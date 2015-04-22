@@ -1,6 +1,6 @@
 # SpotManager
 
-Find cheapest spot instance prices, bid, use, and teardown when no longer needed
+The SpotManager is a state-less program meant to be run periodically.  It finds the cheapest spot instance prices, bids, sets up the machines, and tears them down when done.
 
 ## Assumptions
 
@@ -9,6 +9,7 @@ The module assumes your workload is **long running** and has **many save-points*
 In my case each machine is setup to pull small tasks off a queue and execute them.  These machines can be shutdown at any time; with the most recent task simply placed back on the queue for some other machine to run.   
 
 ## Overview
+
 
 This library works on a concept of ***utility***, which is an abstract value you assign to each EC2 instance type; the ***required utility*** is the primary input used to scale the number and type of instances. 
 

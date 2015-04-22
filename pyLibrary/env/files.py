@@ -165,10 +165,15 @@ class File(object):
         return os.path.isdir(self._filename)
 
     def read_bytes(self):
-        if not self.parent.exists:
-            self.parent.create()
-        with open(self._filename, "rb") as f:
-            return f.read()
+        try:
+            if not self.parent.exists:
+                self.parent.create()
+            with open(self._filename, "rb") as f:
+                return f.read()
+        except Exception, e:
+            from pyLibrary.debugs.logs import Log
+
+            Log.error("roblem reading file {{filename}}", self.abspath)
 
     def write_bytes(self, content):
         if not self.parent.exists:

@@ -22,7 +22,7 @@ import sys
 import gc
 from pyLibrary import strings
 
-from pyLibrary.dot import coalesce, Dict
+from pyLibrary.dot import coalesce, Dict, wrap
 from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import Duration, SECOND
 
@@ -263,8 +263,31 @@ class AllThread(object):
         self.threads.append(t)
 
 
+class MainThread(object):
+
+    def __init__(self):
+        self.name="Main Thread"
+        self.id = thread.get_ident()
+        self.children= []
+
+    def add_child(self, child):
+        self.children.append(child)
+
+    def stop(self):
+        """
+        BLOCKS UNTIL ALL THREADS HAVE STOPPED
+        """
+        children = self.children
+        self.children = []
+        for c in children:
+            c.stop()
+        for c in children:
+            c.join()
+
+
+MAIN_THREAD = MainThread()
+
 ALL_LOCK = Lock("threads ALL_LOCK")
-MAIN_THREAD = Dict(name="Main Thread", id=thread.get_ident())
 ALL = dict()
 ALL[thread.get_ident()] = MAIN_THREAD
 
@@ -280,7 +303,7 @@ class Thread(object):
     TIMEOUT = "TIMEOUT"
 
 
-    def __init__(self, name, target, parent=None, *args, **kwargs):
+    def __init__(self, name, target, *args, **kwargs):
         if not Log:
             _late_import()
         self.id = -1
@@ -299,9 +322,8 @@ class Thread(object):
         self.cprofiler = None
         self.children = []
 
-        if parent is None:
-            parent = Thread.current()
-        parent.add_child(self)
+        self.parent = kwargs.get("parent_thread", Thread.current())
+        self.parent.add_child(self)
 
     def __enter__(self):
         return self
@@ -343,7 +365,9 @@ class Thread(object):
 
         try:
             if self.target is not None:
-                response = self.target(*self.args, **self.kwargs)
+                a, k = self.args, self.kwargs
+                self.args, self.kwargs = None, None
+                response = self.target(*a, **k)
                 with self.synch_lock:
                     self.response = Dict(response=response)
         except Exception, e:

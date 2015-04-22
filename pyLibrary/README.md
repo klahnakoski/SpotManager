@@ -71,19 +71,22 @@ You may continue to use `**kwargs`; which provides a way to overlay one paramete
 Module `strings`
 ----------------
 
-Contains several more string functions.  None of hem are intended for direct use in a python program, rather for use in the `expand_template` function.
+Contains several more string functions.  None of them are intended for direct use in a python program, rather for use in the `expand_template` function.
 
 
-###Function `expand_template()`###
+##Function `expand_template()`###
 
-    pyLibrary.strings.expand_template(template, value)
+The creation of this function was motivated by the desire to extend Python's 
+`format()` function with more features and replace the [formatting mini language](https://docs.python.org/2/library/string.html#formatspec), because it appears to be Perl-inspired line noise.
+
+    	pyLibrary.strings.expand_template(template, value)
 
 A simple function that replaces variables in `template` with the properties
 found in `value`. Variables are indicated by the double moustaches;
 `{{example}}` is a variable.
 
 Properties are converted to `unicode()` before replacing variables.  In the case
-of complex properties; converted to JSON.  Further string manipulation can be
+of complex properties; converted to JSON.  Further string formatting can be
 performed by feeding properties to functions using the pipe (`|`) symbol:
 
 ```python

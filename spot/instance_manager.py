@@ -11,15 +11,27 @@ from __future__ import division
 
 
 class InstanceManager(object):
+    """
+    THIS CLASS MUST HAVE AN IMPLEMENTATION FOR the SpotManager TO USE
+    """
+
+
     def __init__(self, settings):
         self.settings = settings
 
     def required_utility(self):
         return 0
 
-    def setup_instance(self, instance, utility):
+    def setup_instance(
+        self,
+        instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
+        utility
+    ):
         pass
 
-    def teardown_instance(self, instance):
+    def teardown_instance(
+        self,
+        instance   # THE boto INSTANCE OBJECT FOR THE MACHINE TO TEARDOWN
+    ):
         pass
 

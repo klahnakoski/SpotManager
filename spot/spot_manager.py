@@ -28,6 +28,10 @@ from pyLibrary.queries.expressions import CODE
 from pyLibrary.thread.threads import Lock, Thread, MAIN_THREAD, Signal
 from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import DAY, HOUR, WEEK
+from pyLibrary.times.timer import Timer
+
+DEBUG_PRICING = False
+
 
 class SpotManager(object):
     @use_settings
@@ -52,8 +56,20 @@ class SpotManager(object):
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
         active = qb.filter(spot_requests, {"terms": {"status.code": RUNNING_STATUS_CODES | PENDING_STATUS_CODES}})
+        for a in active:
+            Log.note("Active Spot Request: {{type}} @ {{price|round(decimal=4)}}", {
+                "type": a.launch_specification.instance_type,
+                "price": a.price
+            })
+        used_budget = coalesce(SUM(active.price), 0)
         current_spending = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type].current_price for r in active), 0)
-        remaining_budget = self.settings.budget - current_spending
+
+        Log.note("TOTAL SPENDING: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)", {
+            "budget": used_budget,
+            "current": current_spending
+        })
+
+        remaining_budget = self.settings.budget - used_budget
 
         current_utility = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type].type.utility for r in active), 0)
         net_new_utility = utility_required - current_utility
@@ -65,9 +81,10 @@ class SpotManager(object):
             net_new_utility -= self.add_instances(net_new_utility, remaining_budget)
 
         if net_new_utility > 0:
-            Log.warning("Can not fund {{num}} more utility (all utility costs more than {{expected}}/hour)", {
+            Log.alert("Can not fund {{num}} more utility (all utility costs more than {{expected}}/hour).  Remaining budget is {{budget}} ", {
                 "num": net_new_utility,
-                "expected": self.settings.max_utility_price
+                "expected": self.settings.max_utility_price,
+                "budget": remaining_budget
             })
 
         Log.note("All requests for new utility have been made")
@@ -101,14 +118,25 @@ class SpotManager(object):
                 if bid < p.current_price or bid > remaining_budget:
                     continue
 
-                self._request_spot_instance(
-                    price=bid,
-                    availability_zone_group=p.availability_zone,
-                    instance_type=p.type.instance_type,
-                    settings=self.settings.ec2.request
-                )
-                net_new_utility += p.type.utility
-                remaining_budget -= p.current_price
+                try:
+                    self._request_spot_instance(
+                        price=bid,
+                        availability_zone_group=p.availability_zone,
+                        instance_type=p.type.instance_type,
+                        settings=self.settings.ec2.request
+                    )
+                    Log.note("Request instance {{type}} with utility {{utility}} at ${{price}}/hour", {
+                        "type": p.type.instance_type,
+                        "utility": p.type.utility,
+                        "price": bid
+                    })
+                    net_new_utility += p.type.utility
+                    remaining_budget -= bid
+                except Exception, e:
+                    Log.note("Request instance {{type}} FAILED", {
+                        "type": p.type.instance_type,
+                    })
+                    break
 
         return net_new_utility
 
@@ -195,7 +223,10 @@ class SpotManager(object):
             *unwrap(NetworkInterfaceSpecification(**unwrap(s)) for s in listwrap(settings.network_interfaces))
         )
         settings.settings = None
-        return self.conn.request_spot_instances(**unwrap(settings))
+        output = self.conn.request_spot_instances(**unwrap(settings))
+        for o in output:
+            o.add_tag("Name", self.settings.ec2.instance.name)
+        return output
 
     def pricing(self):
         with self.price_locker:
@@ -271,11 +302,12 @@ class SpotManager(object):
             return self.prices
 
     def _get_spot_prices_from_aws(self):
-        try:
-            content = File(self.settings.price_file).read()
-            cache = convert.json2value(content, flexible=False, paths=False)
-        except Exception, e:
-            cache = DictList()
+        with Timer("Read pricing file"):
+            try:
+                content = File(self.settings.price_file).read()
+                cache = convert.json2value(content, flexible=False, paths=False)
+            except Exception, e:
+                cache = DictList()
 
         most_recents = qb.run({
             "from": cache,
@@ -283,47 +315,49 @@ class SpotManager(object):
             "select": {"value": "timestamp", "aggregate": "max"}
         }).data
 
-
         prices = set(cache)
-        for instance_type in self.settings.utility.instance_type:
-            if most_recents:
-                most_recent = most_recents[{"instance_type":instance_type}].timestamp
-                if most_recent == None:
-                    start_at = Date.today() - WEEK
+        with Timer("Get pricing from AWS"):
+            for instance_type in self.settings.utility.instance_type:
+                if most_recents:
+                    most_recent = most_recents[{"instance_type":instance_type}].timestamp
+                    if most_recent == None:
+                        start_at = Date.today() - WEEK
+                    else:
+                        start_at = Date(most_recent)
                 else:
-                    start_at = Date(most_recent)
-            else:
-                start_at = Date.today() - WEEK
-            Log.note("get pricing for {{instance_type}} starting at {{start_at}}", {
-                "instance_type": instance_type,
-                "start_at": start_at
-            })
+                    start_at = Date.today() - WEEK
+                if DEBUG_PRICING:
+                    Log.note("get pricing for {{instance_type}} starting at {{start_at}}", {
+                        "instance_type": instance_type,
+                        "start_at": start_at
+                    })
 
-            next_token=None
-            while True:
-                resultset = self.conn.get_spot_price_history(
-                    product_description="Linux/UNIX",
-                    instance_type=instance_type,
-                    availability_zone="us-west-2c",
-                    start_time=start_at.format(ISO8601),
-                    next_token=next_token
-                )
-                next_token = resultset.next_token
+                next_token=None
+                while True:
+                    resultset = self.conn.get_spot_price_history(
+                        product_description="Linux/UNIX",
+                        instance_type=instance_type,
+                        availability_zone="us-west-2c",
+                        start_time=start_at.format(ISO8601),
+                        next_token=next_token
+                    )
+                    next_token = resultset.next_token
 
-                for p in resultset:
-                    prices.add(wrap({
-                        "availability_zone": p.availability_zone,
-                        "instance_type": p.instance_type,
-                        "price": p.price,
-                        "product_description": p.product_description,
-                        "region": p.region.name,
-                        "timestamp": Date(p.timestamp)
-                    }))
+                    for p in resultset:
+                        prices.add(wrap({
+                            "availability_zone": p.availability_zone,
+                            "instance_type": p.instance_type,
+                            "price": p.price,
+                            "product_description": p.product_description,
+                            "region": p.region.name,
+                            "timestamp": Date(p.timestamp)
+                        }))
 
-                if not next_token:
-                    break
+                    if not next_token:
+                        break
 
-        File(self.settings.price_file).write(convert.value2json(prices, pretty=True))
+        with Timer("Save prices to (pretty) file"):
+            File(self.settings.price_file).write(convert.value2json(prices, pretty=True))
         return prices
 
 

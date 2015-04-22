@@ -1,3 +1,6 @@
 /.idea
 /*.iml
 /pyLibrary/.svn
+*.pyc
+/results
+/resources/aws/prices.json

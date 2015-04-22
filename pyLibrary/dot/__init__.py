@@ -10,7 +10,9 @@
 from __future__ import unicode_literals
 from __future__ import division
 from decimal import Decimal
+import os
 from types import GeneratorType, NoneType, ModuleType
+import sys
 
 _get = object.__getattribute__
 _set = object.__setattr__
@@ -194,7 +196,7 @@ def get_attr(obj, path):
     except Exception, e:
         from pyLibrary.debugs.logs import Log
         if PATH_NOT_FOUND in e:
-            Log.error(PATH_NOT_FOUND+": {{path}}", {"path":path})
+            Log.error(PATH_NOT_FOUND+": {{path}}", {"path":path}, e)
         else:
             Log.error("Problem setting value", e)
 

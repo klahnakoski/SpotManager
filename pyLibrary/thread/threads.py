@@ -14,6 +14,7 @@
 from __future__ import unicode_literals
 from __future__ import division
 from collections import deque
+from copy import copy
 from datetime import datetime, timedelta
 import thread
 import threading
@@ -273,12 +274,14 @@ class MainThread(object):
     def add_child(self, child):
         self.children.append(child)
 
+    def remove_child(self, child):
+        self.children.remove(child)
+
     def stop(self):
         """
         BLOCKS UNTIL ALL THREADS HAVE STOPPED
         """
-        children = self.children
-        self.children = []
+        children = copy(self.children)
         for c in children:
             c.stop()
         for c in children:
@@ -314,7 +317,7 @@ class Thread(object):
         self.args = args
 
         # ENSURE THERE IS A SHARED please_stop SIGNAL
-        self.kwargs = kwargs.copy()
+        self.kwargs = copy(kwargs)
         self.kwargs["please_stop"] = self.kwargs.get("please_stop", Signal())
         self.please_stop = self.kwargs["please_stop"]
 
@@ -346,12 +349,15 @@ class Thread(object):
             Log.error("Can not start thread", e)
 
     def stop(self):
-        for c in self.children:
+        for c in copy(self.children):
             c.stop()
         self.please_stop.go()
 
     def add_child(self, child):
         self.children.append(child)
+
+    def remove_child(self, child):
+        self.children.remove(child)
 
     def _run(self):
         if Log.cprofiler:
@@ -378,9 +384,10 @@ class Thread(object):
             except Exception, f:
                 sys.stderr.write("ERROR in thread: " + str(self.name) + " " + str(e) + "\n")
         finally:
-            for c in self.children:
+            children=copy(self.children)
+            for c in children:
                 c.stop()
-            for c in self.children:
+            for c in children:
                 try:
                     c.join()
                 except Exception, _:
@@ -404,7 +411,8 @@ class Thread(object):
         """
         RETURN THE RESULT {"response":r, "exception":e} OF THE THREAD EXECUTION (INCLUDING EXCEPTION, IF EXISTS)
         """
-        for c in self.children:
+        children = copy(self.children)
+        for c in children:
             c.join(timeout=timeout, till=till)
 
         if not till and timeout:
@@ -415,6 +423,7 @@ class Thread(object):
                 with self.synch_lock:
                     for i in range(10):
                         if self.stopped:
+                            self.parent.remove_child(self)
                             return self.response
                         self.synch_lock.wait(0.5)
 
@@ -423,6 +432,7 @@ class Thread(object):
         else:
             self.stopped.wait_for_go(till=till)
             if self.stopped:
+                self.parent.remove_child(self)
                 return self.response
             else:
                 from pyLibrary.debugs.logs import Except

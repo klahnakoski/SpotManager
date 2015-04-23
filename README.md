@@ -50,8 +50,8 @@ Each SpotManager instance requires a `settings.json` file that controls the Spot
 Conceptually, an instance manager is very simple, with only three methods you need to implement.  This repo has an [example in `active_data.etl`](https://github.com/klahnakoski/SpotManager/blob/master/active_data/etl.py) that you can review. 
 
 * **`required_utility()`** - function to determine how much utility is needed.  Since you are the one defining utility, the amount you need is also up to you.  The `active_data` uses the size of the pending queue to determine, roughly, how much utility is required.
-* **`setup_instance()`** - function is called to setup an instance.  It is passed both a boto ec2 instance object, and the utility this instance is expected to provide. 
-* **`teardown_instance()`** - When the machine is no longer required, this will be called before the machine is terminated.  
+* **`setup()`** - function is called to setup an instance.  It is passed both a boto ec2 instance object, and the utility this instance is expected to provide. 
+* **`teardown()`** - When the machine is no longer required, this will be called before the machine is terminated.  
 
 
 ## Benefits

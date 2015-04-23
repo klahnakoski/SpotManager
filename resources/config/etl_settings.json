@@ -58,7 +58,7 @@
 			"placement_group": null,
 			"block_device_map": null,
 			"instance_profile_arn": null,
-			"instance_profile_name": null,
+			"instance_profile_name": "active-data",
 			"security_group_ids": null,
 			"ebs_optimized": false,
 			"network_interfaces": {

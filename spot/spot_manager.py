@@ -47,12 +47,15 @@ class SpotManager(object):
         self.prices = None
         self.price_lookup = None
         self.done_spot_requests = Signal()
+        self.watcher = None
         self._start_life_cycle_watcher()
         self.pricing()
 
+    def _get_managed_spot_requests(self):
+        return wrap([dictwrap(r) for r in self.conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
 
     def update_spot_requests(self, utility_required):
-        spot_requests = wrap([dictwrap(r) for r in self.conn.get_all_spot_instance_requests()])
+        spot_requests = self._get_managed_spot_requests()
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
         active = qb.filter(spot_requests, {"terms": {"status.code": RUNNING_STATUS_CODES | PENDING_STATUS_CODES}})
@@ -64,7 +67,7 @@ class SpotManager(object):
         used_budget = coalesce(SUM(active.price), 0)
         current_spending = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type].current_price for r in active), 0)
 
-        Log.note("TOTAL SPENDING: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)", {
+        Log.note("TOTAL BUDGET: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)", {
             "budget": used_budget,
             "current": current_spending
         })
@@ -78,10 +81,10 @@ class SpotManager(object):
             net_new_utility += self.remove_instances(-net_new_utility)
 
         if net_new_utility > 0:
-            net_new_utility -= self.add_instances(net_new_utility, remaining_budget)
+            net_new_utility, remaining_budget = self.add_instances(net_new_utility, remaining_budget)
 
         if net_new_utility > 0:
-            Log.alert("Can not fund {{num}} more utility (all utility costs more than {{expected}}/hour).  Remaining budget is {{budget}} ", {
+            Log.alert("Can not fund {{num|round(places=2)}} more utility (all utility costs more than ${{expected|round(decimal=2)}}/hour).  Remaining budget is ${{budget|round(decimal=2)}} ", {
                 "num": net_new_utility,
                 "expected": self.settings.max_utility_price,
                 "budget": remaining_budget
@@ -90,9 +93,8 @@ class SpotManager(object):
         Log.note("All requests for new utility have been made")
         self.done_spot_requests.go()
 
-    def add_instances(self, requested_utility, remaining_budget):
+    def add_instances(self, net_new_utility, remaining_budget):
         prices = self.pricing()
-        net_new_utility = 0
 
         for p in prices:
             max_bid = Math.min(p.higher_price, p.type.utility * self.settings.max_utility_price)
@@ -106,7 +108,7 @@ class SpotManager(object):
                 })
                 continue
 
-            num = Math.floor((requested_utility-net_new_utility) / p.type.utility)
+            num = Math.floor(net_new_utility / p.type.utility)
             if num == 1:
                 min_bid = max_bid
                 price_interval = 0
@@ -130,7 +132,7 @@ class SpotManager(object):
                         "utility": p.type.utility,
                         "price": bid
                     })
-                    net_new_utility += p.type.utility
+                    net_new_utility -= p.type.utility
                     remaining_budget -= bid
                 except Exception, e:
                     Log.note("Request instance {{type}} FAILED", {
@@ -138,7 +140,7 @@ class SpotManager(object):
                     })
                     break
 
-        return net_new_utility
+        return net_new_utility, remaining_budget
 
     def remove_instances(self, utility_to_remove):
         # FIND THE BIGGEST, MOST EXPENSIVE REQUESTS
@@ -167,7 +169,10 @@ class SpotManager(object):
 
         # SEND SHUTDOWN TO EACH INSTANCE
         for i in remove_list:
-            self.instance_manager.teardown_instance(i)
+            try:
+                self.instance_manager.teardown_instance(i)
+            except Exception, e:
+                Log.warning("Teardown of {{id}} failed", {"id": i.id}, e)
 
         remove_requests = remove_list.spot_instance_request_id
 
@@ -191,27 +196,39 @@ class SpotManager(object):
     def _start_life_cycle_watcher(self):
         def life_cycle_watcher(please_stop):
             self.pricing()
+            extra_refresh = self.done_spot_requests.is_go()
 
             while not please_stop:
-                spot_requests = wrap([dictwrap(r) for r in self.conn.get_all_spot_instance_requests()])
+                spot_requests = self._get_managed_spot_requests()
                 instances = wrap([dictwrap(i) for r in self.conn.get_all_instances() for i in r.instances])
 
                 #INSTANCES THAT REQUIRE SETUP
-                please_setup = instances.filter(lambda i: i.id in spot_requests.instance_id and not i.tags.get("Name") and i._state.name == "running")
-                for i in please_setup:
-                    try:
-                        p = self.price_lookup[i.instance_type]
-                        self.instance_manager.setup_instance(i, p.type.utility)
-                        i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
-                    except Exception, e:
-                        Log.warning("problem with setup of {{instance_id}}", {"instance_id": i.id})
+                setup_time = Timer("setup machines")
+                with setup_time:
+                    please_setup = instances.filter(lambda i: i.id in spot_requests.instance_id and not i.tags.get("Name") and i._state.name == "running")
+                    for i in please_setup:
+                        try:
+                            p = self.price_lookup[i.instance_type]
+                            self.instance_manager.setup_instance(i, p.type.utility)
+                            i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
+                        except Exception, e:
+                            Log.warning("problem with setup of {{instance_id}}", {"instance_id": i.id})
+
+                if self.done_spot_requests and not extra_refresh:  # NOTICE THE CHANGE IN done_spot_requests WE CAN EXPECT MORE PENDING REQUESTS
+                    extra_refresh = self.done_spot_requests.is_go()
+                    spot_requests = self._get_managed_spot_requests()
+                elif setup_time.seconds >= 5:
+                    spot_requests = self._get_managed_spot_requests()
 
                 pending = qb.filter(spot_requests, {"terms": {"status.code": PENDING_STATUS_CODES}})
-                if not pending and self.done_spot_requests:
+                if not pending and self.done_spot_requests and extra_refresh:
                     Log.note("No more pending spot requests")
                     please_stop.go()
                     break
-                Thread.sleep(seconds=5, please_stop=please_stop)
+                elif pending:
+                    Log.note("waiting for spot requests: {{pending}}", {"pending": pending.id})
+
+                Thread.sleep(seconds=10, please_stop=please_stop)
 
             Log.note("life cycle watcher has stopped")
 
@@ -376,6 +393,7 @@ TERMINATED_STATUS_CODES = {
     "bad-parameters"
 }
 RETRY_STATUS_CODES = {
+    "az-group-constraint",
     "instance-terminated-by-price",
     "price-too-low",
     "bad-parameters",
@@ -401,8 +419,8 @@ def main():
         with SingleInstance():
             instance_manager = new_instance(settings.instance)
             m = SpotManager(instance_manager, settings=settings)
-
             m.update_spot_requests(instance_manager.required_utility())
+            m.watcher.join()
     except Exception, e:
         Log.warning("Problem with spot manager", e)
     finally:

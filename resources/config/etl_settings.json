@@ -74,6 +74,7 @@
 	},
 	"instance":{
 		"class":"active_data.etl.ETL",
+		"minimum_utility": 3,
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 			"user": "ubuntu",
@@ -91,10 +92,17 @@
 	"debug": {
 		"trace": true,
 		"cprofile": {
-			"enabled": true,
-			"filename": "./results/spot_profile.tab"
+			"enabled": false,
+			"filename": "results/active_data_spot_profile.tab"
 		},
 		"log": [
+			{
+				"class": "logging.handlers.RotatingFileHandler",
+				"filename": "results/logs/active_data_etl.log",
+				"maxBytes": 10000000,
+				"backupCount": 100,
+				"encoding": "utf8"
+			},
 			{
 				"log_type": "console"
 			}

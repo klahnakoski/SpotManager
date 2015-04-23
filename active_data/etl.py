@@ -32,6 +32,7 @@ class ETL(InstanceManager):
         self,
         work_queue,  # SETTINGS FOR AWS QUEUE
         connect,     # SETTINGS FOR Fabric `env` TO CONNECT TO INSTANCE
+        minimum_utility,
         settings=None
     ):
         InstanceManager.__init__(self, settings)
@@ -44,7 +45,7 @@ class ETL(InstanceManager):
         # OF TOTAL WORK THE QUEUE SIZE IS TERRIBLE PREDICTOR OF HOW MUCH
         # UTILITY WE REALLY NEED.  WE USE log10() TO SUPPRESS THE
         # VARIABILITY, AND HOPE FOR THE BEST
-        return max(2, log10(max(pending, 1)) * 10)
+        return max(self.settings.minimum_utility, log10(max(pending, 1)) * 10)
 
     def setup_instance(self, instance, utility):
         cpu_count = int(round(utility))

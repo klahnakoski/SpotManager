@@ -25,7 +25,7 @@ from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings, new_instance
 from pyLibrary.queries import qb
 from pyLibrary.queries.expressions import CODE
-from pyLibrary.thread.threads import Lock, Thread, MAIN_THREAD, Signal
+from pyLibrary.thread.threads import Lock, Thread, MAIN_THREAD, Signal, Queue
 from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import DAY, HOUR, WEEK
 from pyLibrary.times.timer import Timer
@@ -47,6 +47,7 @@ class SpotManager(object):
         self.prices = None
         self.price_lookup = None
         self.done_spot_requests = Signal()
+        self.net_new_spot_requests = Queue("net new instances")
         self.watcher = None
         self._start_life_cycle_watcher()
         self.pricing()
@@ -109,7 +110,7 @@ class SpotManager(object):
                 })
                 continue
 
-            num = Math.round(net_new_utility / p.type.utility)
+            num = int(Math.round(net_new_utility / p.type.utility))
             if num == 1:
                 min_bid = max_bid
                 price_interval = 0
@@ -122,7 +123,7 @@ class SpotManager(object):
                     continue
 
                 try:
-                    self._request_spot_instance(
+                    new_instance = self._request_spot_instance(
                         price=bid,
                         availability_zone_group=p.availability_zone,
                         instance_type=p.type.instance_type,
@@ -135,6 +136,7 @@ class SpotManager(object):
                     })
                     net_new_utility -= p.type.utility
                     remaining_budget -= bid
+                    self.net_new_spot_requests.add(dictwrap(new_instance))
                 except Exception, e:
                     Log.note("Request instance {{type}} FAILED", {
                         "type": p.type.instance_type,
@@ -176,7 +178,7 @@ class SpotManager(object):
         Log.note("Shutdown {{instances}}", {"instances": remove_list.id})
         for i in remove_list:
             try:
-                self.instance_manager.teardown_instance(i)
+                self.instance_manager.teardown(i)
             except Exception, e:
                 Log.warning("Teardown of {{id}} failed", {"id": i.id}, e)
 
@@ -202,32 +204,32 @@ class SpotManager(object):
     def _start_life_cycle_watcher(self):
         def life_cycle_watcher(please_stop):
             self.pricing()
-            extra_refresh = self.done_spot_requests.is_go()
 
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
                 instances = wrap([dictwrap(i) for r in self.conn.get_all_instances() for i in r.instances])
 
-                #INSTANCES THAT REQUIRE SETUP
+                # INSTANCES THAT REQUIRE SETUP
                 setup_time = Timer("setup machines")
                 with setup_time:
                     please_setup = instances.filter(lambda i: i.id in spot_requests.instance_id and not i.tags.get("Name") and i._state.name == "running")
                     for i in please_setup:
                         try:
                             p = self.price_lookup[i.instance_type]
-                            self.instance_manager.setup_instance(i, p.type.utility)
+                            self.instance_manager.setup(i, p.type.utility)
                             i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
                         except Exception, e:
                             Log.warning("problem with setup of {{instance_id}}", {"instance_id": i.id}, e)
 
-                if self.done_spot_requests and not extra_refresh:  # NOTICE THE CHANGE IN done_spot_requests WE CAN EXPECT MORE PENDING REQUESTS
-                    extra_refresh = self.done_spot_requests.is_go()
-                    spot_requests = self._get_managed_spot_requests()
-                elif setup_time.seconds >= 5:
+                if setup_time.seconds >= 5:
+                    # REFESH STALE
                     spot_requests = self._get_managed_spot_requests()
 
                 pending = qb.filter(spot_requests, {"terms": {"status.code": PENDING_STATUS_CODES}})
-                if not pending and self.done_spot_requests and extra_refresh:
+                if self.done_spot_requests:
+                    pending.extend(self.net_new_spot_requests.pop_all())
+
+                if not pending and self.done_spot_requests:
                     Log.note("No more pending spot requests")
                     please_stop.go()
                     break
@@ -246,10 +248,10 @@ class SpotManager(object):
             *unwrap(NetworkInterfaceSpecification(**unwrap(s)) for s in listwrap(settings.network_interfaces))
         )
         settings.settings = None
-        output = self.conn.request_spot_instances(**unwrap(settings))
+        output = list(self.conn.request_spot_instances(**unwrap(settings)))
         for o in output:
             o.add_tag("Name", self.settings.ec2.instance.name)
-        return output
+        return output[0]
 
     def pricing(self):
         with self.price_locker:

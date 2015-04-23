@@ -22,14 +22,14 @@ class InstanceManager(object):
     def required_utility(self):
         return 0
 
-    def setup_instance(
+    def setup(
         self,
         instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
         utility
     ):
         pass
 
-    def teardown_instance(
+    def teardown(
         self,
         instance   # THE boto INSTANCE OBJECT FOR THE MACHINE TO TEARDOWN
     ):

@@ -11,7 +11,7 @@ from __future__ import division
 from math import log10
 
 from fabric.api import settings as fabric_settings
-from fabric.context_managers import cd
+from fabric.context_managers import cd, hide
 from fabric.contrib import files as fabric_files
 from fabric.operations import run, sudo, put
 from fabric.state import env
@@ -47,15 +47,18 @@ class ETL(InstanceManager):
         # VARIABILITY, AND HOPE FOR THE BEST
         return max(self.settings.minimum_utility, log10(max(pending, 1)) * 10)
 
-    def setup_instance(self, instance, utility):
+    def setup(self, instance, utility):
         cpu_count = int(round(utility))
 
-        self._config_fabric(instance)
-        self._setup_etl_code()
-        self._add_private_file()
-        self._setup_etl_supervisor(cpu_count)
+        Log.note("setup {{instance}}", {"instance": instance.id})
+        with hide('output'):
+            self._config_fabric(instance)
+            self._setup_etl_code()
+            self._add_private_file()
+            self._setup_etl_supervisor(cpu_count)
 
-    def teardown_instance(self, instance):
+    def teardown(self, instance):
+        Log.note("teardown {{instance}}", {"instance": instance.id})
         self._config_fabric(instance)
         sudo("supervisorctl stop all")
 
@@ -70,9 +73,10 @@ class ETL(InstanceManager):
                 run("wget https://bootstrap.pypa.io/get-pip.py")
                 sudo("python get-pip.py")
 
-        if not fabric_files.exists("/home/ubuntu/TestLog-ETL"):
+        if not fabric_files.exists("/home/ubuntu/TestLog-ETL/README.md"):
             with cd("/home/ubuntu"):
                 sudo("apt-get -y install git-core")
+                run('rm -fr /home/ubuntu/TestLog-ETL')
                 run("git clone https://github.com/klahnakoski/TestLog-ETL.git")
 
         with cd("/home/ubuntu/TestLog-ETL"):
@@ -104,7 +108,8 @@ class ETL(InstanceManager):
         sudo("supervisorctl update")
 
     def _add_private_file(self):
-        put('~/private_active_data_etl.json', '/home/ubuntu')
+        run('rm -f /home/ubuntu/private.json')
+        put('~/private_active_data_etl.json', '/home/ubuntu/private.json')
         with cd("/home/ubuntu"):
             run("chmod o-r private.json")
 

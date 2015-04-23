@@ -104,11 +104,14 @@ class ETL(InstanceManager):
         sudo("supervisorctl update")
 
     def _add_private_file(self):
-        put('~/private.json', '/home/ubuntu')
+        put('~/private_active_data_etl.json', '/home/ubuntu')
         with cd("/home/ubuntu"):
             run("chmod o-r private.json")
 
     def _config_fabric(self, instance):
+        if not instance.ip_address:
+            Log.error("Expecting an ip address for {{instance_id}}", {"instance_id": instance.id})
+
         for k, v in self.settings.connect.items():
             env[k] = v
         env.host_string = instance.ip_address

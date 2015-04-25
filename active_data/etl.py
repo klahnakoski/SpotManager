@@ -45,7 +45,7 @@ class ETL(InstanceManager):
         # OF TOTAL WORK THE QUEUE SIZE IS TERRIBLE PREDICTOR OF HOW MUCH
         # UTILITY WE REALLY NEED.  WE USE log10() TO SUPPRESS THE
         # VARIABILITY, AND HOPE FOR THE BEST
-        return max(self.settings.minimum_utility, log10(max(pending, 1)) * 10)
+        return max(self.settings.minimum_utility, log10(max(pending, 1)) * 4)
 
     def setup(self, instance, utility):
         cpu_count = int(round(utility))
@@ -97,7 +97,7 @@ class ETL(InstanceManager):
         conf_file = File("./resources/supervisor/etl.conf")
         content = conf_file.read_bytes()
         find = between(content, "numprocs=", "\n")
-        content = content.replace("numprocs=" + find + "\n", "numprocs=" + str(cpu_count * 2) + "\n")
+        content = content.replace("numprocs=" + find + "\n", "numprocs=" + str(cpu_count) + "\n")
         File("./resources/supervisor/etl.conf.alt").write_bytes(content)
         sudo("rm -f /etc/supervisor/conf.d/etl.conf")
         put("./resources/supervisor/etl.conf.alt", '/etc/supervisor/conf.d/etl.conf', use_sudo=True)

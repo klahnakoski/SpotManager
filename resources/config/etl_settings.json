@@ -1,6 +1,7 @@
 {
-	"budget": 0.50,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"budget": 0.25,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.02,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
+	"max_new_utility": 4,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"price_file": "resources/aws/prices.json",
 	"aws": {
 		"$ref": "//~/private.json#aws_credentials"

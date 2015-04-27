@@ -22,6 +22,7 @@ from pyLibrary.debugs.logs import Log
 from pyLibrary.env.files import File
 from pyLibrary.meta import use_settings
 from pyLibrary.strings import between
+from pyLibrary.thread.threads import Lock
 
 from spot.instance_manager import InstanceManager
 
@@ -36,6 +37,7 @@ class ETL(InstanceManager):
         settings=None
     ):
         InstanceManager.__init__(self, settings)
+        self.locker = Lock()
         self.settings = settings
 
     def required_utility(self):
@@ -48,19 +50,21 @@ class ETL(InstanceManager):
         return max(self.settings.minimum_utility, log10(max(pending, 1)) * 4)
 
     def setup(self, instance, utility):
-        cpu_count = int(round(utility))
+        with self.locker:
+            cpu_count = int(round(utility))
 
-        Log.note("setup {{instance}}", {"instance": instance.id})
-        with hide('output'):
-            self._config_fabric(instance)
-            self._setup_etl_code()
-            self._add_private_file()
-            self._setup_etl_supervisor(cpu_count)
+            Log.note("setup {{instance}}", {"instance": instance.id})
+            with hide('output'):
+                self._config_fabric(instance)
+                self._setup_etl_code()
+                self._add_private_file()
+                self._setup_etl_supervisor(cpu_count)
 
     def teardown(self, instance):
-        Log.note("teardown {{instance}}", {"instance": instance.id})
-        self._config_fabric(instance)
-        sudo("supervisorctl stop all")
+        with self.locker:
+            Log.note("teardown {{instance}}", {"instance": instance.id})
+            self._config_fabric(instance)
+            sudo("supervisorctl stop all")
 
     def _setup_etl_code(self):
         sudo("sudo apt-get update")

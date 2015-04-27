@@ -216,6 +216,7 @@ class SpotManager(object):
                 instances = wrap([dictwrap(i) for r in self.conn.get_all_instances() for i in r.instances])
 
                 # INSTANCES THAT REQUIRE SETUP
+                setup_failures = 0
                 setup_time = Timer("setup machines")
                 with setup_time:
                     please_setup = instances.filter(lambda i: i.id in spot_requests.instance_id and not i.tags.get("Name") and i._state.name == "running")
@@ -226,12 +227,12 @@ class SpotManager(object):
                             i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
                             with self.net_new_locker:
                                 self.net_new_spot_requests.remove(i)
-
                         except Exception, e:
+                            setup_failures += 1
                             Log.warning("problem with setup of {{instance_id}}", {"instance_id": i.id}, e)
 
                 if setup_time.seconds >= 5:
-                    # REFESH STALE
+                    # REFRESH STALE
                     spot_requests = self._get_managed_spot_requests()
 
                 pending = qb.filter(spot_requests, {"terms": {"status.code": PENDING_STATUS_CODES}})
@@ -245,7 +246,7 @@ class SpotManager(object):
                         pending = UniqueIndex(("id",), data=pending)
                         pending = pending | self.net_new_spot_requests
 
-                if not pending and self.done_spot_requests:
+                if not pending and not setup_failures and self.done_spot_requests:
                     Log.note("No more pending spot requests")
                     please_stop.go()
                     break

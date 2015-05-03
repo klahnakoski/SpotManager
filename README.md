@@ -1,3 +1,6 @@
+
+> This project needs your help:  It needs someone to review the test suite for this code (not yet pushed).  If you have time to do this please email me at klahnakoski@mozilla.com 
+
 # SpotManager
 
 The SpotManager is a state-less program meant to be run periodically.  It finds the cheapest spot instance prices, bids, sets up the machines, and tears them down when done.

@@ -28,11 +28,11 @@ from pyLibrary.queries.expressions import CODE
 from pyLibrary.queries.unique_index import UniqueIndex
 from pyLibrary.thread.threads import Lock, Thread, MAIN_THREAD, Signal, Queue
 from pyLibrary.times.dates import Date
-from pyLibrary.times.durations import DAY, HOUR, WEEK, MINUTE
+from pyLibrary.times.durations import DAY, HOUR, WEEK, MINUTE, SECOND, Duration
 from pyLibrary.times.timer import Timer
 
 DEBUG_PRICING = False
-
+TIME_FROM_RUNNING_TO_LOGIN = 5 * MINUTE
 
 class SpotManager(object):
     @use_settings
@@ -41,8 +41,8 @@ class SpotManager(object):
         self.instance_manager = instance_manager
         self.conn = boto.ec2.connect_to_region(
             region_name=settings.aws.region,
-            aws_access_key_id=settings.aws.aws_access_key_id,
-            aws_secret_access_key=settings.aws.aws_secret_access_key
+            aws_access_key_id=unwrap(settings.aws.aws_access_key_id),
+            aws_secret_access_key=unwrap(settings.aws.aws_secret_access_key)
         )
         self.price_locker = Lock()
         self.prices = None
@@ -123,22 +123,22 @@ class SpotManager(object):
                     continue
 
                 try:
-                    new_instances = self._request_spot_instances(
+                    new_requests = self._request_spot_instances(
                         price=bid,
                         availability_zone_group=p.availability_zone,
                         instance_type=p.type.instance_type,
                         settings=self.settings.ec2.request
                     )
                     Log.note("Request {{num}} instance {{type}} with utility {{utility}} at ${{price}}/hour", {
-                        "num": len(new_instances),
+                        "num": len(new_requests),
                         "type": p.type.instance_type,
                         "utility": p.type.utility,
                         "price": bid
                     })
-                    net_new_utility -= p.type.utility * len(new_instances)
-                    remaining_budget -= bid * len(new_instances)
+                    net_new_utility -= p.type.utility * len(new_requests)
+                    remaining_budget -= bid * len(new_requests)
                     with self.net_new_locker:
-                        for ii in new_instances:
+                        for ii in new_requests:
                             self.net_new_spot_requests.add(dictwrap(ii))
                 except Exception, e:
                     Log.note("Request instance {{type}} FAILED", {
@@ -196,7 +196,9 @@ class SpotManager(object):
         return net_new_utility
 
     def _get_managed_spot_requests(self):
-        return wrap([dictwrap(r) for r in self.conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
+        output = wrap([dictwrap(r) for r in self.conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
+        # Log.note("got spot from amazon {{spot_ids}}", {"spot_ids":output.id})
+        return output
 
     def _get_managed_instances(self):
         output =[]
@@ -213,32 +215,40 @@ class SpotManager(object):
 
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
-                instances = wrap([dictwrap(i) for r in self.conn.get_all_instances() for i in r.instances])
-
+                last_get = Date.now()
+                instances = wrap({i.id: dictwrap(i) for r in self.conn.get_all_instances() for i in r.instances})
                 # INSTANCES THAT REQUIRE SETUP
-                setup_failures = 0
-                setup_time = Timer("setup machines")
-                with setup_time:
-                    please_setup = instances.filter(lambda i: i.id in spot_requests.instance_id and not i.tags.get("Name") and i._state.name == "running")
-                    for i in please_setup:
-                        try:
-                            p = self.price_lookup[i.instance_type]
-                            self.instance_manager.setup(i, p.type.utility)
-                            i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
+                time_to_stop_trying = {}
+                please_setup = [(i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests] if i.id and not i.tags.get("Name") and i._state.name == "running"]
+                for i, r in please_setup:
+                    try:
+                        p = self.price_lookup[i.instance_type]
+                        self.instance_manager.setup(i, p.type.utility)
+                        i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
+                        with self.net_new_locker:
+                            self.net_new_spot_requests.remove(r.id)
+                    except Exception, e:
+                        if not time_to_stop_trying.get(i.id):
+                            time_to_stop_trying[i.id] = Date.now() + TIME_FROM_RUNNING_TO_LOGIN
+                        if Date.now() > time_to_stop_trying[i.id]:
+                            # FAIL TO SETUP AFTER 5 MINUTES, THEN TERMINATE INSTANCE
+                            self.conn.terminate_instances(instance_ids=[i.id])
                             with self.net_new_locker:
-                                self.net_new_spot_requests.remove(i)
-                        except Exception, e:
-                            setup_failures += 1
-                            Log.warning("problem with setup of {{instance_id}}", {"instance_id": i.id}, e)
+                                self.net_new_spot_requests.remove(r.id)
+                            Log.warning("Second problem with setup of {{instance_id}}.  Instance TERMINATED!", {"instance_id": i.id}, e)
+                        else:
+                            Log.warning("Problem with setup of {{instance_id}}", {"instance_id": i.id}, e)
 
-                if setup_time.seconds >= 5:
+                if Date.now() - last_get > 5 * SECOND:
                     # REFRESH STALE
                     spot_requests = self._get_managed_spot_requests()
+                    last_get = Date.now()
+
 
                 pending = qb.filter(spot_requests, {"terms": {"status.code": PENDING_STATUS_CODES}})
                 if self.done_spot_requests:
                     with self.net_new_locker:
-                        expired = Date.now() - 5 * MINUTE
+                        expired = Date.now() - self.settings.run_interval + 5 * MINUTE
                         for ii in list(self.net_new_spot_requests):
                             if Date(ii.create_time) < expired:
                                 ## SOMETIMES REQUESTS NEVER GET INTO THE MAIN LIST OF REQUESTS
@@ -246,7 +256,7 @@ class SpotManager(object):
                         pending = UniqueIndex(("id",), data=pending)
                         pending = pending | self.net_new_spot_requests
 
-                if not pending and not setup_failures and self.done_spot_requests:
+                if not pending and not time_to_stop_trying and self.done_spot_requests:
                     Log.note("No more pending spot requests")
                     please_stop.go()
                     break
@@ -441,6 +451,7 @@ def main():
     """
     try:
         settings = startup.read_settings()
+        settings.run_interval = Duration(settings.run_interval)
         Log.start(settings.debug)
         with SingleInstance():
             instance_manager = new_instance(settings.instance)

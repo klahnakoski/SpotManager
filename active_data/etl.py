@@ -8,7 +8,6 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
-from math import log10
 
 from fabric.api import settings as fabric_settings
 from fabric.context_managers import cd, hide
@@ -17,13 +16,11 @@ from fabric.operations import run, sudo, put
 from fabric.state import env
 
 from pyLibrary import aws
-
 from pyLibrary.debugs.logs import Log
 from pyLibrary.env.files import File
 from pyLibrary.meta import use_settings
 from pyLibrary.strings import between
 from pyLibrary.thread.threads import Lock
-
 from spot.instance_manager import InstanceManager
 
 
@@ -47,7 +44,7 @@ class ETL(InstanceManager):
         # OF TOTAL WORK THE QUEUE SIZE IS TERRIBLE PREDICTOR OF HOW MUCH
         # UTILITY WE REALLY NEED.  WE USE log10() TO SUPPRESS THE
         # VARIABILITY, AND HOPE FOR THE BEST
-        return max(self.settings.minimum_utility, log10(max(pending, 1)) * 4)
+        return max(self.settings.minimum_utility, max(pending/100, 1))
 
     def setup(self, instance, utility):
         with self.locker:
@@ -67,7 +64,8 @@ class ETL(InstanceManager):
             sudo("supervisorctl stop all")
 
     def _setup_etl_code(self):
-        sudo("sudo apt-get update")
+        sudo("apt-get update")
+        sudo("apt-get clean")
 
         if not fabric_files.exists("/home/ubuntu/temp"):
             run("mkdir -p /home/ubuntu/temp")
@@ -79,7 +77,7 @@ class ETL(InstanceManager):
 
         if not fabric_files.exists("/home/ubuntu/TestLog-ETL/README.md"):
             with cd("/home/ubuntu"):
-                sudo("apt-get -y install git-core")
+                sudo("apt-get -yf install git-core")
                 run('rm -fr /home/ubuntu/TestLog-ETL')
                 run("git clone https://github.com/klahnakoski/TestLog-ETL.git")
 

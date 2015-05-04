@@ -78,6 +78,9 @@ class SpotManager(object):
         current_utility = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type].type.utility for r in active), 0)
         net_new_utility = utility_required - current_utility
 
+        if remaining_budget < 0:
+            remaining_budget, net_new_utility = self.save_money(remaining_budget, net_new_utility)
+
         if net_new_utility <= 0:
             net_new_utility = self.remove_instances(net_new_utility)
 
@@ -112,10 +115,10 @@ class SpotManager(object):
 
             num = int(Math.round(net_new_utility / p.type.utility))
             if num == 1:
-                min_bid = max_bid
+                min_bid = Math.min(min_bid*1.1, max_bid)
                 price_interval = 0
             else:
-                price_interval = (max_bid - min_bid) / (num - 1)
+                price_interval = Math.min(min_bid/10, (max_bid - min_bid) / (num - 1))
 
             for i in range(num):
                 bid = min_bid + (i * price_interval)
@@ -149,16 +152,7 @@ class SpotManager(object):
         return net_new_utility, remaining_budget
 
     def remove_instances(self, net_new_utility):
-        # FIND THE BIGGEST, MOST EXPENSIVE REQUESTS
-        instances = self._get_managed_instances()
-
-        for r in instances:
-            r.markup = self.price_lookup[r.instance_type]
-
-        instances = qb.sort(instances, [
-            {"value": "markup.type.utility", "sort": -1},
-            {"value": "markup.estimated_value", "sort": 1}
-        ])
+        instances = self.running_instances()
 
         # FIND COMBO THAT WILL SHUTDOWN WHAT WE NEED EXACTLY, OR MORE
         remove_list = []
@@ -194,6 +188,53 @@ class SpotManager(object):
         self.conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
 
         return net_new_utility
+
+    def running_instances(self):
+        # FIND THE BIGGEST, MOST EXPENSIVE REQUESTS
+        instances = self._get_managed_instances()
+        for r in instances:
+            r.markup = self.price_lookup[r.instance_type]
+        instances = qb.sort(instances, [
+            {"value": "markup.type.utility", "sort": -1},
+            {"value": "markup.estimated_value", "sort": 1}
+        ])
+        return instances
+
+    def save_money(self, remaining_budget, net_new_utility):
+        remove_spot_requests = wrap([])
+
+        # IF WE ARE STILL OUT OF MONEY, THEN CANCEL ALL REQUESTS
+        if remaining_budget < 0:
+            requests = self._get_managed_spot_requests()
+            for r in requests:
+                remove_spot_requests.append(r.id)
+
+        instances = self.running_instances()
+
+        remove_list = wrap([])
+        for s in instances:
+            if remaining_budget >= 0:
+                break
+            remove_list.append(s)
+            net_new_utility += coalesce(s.markup.type.utility, 0)
+            remaining_budget += coalesce(s.markup.price_80, s.markup.curret_price)
+
+        # SEND SHUTDOWN TO EACH INSTANCE
+        Log.note("Shutdown {{instances}}", {"instances": remove_list.id})
+        for i in remove_list:
+            try:
+                self.instance_manager.teardown(i)
+            except Exception, e:
+                Log.warning("Teardown of {{id}} failed", {"id": i.id}, e)
+
+        remove_spot_requests.extend(remove_list.spot_instance_request_id)
+
+        # TERMINATE INSTANCES
+        self.conn.terminate_instances(instance_ids=remove_list.id)
+
+        # TERMINATE SPOT REQUESTS
+        self.conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
+        return remaining_budget, net_new_utility
 
     def _get_managed_spot_requests(self):
         output = wrap([dictwrap(r) for r in self.conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
@@ -234,7 +275,7 @@ class SpotManager(object):
                             # FAIL TO SETUP AFTER 5 MINUTES, THEN TERMINATE INSTANCE
                             self.conn.terminate_instances(instance_ids=[i.id])
                             with self.net_new_locker:
-                                self.net_new_spot_requests.remove(r.id)
+                                    self.net_new_spot_requests.remove(r.id)
                             Log.warning("Second problem with setup of {{instance_id}}.  Instance TERMINATED!", {"instance_id": i.id}, e)
                         else:
                             Log.warning("Problem with setup of {{instance_id}}", {"instance_id": i.id}, e)
@@ -248,7 +289,7 @@ class SpotManager(object):
                 pending = qb.filter(spot_requests, {"terms": {"status.code": PENDING_STATUS_CODES}})
                 if self.done_spot_requests:
                     with self.net_new_locker:
-                        expired = Date.now() - self.settings.run_interval + 5 * MINUTE
+                        expired = Date.now() - self.settings.run_interval + 2 * MINUTE
                         for ii in list(self.net_new_spot_requests):
                             if Date(ii.create_time) < expired:
                                 ## SOMETIMES REQUESTS NEVER GET INTO THE MAIN LIST OF REQUESTS
@@ -428,7 +469,6 @@ TERMINATED_STATUS_CODES = {
     "bad-parameters"
 }
 RETRY_STATUS_CODES = {
-    "az-group-constraint",
     "instance-terminated-by-price",
     "price-too-low",
     "bad-parameters",
@@ -437,7 +477,8 @@ RETRY_STATUS_CODES = {
 }
 PENDING_STATUS_CODES = {
     "pending-evaluation",
-    "pending-fulfillment"
+    "pending-fulfillment",
+    "az-group-constraint"
 }
 RUNNING_STATUS_CODES = {
     "fulfilled",

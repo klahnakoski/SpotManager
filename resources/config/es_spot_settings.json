@@ -1,0 +1,118 @@
+{
+	"budget": 0.70,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"max_utility_price": 0.02,  //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
+	"max_new_utility": 400,     //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
+	"bid_percentile": 0.9,      //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
+	"price_file": "resources/aws/prices.json",
+	"run_interval": "10minute", //HOW LONG BEFORE NEXT RUN
+	"aws": {
+		"$ref": "//~/private.json#aws_credentials"
+	},
+	"utility":[ //ONE POINT PER 2GIG OF MEMORY, PLUS 5 IF OVER 1Tb OF DRIVE SPACE INCLUDED (SAVE 3.5/hour)
+		{"instance_type": "c3.4xlarge", "utility": 15, "discount": -0.07, "over_1T":false},
+		{"instance_type": "c3.8xlarge", "utility": 30, "discount": -0.07, "over_1T":false},
+
+		{"instance_type": "c4.4xlarge", "utility": 15, "discount": -0.07, "over_1T":false},
+		{"instance_type": "c4.8xlarge", "utility": 30, "discount": -0.07, "over_1T":false},
+
+		{"instance_type": "cc2.8xlarge", "utility": 30, "discount": -0.07, "over_1T":false},
+		{"instance_type": "cr1.8xlarge", "utility": 30, "discount": -0.07, "over_1T":false},
+
+		{"instance_type": "d2.xlarge", "utility": 15, "discount": 0, "over_1T":true},
+		{"instance_type": "d2.2xlarge", "utility": 30, "discount": 0, "over_1T":true},
+		{"instance_type": "d2.4xlarge", "utility": 30, "discount": 0, "over_1T":true},
+		{"instance_type": "d2.8xlarge", "utility": 30, "discount": 0, "over_1T":true},
+
+		{"instance_type": "hi1.4xlarge", "utility": 30, "discount": 0, "over_1T":true},
+
+		{"instance_type": "i2.xlarge", "utility": 15, "discount": -0.07, "over_1T":false},
+		{"instance_type": "i2.2xlarge", "utility": 30, "discount": 0, "over_1T":true},
+		{"instance_type": "i2.4xlarge", "utility": 30, "discount": 0, "over_1T":true},
+		{"instance_type": "i2.8xlarge", "utility": 30, "discount": 0, "over_1T":true},
+
+		{"instance_type": "m3.2xlarge", "utility": 15, "discount": -0.07, "over_1T":false},
+
+		{"instance_type": "r3.xlarge", "utility": 15, "discount": -0.07, "over_1T":false},
+		{"instance_type": "r3.2xlarge", "utility": 30, "discount": -0.07, "over_1T":false},
+		{"instance_type": "r3.4xlarge", "utility": 30, "discount": -0.07, "over_1T":false},
+		{"instance_type": "r3.8xlarge", "utility": 30, "discount": -0.07, "over_1T":false}
+	],
+	"ec2": {
+		"request": {
+			//SEE http://boto.readthedocs.org/en/latest/ref/ec2.html#boto.ec2.connection.EC2Connection.request_spot_instances
+			"price": 0.001,
+			"image_id": "ami-e7527ed7",
+			"count": 1,
+			"type": "one-time",
+			"valid_from": null,
+			"valid_until": null,
+			"launch_group": null,
+			"availability_zone_group": null,
+			"key_name": "aws-pulse-logger",
+			"security_groups": null,
+			"user_data": null,
+			"addressing_type": null,
+			"instance_type": null,
+			"placement": null,
+			"kernel_id": null,
+			"ramdisk_id": null,
+			"monitoring_enabled": false,
+			"subnet_id": null,
+			"placement_group": null,
+			"block_device_map": null,
+			"instance_profile_arn": null,
+			"instance_profile_name": "active-data",
+			"security_group_ids": null,
+			"ebs_optimized": false,
+			"network_interfaces": {
+				"subnet_id": "subnet-b7c137ee",
+				"groups": ["sg-bb542fde"],
+				"associate_public_ip_address": true
+			},
+			"dry_run": false
+		},
+		"instance": {
+			"name": "ActiveData ES Spot Instance"
+		}
+	},
+	"instance":{
+		"class":"active_data.es_spot.ESSpot",
+		"minimum_utility": 120,
+		"connect": {
+			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
+			"user": "ec2-user",
+			"key_filename": "~/keys/aws-pulse-logger.pem",
+			"disable_known_hosts": true,
+			"host_string": "",
+			"port": 22,
+			"password": ""
+		},
+		"new_volume":{
+			"size":1000,
+			"volume_type":"magnetic",
+			"zone": "us-west-2c",
+			"snapshot": null,
+			"iops":null,
+			"encrypted":false
+		}
+	},
+	"debug": {
+		"trace": true,
+		"cprofile": {
+			"enabled": false,
+			"filename": "results/active_data_spot_profile.tab"
+		},
+		"log": [
+			{
+				"class": "logging.handlers.RotatingFileHandler",
+				"filename": "results/logs/active_data_etl.log",
+				"maxBytes": 10000000,
+				"backupCount": 100,
+				"encoding": "utf8"
+			},
+			{
+				"log_type": "console"
+			}
+		]
+	}
+}

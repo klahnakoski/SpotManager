@@ -59,14 +59,18 @@ class SpotManager(object):
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
         active = qb.filter(spot_requests, {"terms": {"status.code": RUNNING_STATUS_CODES | PENDING_STATUS_CODES}})
+        used_budget = 0
+        current_spending = 0
         for a in active:
+            about = self.price_lookup[a.launch_specification.instance_type]
+            discount = coalesce(about.discount, 0)
             Log.note("Active Spot Request {{id}}: {{type}} @ {{price|round(decimal=4)}}", {
                 "id": a.id,
                 "type": a.launch_specification.instance_type,
-                "price": a.price
+                "price": a.price - discount
             })
-        used_budget = coalesce(SUM(active.price), 0)
-        current_spending = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type].current_price for r in active), 0)
+            used_budget += a.price - discount
+            current_spending += about.current_price - discount
 
         Log.note("TOTAL BUDGET: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)", {
             "budget": used_budget,
@@ -102,6 +106,11 @@ class SpotManager(object):
         prices = self.pricing()
 
         for p in prices:
+            if p.current_price==None:
+                Log.note("{{type}} has no price", {
+                    "type": p.type.instance_type
+                })
+                continue
             max_bid = Math.min(p.higher_price, p.type.utility * self.settings.max_utility_price)
             min_bid = p.price_80
 
@@ -115,7 +124,9 @@ class SpotManager(object):
 
             num = int(Math.round(net_new_utility / p.type.utility))
             if num == 1:
-                min_bid = Math.min(min_bid*1.1, max_bid)
+
+
+                min_bid = Math.min(Math.max(p.current_price*1.1, Math.min(min_bid, max_bid)), p.type.utility * self.settings.max_utility_price)
                 price_interval = 0
             else:
                 price_interval = Math.min(min_bid/10, (max_bid - min_bid) / (num - 1))
@@ -144,10 +155,10 @@ class SpotManager(object):
                         for ii in new_requests:
                             self.net_new_spot_requests.add(dictwrap(ii))
                 except Exception, e:
-                    Log.note("Request instance {{type}} FAILED", {
+                    Log.note("Request instance {{type}} failed bcause {{reason}}", {
                         "type": p.type.instance_type,
+                        "reason": e.message
                     })
-                    break
 
         return net_new_utility, remaining_budget
 
@@ -252,8 +263,6 @@ class SpotManager(object):
 
     def _start_life_cycle_watcher(self):
         def life_cycle_watcher(please_stop):
-            self.pricing()
-
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
                 last_get = Date.now()
@@ -263,8 +272,9 @@ class SpotManager(object):
                 please_setup = [(i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests] if i.id and not i.tags.get("Name") and i._state.name == "running"]
                 for i, r in please_setup:
                     try:
-                        p = self.price_lookup[i.instance_type]
-                        self.instance_manager.setup(i, p.type.utility)
+                        p = [u for u in self.settings.utility if u.instance_type == i.instance_type][0]
+                        i.markup = p
+                        self.instance_manager.setup(i, p.utility)
                         i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
                         with self.net_new_locker:
                             self.net_new_spot_requests.remove(r.id)
@@ -275,7 +285,7 @@ class SpotManager(object):
                             # FAIL TO SETUP AFTER 5 MINUTES, THEN TERMINATE INSTANCE
                             self.conn.terminate_instances(instance_ids=[i.id])
                             with self.net_new_locker:
-                                    self.net_new_spot_requests.remove(r.id)
+                                self.net_new_spot_requests.remove(r.id)
                             Log.warning("Second problem with setup of {{instance_id}}.  Instance TERMINATED!", {"instance_id": i.id}, e)
                         else:
                             Log.warning("Problem with setup of {{instance_id}}", {"instance_id": i.id}, e)
@@ -494,7 +504,7 @@ def main():
         settings = startup.read_settings()
         settings.run_interval = Duration(settings.run_interval)
         Log.start(settings.debug)
-        with SingleInstance():
+        with SingleInstance(flavor_id=settings.args.filename):
             instance_manager = new_instance(settings.instance)
             m = SpotManager(instance_manager, settings=settings)
             m.update_spot_requests(instance_manager.required_utility())

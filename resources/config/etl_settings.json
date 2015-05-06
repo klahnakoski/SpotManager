@@ -1,7 +1,7 @@
 {
 	"budget": 0.25,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.02,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
-	"max_new_utility": 4,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
+	"max_new_utility": 40,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"price_file": "resources/aws/prices.json",
 	"run_interval": "10minute",
 	"aws": {

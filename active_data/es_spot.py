@@ -57,6 +57,7 @@ class ESSpot(InstanceManager):
             with hide('output'):
                 self._config_fabric(instance)
                 self._install_es(gigabytes)
+            self._start_es()
 
     def _config_fabric(self, instance):
         if not instance.ip_address:
@@ -93,11 +94,11 @@ class ESSpot(InstanceManager):
             #MOUNT AND FORMAT THE EBS VOLUME (list with `lsblk`)
             for i, k in enumerate(self.volumes):
                 si = unicode(i+1)
-                sudo('mkfs -t ext4 /dev/xvd'+k)
+                sudo('mkfs -t ext4 /dev/xvd'+k["letter"])
                 sudo('mkdir /data'+si)
 
                 #ADD TO /etc/fstab SO AROUND AFTER REBOOT
-                sudo("sed -i '$ a\\/dev/xvd"+k+"   /data"+si+"       ext4    defaults,nofail  0   2' /etc/fstab")
+                sudo("sed -i '$ a\\/dev/xvd"+k["letter"]+"   /data"+si+"       ext4    defaults,nofail  0   2' /etc/fstab")
 
 
             #TEST IT IS WORKING
@@ -123,15 +124,13 @@ class ESSpot(InstanceManager):
         File("./results/temp/elasticsearch.in.sh").write(sh)
         put("./results/temp/elasticsearch.in.sh", '/usr/local/elasticsearch/bin/elasticsearch.in.sh', use_sudo=True)
 
+    def _start_es(self):
         with cd("/usr/local/elasticsearch/"):
-            sudo("./bin/elasticsearch -d")
+            sudo("nohup ./bin/elasticsearch >& /dev/null < /dev/null &")
 
     def _add_volumes(self, instance, num_volumes):
-        existing_volumes = wrap(list(dictwrap(v) for v in self.conn.get_all_volumes() if v.attach_data.instance_id == instance.id))
-
-        if Math.sum(existing_volumes.size) > 1000:
-            # ALREADY HAVE DRIVES, USE THEM
-            self.volumes = [v.attach_data.device[-1] for v in existing_volumes if v.size >= 600]
+        if instance.markup.drives:
+            self.volumes = [{"letter": v} for v in instance.markup.drives]
         else:
             volumes = []
             for i in range(num_volumes):

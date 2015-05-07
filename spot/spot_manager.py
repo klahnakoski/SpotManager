@@ -10,6 +10,7 @@ from __future__ import unicode_literals
 from __future__ import division
 
 import boto
+from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
 from boto.ec2.spotpricehistory import SpotPriceHistory
 from boto.utils import ISO8601
@@ -63,14 +64,13 @@ class SpotManager(object):
         current_spending = 0
         for a in active:
             about = self.price_lookup[a.launch_specification.instance_type]
-            discount = coalesce(about.discount, 0)
             Log.note("Active Spot Request {{id}}: {{type}} @ {{price|round(decimal=4)}}", {
                 "id": a.id,
                 "type": a.launch_specification.instance_type,
-                "price": a.price - discount
+                "price": a.price - about.type.discount
             })
-            used_budget += a.price - discount
-            current_spending += about.current_price - discount
+            used_budget += a.price - about.type.discount
+            current_spending += about.current_price - about.type.discount
 
         Log.note("TOTAL BUDGET: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)", {
             "budget": used_budget,
@@ -124,8 +124,6 @@ class SpotManager(object):
 
             num = int(Math.round(net_new_utility / p.type.utility))
             if num == 1:
-
-
                 min_bid = Math.min(Math.max(p.current_price*1.1, Math.min(min_bid, max_bid)), p.type.utility * self.settings.max_utility_price)
                 price_interval = 0
             else:
@@ -326,6 +324,16 @@ class SpotManager(object):
             *unwrap(NetworkInterfaceSpecification(**unwrap(s)) for s in listwrap(settings.network_interfaces))
         )
         settings.settings = None
+
+        #INCLUDE EPHEMERAL STORAGE BlockDeviceMapping
+        settings.block_device_map = BlockDeviceMapping()
+        for i in range(ephemeral_storage[instance_type]["num"]):
+            letter = convert.ascii2char(98 + i)
+            settings.block_device_map["/dev/sd" + letter] = BlockDeviceType(
+                ephemeral_name='ephemeral' + unicode(i),
+                # size=ephemeral_storage[instance_type]["size"],
+                delete_on_termination=True
+            )
         output = list(self.conn.request_spot_instances(**unwrap(settings)))
         for o in output:
             o.add_tag("Name", self.settings.ec2.instance.name)
@@ -383,7 +391,7 @@ class SpotManager(object):
                     }
                 ],
                 "select": [
-                    {"name": "price_80", "value": "price", "aggregate": "percentile", "percentile": 0.80},
+                    {"name": "price_80", "value": "price", "aggregate": "percentile", "percentile": self.settings.bid_percentile},
                     {"name": "max_price", "value": "price", "aggregate": "max"},
                     {"aggregate": "count"},
                     {"value": "current_price", "aggregate": "one"},
@@ -497,15 +505,14 @@ RUNNING_STATUS_CODES = {
 
 
 def main():
-    """
-    CLEAR OUT KEYS FROM BUCKET BY RANGE, OR BY FILE
-    """
     try:
         settings = startup.read_settings()
         settings.run_interval = Duration(settings.run_interval)
         Log.start(settings.debug)
         with SingleInstance(flavor_id=settings.args.filename):
             instance_manager = new_instance(settings.instance)
+            for u in settings.utility:
+                u.discount = coalesce(u.discount, 0)
             m = SpotManager(instance_manager, settings=settings)
             m.update_spot_requests(instance_manager.required_utility())
             m.watcher.join()
@@ -514,6 +521,57 @@ def main():
     finally:
         Log.stop()
         MAIN_THREAD.stop()
+
+
+ephemeral_storage = {
+    "c1.medium": {"num": 1, "size": 350},
+    "c1.xlarge": {"num": 4, "size": 420},
+    "c3.2xlarge": {"num": 2, "size": 80},
+    "c3.4xlarge": {"num": 2, "size": 160},
+    "c3.8xlarge": {"num": 2, "size": 320},
+    "c3.large": {"num": 2, "size": 16},
+    "c3.xlarge": {"num": 2, "size": 40},
+    "c4.2xlarge": {"num": 0, "size": 0},
+    "c4.4xlarge": {"num": 0, "size": 0},
+    "c4.8xlarge": {"num": 0, "size": 0},
+    "c4.large": {"num": 0, "size": 0},
+    "c4.xlarge": {"num": 0, "size": 0},
+    "cc2.8xlarge": {"num": 4, "size": 840},
+    "cg1.4xlarge": {"num": 2, "size": 840},
+    "cr1.8xlarge": {"num": 2, "size": 120},
+    "d2.2xlarge": {"num": 6, "size": 2000},
+    "d2.4xlarge": {"num": 12, "size": 2000},
+    "d2.8xlarge": {"num": 24, "size": 2000},
+    "d2.xlarge": {"num": 3, "size": 2000},
+    "g2.2xlarge": {"num": 1, "size": 60},
+    "hi1.4xlarge": {"num": 2, "size": 1024},
+    "hs1.8xlarge": {"num": 24, "size": 2000},
+    "i2.2xlarge": {"num": 2, "size": 800},
+    "i2.4xlarge": {"num": 4, "size": 800},
+    "i2.8xlarge": {"num": 8, "size": 800},
+    "i2.xlarge": {"num": 1, "size": 800},
+    "m1.large": {"num": 2, "size": 420},
+    "m1.medium": {"num": 1, "size": 410},
+    "m1.small": {"num": 1, "size": 160},
+    "m1.xlarge": {"num": 4, "size": 420},
+    "m2.2xlarge": {"num": 1, "size": 850},
+    "m2.4xlarge": {"num": 2, "size": 840},
+    "m2.xlarge": {"num": 1, "size": 420},
+    "m3.2xlarge": {"num": 2, "size": 80},
+    "m3.large": {"num": 1, "size": 32},
+    "m3.medium": {"num": 1, "size": 4},
+    "m3.xlarge": {"num": 2, "size": 40},
+    "r3.2xlarge": {"num": 1, "size": 160},
+    "r3.4xlarge": {"num": 1, "size": 320},
+    "r3.8xlarge": {"num": 2, "size": 320},
+    "r3.large": {"num": 1, "size": 32},
+    "r3.xlarge": {"num": 1, "size": 80},
+    "t1.micro": {"num": 0, "size": 0},
+    "t2.medium": {"num": 0, "size": 0},
+    "t2.micro": {"num": 0, "size": 0},
+    "t2.small": {"num": 0, "size": 0}
+}
+
 
 
 if __name__ == "__main__":

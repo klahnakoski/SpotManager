@@ -4,6 +4,7 @@
 	"max_new_utility": 40,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"price_file": "resources/aws/prices.json",
 	"run_interval": "10minute",
+	"bid_percentile": 0.8,      //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
 	"aws": {
 		"$ref": "//~/private.json#aws_credentials"
 	},

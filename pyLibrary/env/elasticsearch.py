@@ -184,12 +184,12 @@ class Index(object):
     def delete_record(self, filter):
         self.cluster.get_metadata()
 
-        if self.cluster.node_metadata.version.number.startswith("0.90"):
+        if self.cluster.cluster_metadata.version.number.startswith("0.90"):
             query = {"filtered": {
                 "query": {"match_all": {}},
                 "filter": filter
             }}
-        elif self.cluster.node_metadata.version.number.startswith("1.0"):
+        elif self.cluster.cluster_metadata.version.number.startswith("1.0"):
             query = {"query": {"filtered": {
                 "query": {"match_all": {}},
                 "filter": filter
@@ -500,8 +500,8 @@ class Cluster(object):
             if not self.cluster_metadata:
                 response = self.get("/_cluster/state")
                 self.cluster_metadata = response.metadata
-                self.node_metadata = self.get("/")
-                self.version = self.node_metadata.version.number
+                self.cluster_metadata = self.get("/")
+                self.version = self.cluster_metadata.version.number
         else:
             Log.error("Metadata exploration has been disabled")
         return self.cluster_metadata

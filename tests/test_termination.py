@@ -6,4 +6,5 @@ class TestTerminations(FuzzyTestCase):
 
     def setUp():
         #BUILD FAKE AWS
+        pass
 

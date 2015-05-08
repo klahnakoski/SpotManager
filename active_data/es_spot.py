@@ -125,8 +125,13 @@ class ESSpot(InstanceManager):
         put("./results/temp/elasticsearch.in.sh", '/usr/local/elasticsearch/bin/elasticsearch.in.sh', use_sudo=True)
 
     def _start_es(self):
+        File("./result/temp/start_es.sh").write("nohup ./bin/elasticsearch >& /dev/null < /dev/null &\nsleep 20")
+        with cd("/home/ec2-user/"):
+            put("./result/temp/start_es.sh", "start_es.sh")
+            run("chmod u+x start_es.sh")
+
         with cd("/usr/local/elasticsearch/"):
-            sudo("nohup ./bin/elasticsearch >& /dev/null < /dev/null &")
+            sudo("/home/ec2-user/start_es.sh")
 
     def _add_volumes(self, instance, num_volumes):
         if instance.markup.drives:

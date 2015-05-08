@@ -409,11 +409,16 @@ def bytes2hex(value, separator=" "):
 
 
 def base642bytearray(value):
+    return bytearray(base64.b64decode(value))
+
+
+def base642bytes(value):
     return base64.b64decode(value)
 
 
 def bytes2base64(value):
     return base64.b64encode(value).decode("utf8")
+
 
 def bytes2sha1(value):
     if isinstance(value, unicode):

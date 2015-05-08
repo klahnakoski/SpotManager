@@ -2,7 +2,7 @@
 	"budget": 0.70,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.02,  //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 400,     //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
-	"bid_percentile": 0.9,      //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
+	"bid_percentile": 0.95,     //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
 	"price_file": "resources/aws/prices.json",
 	"run_interval": "10minute", //HOW LONG BEFORE NEXT RUN
 	"aws": {

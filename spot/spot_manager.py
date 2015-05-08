@@ -52,7 +52,8 @@ class SpotManager(object):
         self.net_new_locker = Lock()
         self.net_new_spot_requests = UniqueIndex(("id",))
         self.watcher = None
-        self._start_life_cycle_watcher()
+        if instance_manager.setup_required():
+            self._start_life_cycle_watcher()
         self.pricing()
 
     def update_spot_requests(self, utility_required):
@@ -515,7 +516,9 @@ def main():
                 u.discount = coalesce(u.discount, 0)
             m = SpotManager(instance_manager, settings=settings)
             m.update_spot_requests(instance_manager.required_utility())
-            m.watcher.join()
+
+            if m.watcher:
+                m.watcher.join()
     except Exception, e:
         Log.warning("Problem with spot manager", e)
     finally:

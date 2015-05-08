@@ -50,7 +50,7 @@ class SpotManager(object):
         self.price_lookup = None
         self.done_spot_requests = Signal()
         self.net_new_locker = Lock()
-        self.net_new_spot_requests = UniqueIndex(("id",))
+        self.net_new_spot_requests = UniqueIndex(("id",))  # SPOT REQUESTS FOR THIS SESSION
         self.watcher = None
         self._start_life_cycle_watcher()
         self.pricing()
@@ -111,7 +111,9 @@ class SpotManager(object):
                     "type": p.type.instance_type
                 })
                 continue
-            max_bid = Math.min(p.higher_price, p.type.utility * self.settings.max_utility_price)
+            # DO NOT BID HIGHER THAN WHAT WE ARE WILLING TO PAY
+            max_acceptable_price = p.type.utility * self.settings.max_utility_price
+            max_bid = Math.min(p.higher_price, max_acceptable_price)
             min_bid = p.price_80
 
             if min_bid > max_bid:
@@ -124,7 +126,7 @@ class SpotManager(object):
 
             num = int(Math.round(net_new_utility / p.type.utility))
             if num == 1:
-                min_bid = Math.min(Math.max(p.current_price*1.1, Math.min(min_bid, max_bid)), p.type.utility * self.settings.max_utility_price)
+                min_bid = Math.min(Math.max(p.current_price*1.1, min_bid), max_acceptable_price)
                 price_interval = 0
             else:
                 price_interval = Math.min(min_bid/10, (max_bid - min_bid) / (num - 1))
@@ -443,7 +445,7 @@ class SpotManager(object):
                         "start_at": start_at
                     })
 
-                next_token=None
+                next_token = None
                 while True:
                     resultset = self.conn.get_spot_price_history(
                         product_description="Linux/UNIX",

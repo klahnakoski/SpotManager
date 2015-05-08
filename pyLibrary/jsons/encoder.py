@@ -279,10 +279,10 @@ def pretty_json(value):
                     return "{}"
                 items = list(value.items())
                 if len(items) == 1:
-                    return "{" + quote(items[0][0]) + ": " + pretty_json(items[0][1]).strip() + "}"
+                    return "{" + quote(unicode(items[0][0])) + ": " + pretty_json(items[0][1]).strip() + "}"
 
                 items = sorted(items, lambda a, b: value_compare(a[0], b[0]))
-                values = [quote(k)+": " + indent(pretty_json(v)).strip() for k, v in items if v != None]
+                values = [quote(unicode(k))+": " + indent(pretty_json(v)).strip() for k, v in items if v != None]
                 return "{\n" + INDENT + (",\n"+INDENT).join(values) + "\n}"
             except Exception, e:
                 from pyLibrary.debugs.logs import Log

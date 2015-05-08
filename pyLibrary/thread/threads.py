@@ -380,7 +380,7 @@ class Thread(object):
             with self.synch_lock:
                 self.response = Dict(exception=e)
             try:
-                Log.fatal("Problem in thread {{name}}", {"name": self.name}, e)
+                Log.fatal("Problem in thread {{name|quote}}", {"name": self.name}, e)
             except Exception, f:
                 sys.stderr.write("ERROR in thread: " + str(self.name) + " " + str(e) + "\n")
         finally:
@@ -499,6 +499,9 @@ class Thread(object):
         """
         SLEEP UNTIL keyboard interrupt
         """
+        if not isinstance(please_stop, Signal):
+            please_stop = Signal()
+
         if allow_exit:
             Thread('waiting for "exit"', readloop, please_stop=please_stop).start()
 
@@ -506,9 +509,6 @@ class Thread(object):
             if not Log:
                 _late_import()
             Log.error("Only the main thread can sleep forever (waiting for KeyboardInterrupt)")
-
-        if not isinstance(please_stop, Signal):
-            please_stop = Signal()
 
         # DEOS NOT SEEM TO WOKR
         # def stopper():

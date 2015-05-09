@@ -90,6 +90,7 @@ class ESSpot(InstanceManager):
                 # https://github.com/elasticsearch/elasticsearch-cloud-aws
                 sudo('bin/plugin -install elasticsearch/elasticsearch-cloud-aws/2.4.1')
 
+
         if not fabric_files.exists("/data1"):
             #MOUNT AND FORMAT THE EBS VOLUME (list with `lsblk`)
             for i, k in enumerate(self.volumes):
@@ -107,6 +108,10 @@ class ESSpot(InstanceManager):
             sudo('mkdir /data1/logs')
             sudo('mkdir /data1/heapdump')
 
+            #INCREASE NUMBER OF FILE HANDLES
+            sudo("sysctl -w fs.file-max=64000")
+            sudo("sed -i '$ a\\fs.file-max = 64000' /etc/sysctl.conf")
+            sudo("sysctl -p")
 
         # COPY CONFIG FILE TO ES DIR
         yml = File("./resources/config/es_spot_config.yml").read().replace("\r", "")
@@ -125,9 +130,9 @@ class ESSpot(InstanceManager):
         put("./results/temp/elasticsearch.in.sh", '/usr/local/elasticsearch/bin/elasticsearch.in.sh', use_sudo=True)
 
     def _start_es(self):
-        File("./result/temp/start_es.sh").write("nohup ./bin/elasticsearch >& /dev/null < /dev/null &\nsleep 20")
+        File("./results/temp/start_es.sh").write("nohup ./bin/elasticsearch >& /dev/null < /dev/null &\nsleep 20")
         with cd("/home/ec2-user/"):
-            put("./result/temp/start_es.sh", "start_es.sh")
+            put("./results/temp/start_es.sh", "start_es.sh")
             run("chmod u+x start_es.sh")
 
         with cd("/usr/local/elasticsearch/"):

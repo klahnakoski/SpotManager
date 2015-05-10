@@ -283,6 +283,8 @@ class MainThread(object):
         """
         children = copy(self.children)
         for c in children:
+            if c.name:
+                Log.note("Stopping thread {{name|quote}}", {"name": c.name})
             c.stop()
         for c in children:
             c.join()
@@ -411,12 +413,15 @@ class Thread(object):
         """
         RETURN THE RESULT {"response":r, "exception":e} OF THE THREAD EXECUTION (INCLUDING EXCEPTION, IF EXISTS)
         """
+        if timeout is not None:
+            if till is None:
+                till = datetime.utcnow() + timedelta(seconds=timeout)
+            else:
+                Log.error("Can not except both `timeout` and `till`")
+
         children = copy(self.children)
         for c in children:
-            c.join(timeout=timeout, till=till)
-
-        if not till and timeout:
-            till = datetime.utcnow() + timedelta(seconds=timeout)
+            c.join(till=till)
 
         if till is None:
             while True:

@@ -77,7 +77,7 @@
 	},
 	"instance":{
 		"class":"active_data.etl.ETL",
-		"minimum_utility": 3,
+		"minimum_utility": 2,
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 			"user": "ubuntu",

@@ -18,6 +18,7 @@ from fabric.state import env
 from pyLibrary import aws
 from pyLibrary.debugs.logs import Log
 from pyLibrary.env.files import File
+from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings
 from pyLibrary.strings import between
 from pyLibrary.thread.threads import Lock
@@ -40,11 +41,7 @@ class ETL(InstanceManager):
     def required_utility(self):
         queue = aws.Queue(self.settings.work_queue)
         pending = len(queue)
-        # SINCE EACH ITEM IN QUEUE REPRESENTS SMALL, OR GIGANTIC, AMOUNT
-        # OF TOTAL WORK THE QUEUE SIZE IS TERRIBLE PREDICTOR OF HOW MUCH
-        # UTILITY WE REALLY NEED.  WE USE log10() TO SUPPRESS THE
-        # VARIABILITY, AND HOPE FOR THE BEST
-        return max(self.settings.minimum_utility, max(pending/100, 1))
+        return max(self.settings.minimum_utility, Math.ceiling(pending/10))
 
     def setup(self, instance, utility):
         with self.locker:

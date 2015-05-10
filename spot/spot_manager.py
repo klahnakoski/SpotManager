@@ -20,17 +20,18 @@ from pyLibrary.collections import SUM
 from pyLibrary.debugs import startup
 from pyLibrary.debugs.logs import Log
 from pyLibrary.debugs.startup import SingleInstance
-from pyLibrary.dot import wrap, dictwrap, coalesce, listwrap, unwrap, DictList, get_attr
+from pyLibrary.dot import wrap, dictwrap, coalesce, listwrap, unwrap, DictList
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings, new_instance
 from pyLibrary.queries import qb
 from pyLibrary.queries.expressions import CODE
 from pyLibrary.queries.unique_index import UniqueIndex
-from pyLibrary.thread.threads import Lock, Thread, MAIN_THREAD, Signal, Queue
+from pyLibrary.thread.threads import Lock, Thread, MAIN_THREAD, Signal
 from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import DAY, HOUR, WEEK, MINUTE, SECOND, Duration
 from pyLibrary.times.timer import Timer
+
 
 DEBUG_PRICING = False
 TIME_FROM_RUNNING_TO_LOGIN = 5 * MINUTE

@@ -51,6 +51,8 @@ class UniqueIndex(object):
         except Exception, e:
             Log.error("something went wrong", e)
 
+    def keys(self):
+        return self._data.keys()
 
     def add(self, val):
         key = value2key(self._keys, val)

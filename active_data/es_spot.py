@@ -39,6 +39,7 @@ class ESSpot(InstanceManager):
         self.settings = settings
         self.volumes = []
         self.conn = None
+        self.instance = None
         self.locker = Lock()
 
     def required_utility(self):
@@ -49,9 +50,8 @@ class ESSpot(InstanceManager):
         instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
         utility
     ):
-        self.conn = instance.connection
-        self._add_volumes(instance, Math.floor(utility/15))
         with self.locker:
+            self.instance = instance
             gigabytes = Math.floor(utility, 15)
             Log.note("setup {{instance}}", {"instance": instance.id})
             with hide('output'):
@@ -90,8 +90,10 @@ class ESSpot(InstanceManager):
                 # https://github.com/elasticsearch/elasticsearch-cloud-aws
                 sudo('bin/plugin -install elasticsearch/elasticsearch-cloud-aws/2.4.1')
 
-
         if not fabric_files.exists("/data1"):
+            self.conn = self.instance.connection
+            self._add_volumes(self.instance, Math.floor(gigabytes/15))
+
             #MOUNT AND FORMAT THE EBS VOLUME (list with `lsblk`)
             for i, k in enumerate(self.volumes):
                 si = unicode(i+1)
@@ -110,8 +112,6 @@ class ESSpot(InstanceManager):
 
             #INCREASE NUMBER OF FILE HANDLES
             sudo("sysctl -w fs.file-max=64000")
-            sudo("sed -i '$ a\\fs.file-max = 64000' /etc/sysctl.conf")
-            sudo("sysctl -p")
 
         # COPY CONFIG FILE TO ES DIR
         yml = File("./resources/config/es_spot_config.yml").read().replace("\r", "")
@@ -159,6 +159,6 @@ class ESSpot(InstanceManager):
             except Exception, e:
                 for v in volumes:
                     self.conn.delete_volume(v.volume.id)
-                Log.error("Can not setup")
+                Log.error("Can not setup", e)
 
             self.volumes=volumes

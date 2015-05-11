@@ -60,7 +60,7 @@ class SpotManager(object):
         spot_requests = self._get_managed_spot_requests()
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
-        active = qb.filter(spot_requests, {"terms": {"status.code": RUNNING_STATUS_CODES | PENDING_STATUS_CODES}})
+        active = qb.filter(spot_requests, {"terms": {"status.code": RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE}})
         used_budget = 0
         current_spending = 0
         for a in active:
@@ -215,13 +215,16 @@ class SpotManager(object):
     def save_money(self, remaining_budget, net_new_utility):
         remove_spot_requests = wrap([])
 
-        # IF WE ARE STILL OUT OF MONEY, THEN CANCEL ALL REQUESTS
+        # FIRST CANCEL THE PENDING REQUESTS
         if remaining_budget < 0:
             requests = self._get_managed_spot_requests()
             for r in requests:
-                remove_spot_requests.append(r.id)
+                if r.status.code in PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE:
+                    remove_spot_requests.append(r.id)
+                    net_new_utility += self.settings.utility[r.launch_specification.instance_type].utility
+                    remaining_budget += r.price
 
-        instances = self.running_instances()
+        instances = qb.sort(self.running_instances(), "markup.estimated_value")
 
         remove_list = wrap([])
         for s in instances:
@@ -229,7 +232,7 @@ class SpotManager(object):
                 break
             remove_list.append(s)
             net_new_utility += coalesce(s.markup.type.utility, 0)
-            remaining_budget += coalesce(s.markup.price_80, s.markup.curret_price)
+            remaining_budget += coalesce(s.markup.price_80, s.markup.current_price)
 
         # SEND SHUTDOWN TO EACH INSTANCE
         Log.note("Shutdown {{instances}}", {"instances": remove_list.id})
@@ -273,7 +276,7 @@ class SpotManager(object):
                 please_setup = [(i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests] if i.id and not i.tags.get("Name") and i._state.name == "running"]
                 for i, r in please_setup:
                     try:
-                        p = [u for u in self.settings.utility if u.instance_type == i.instance_type][0]
+                        p = self.settings.utility[i.instance_type]
                         i.markup = p
                         self.instance_manager.setup(i, p.utility)
                         i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
@@ -296,8 +299,9 @@ class SpotManager(object):
                     spot_requests = self._get_managed_spot_requests()
                     last_get = Date.now()
 
-
                 pending = qb.filter(spot_requests, {"terms": {"status.code": PENDING_STATUS_CODES}})
+                give_up = qb.filter(spot_requests, {"terms": {"status.code": PROBABLY_NOT_FOR_A_WHILE}})
+
                 if self.done_spot_requests:
                     with self.net_new_locker:
                         expired = Date.now() - self.settings.run_interval + 2 * MINUTE
@@ -305,8 +309,13 @@ class SpotManager(object):
                             if Date(ii.create_time) < expired:
                                 ## SOMETIMES REQUESTS NEVER GET INTO THE MAIN LIST OF REQUESTS
                                 self.net_new_spot_requests.remove(ii)
+                        for g in give_up:
+                            self.net_new_spot_requests.remove(g.id)
                         pending = UniqueIndex(("id",), data=pending)
                         pending = pending | self.net_new_spot_requests
+
+                if give_up:
+                    self.conn.cancel_spot_instance_requests(request_ids=give_up.id)
 
                 if not pending and not time_to_stop_trying and self.done_spot_requests:
                     Log.note("No more pending spot requests")
@@ -390,7 +399,7 @@ class SpotManager(object):
                         "name": "type",
                         "value": "instance_type",
                         "allowNulls": False,
-                        "domain": {"type": "set", "key": "instance_type", "partitions": self.settings.utility}
+                        "domain": {"type": "set", "key": "instance_type", "partitions": list(self.settings.utility)}
                     }
                 ],
                 "select": [
@@ -431,7 +440,7 @@ class SpotManager(object):
 
         prices = set(cache)
         with Timer("Get pricing from AWS"):
-            for instance_type in self.settings.utility.instance_type:
+            for instance_type in self.settings.utility.keys():
                 if most_recents:
                     most_recent = most_recents[{"instance_type":instance_type}].timestamp
                     if most_recent == None:
@@ -498,7 +507,9 @@ RETRY_STATUS_CODES = {
 }
 PENDING_STATUS_CODES = {
     "pending-evaluation",
-    "pending-fulfillment",
+    "pending-fulfillment"
+}
+PROBABLY_NOT_FOR_A_WHILE = {
     "az-group-constraint"
 }
 RUNNING_STATUS_CODES = {
@@ -513,9 +524,10 @@ def main():
         settings.run_interval = Duration(settings.run_interval)
         Log.start(settings.debug)
         with SingleInstance(flavor_id=settings.args.filename):
-            instance_manager = new_instance(settings.instance)
             for u in settings.utility:
                 u.discount = coalesce(u.discount, 0)
+            settings.utility = UniqueIndex(["instance_type"], data=settings.utility)
+            instance_manager = new_instance(settings.instance)
             m = SpotManager(instance_manager, settings=settings)
             m.update_spot_requests(instance_manager.required_utility())
             m.watcher.join()

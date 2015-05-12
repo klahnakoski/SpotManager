@@ -447,7 +447,7 @@ class SpotManager(object):
                 next_token=None
                 while True:
                     resultset = self.conn.get_spot_price_history(
-                        product_description="Linux/UNIX",
+                        product_description="Linux/UNIX (Amazon VPC)",
                         instance_type=instance_type,
                         availability_zone="us-west-2c",
                         start_time=start_at.format(ISO8601),

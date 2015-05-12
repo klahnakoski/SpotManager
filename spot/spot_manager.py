@@ -347,6 +347,11 @@ class SpotManager(object):
                 # size=ephemeral_storage[instance_type]["size"],
                 delete_on_termination=True
             )
+
+        if settings.expiration:
+            settings.valid_until = (Date.now() + settings.expiration * SECOND).format("%FT%TZ")
+            settings.expiration = None
+
         output = list(self.ec2_conn.request_spot_instances(**unwrap(settings)))
         for o in output:
             o.add_tag("Name", self.settings.ec2.instance.name)
@@ -501,7 +506,6 @@ TERMINATED_STATUS_CODES = {
 }
 RETRY_STATUS_CODES = {
     "instance-terminated-by-price",
-    "price-too-low",
     "bad-parameters",
     "canceled-before-fulfillment",
     "instance-terminated-by-user"
@@ -509,7 +513,8 @@ RETRY_STATUS_CODES = {
 PENDING_STATUS_CODES = {
     "pending-evaluation",
     "pending-fulfillment",
-    "az-group-constraint"
+    "az-group-constraint",
+    "price-too-low"
 }
 RUNNING_STATUS_CODES = {
     "fulfilled",

@@ -461,7 +461,7 @@ class SpotManager(object):
                     resultset = self.ec2_conn.get_spot_price_history(
                         product_description="Linux/UNIX (Amazon VPC)",
                         instance_type=instance_type,
-                        availability_zone="us-west-2c",
+                        availability_zone=self.settings.availability_zone,
                         start_time=start_at.format(ISO8601),
                         next_token=next_token
                     )

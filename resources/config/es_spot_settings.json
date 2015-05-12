@@ -5,6 +5,7 @@
 	"bid_percentile": 0.95,     //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
 	"price_file": "resources/aws/prices.json",
 	"run_interval": "10minute", //HOW LONG BEFORE NEXT RUN
+	"availability_zone": "us-west-2c",
 	"aws": {
 		"$ref": "//~/private.json#aws_credentials"
 	},

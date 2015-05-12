@@ -40,11 +40,12 @@ class SpotManager(object):
     def __init__(self, instance_manager, settings):
         self.settings = settings
         self.instance_manager = instance_manager
-        self.conn = boto.ec2.connect_to_region(
+        aws_args = dict(
             region_name=settings.aws.region,
             aws_access_key_id=unwrap(settings.aws.aws_access_key_id),
-            aws_secret_access_key=unwrap(settings.aws.aws_secret_access_key)
-        )
+            aws_secret_access_key=unwrap(settings.aws.aws_secret_access_key))
+        self.ec2_conn = boto.ec2.connect_to_region(**aws_args)
+        self.vpc_conn = boto.vpc.connect_to_region(**aws_args)
         self.price_locker = Lock()
         self.prices = None
         self.price_lookup = None
@@ -192,10 +193,10 @@ class SpotManager(object):
         remove_spot_requests = remove_list.spot_instance_request_id
 
         # TERMINATE INSTANCES
-        self.conn.terminate_instances(instance_ids=remove_list.id)
+        self.ec2_conn.terminate_instances(instance_ids=remove_list.id)
 
         # TERMINATE SPOT REQUESTS
-        self.conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
+        self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
 
         return net_new_utility
 
@@ -240,20 +241,20 @@ class SpotManager(object):
         remove_spot_requests.extend(remove_list.spot_instance_request_id)
 
         # TERMINATE INSTANCES
-        self.conn.terminate_instances(instance_ids=remove_list.id)
+        self.ec2_conn.terminate_instances(instance_ids=remove_list.id)
 
         # TERMINATE SPOT REQUESTS
-        self.conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
+        self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
         return remaining_budget, net_new_utility
 
     def _get_managed_spot_requests(self):
-        output = wrap([dictwrap(r) for r in self.conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
+        output = wrap([dictwrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
         # Log.note("got spot from amazon {{spot_ids}}", {"spot_ids":output.id})
         return output
 
     def _get_managed_instances(self):
         output =[]
-        reservations = self.conn.get_all_instances()
+        reservations = self.ec2_conn.get_all_instances()
         for res in reservations:
             for instance in res.instances:
                 if instance.tags.get('Name', '').startswith(self.settings.ec2.instance.name) and instance._state.name == "running":
@@ -265,7 +266,7 @@ class SpotManager(object):
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
                 last_get = Date.now()
-                instances = wrap({i.id: dictwrap(i) for r in self.conn.get_all_instances() for i in r.instances})
+                instances = wrap({i.id: dictwrap(i) for r in self.ec2_conn.get_all_instances() for i in r.instances})
                 # INSTANCES THAT REQUIRE SETUP
                 time_to_stop_trying = {}
                 please_setup = [(i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests] if i.id and not i.tags.get("Name") and i._state.name == "running"]
@@ -282,7 +283,7 @@ class SpotManager(object):
                             time_to_stop_trying[i.id] = Date.now() + TIME_FROM_RUNNING_TO_LOGIN
                         if Date.now() > time_to_stop_trying[i.id]:
                             # FAIL TO SETUP AFTER 5 MINUTES, THEN TERMINATE INSTANCE
-                            self.conn.terminate_instances(instance_ids=[i.id])
+                            self.ec2_conn.terminate_instances(instance_ids=[i.id])
                             with self.net_new_locker:
                                 self.net_new_spot_requests.remove(r.id)
                             Log.warning("Second problem with setup of {{instance_id}}.  Instance TERMINATED!", {"instance_id": i.id}, e)
@@ -321,9 +322,20 @@ class SpotManager(object):
 
     @use_settings
     def _request_spot_instances(self, price, availability_zone_group, instance_type, settings=None):
-        settings.network_interfaces = NetworkInterfaceCollection(
-            *unwrap(NetworkInterfaceSpecification(**unwrap(s)) for s in listwrap(settings.network_interfaces))
-        )
+        settings.network_interfaces = NetworkInterfaceCollection()
+
+        for interface_settings in listwrap(settings.network_interfaces):
+            try:
+                subnet = self.vpc_conn.get_all_subnets(filters={'subnet_id': interface_settings.subnet_id})[0]
+
+                if subnet.availability_zone == availability_zone_group:
+                    settings.network_interfaces.append(NetworkInterfaceSpecification(**unwrap(interface_settings)))
+            except IndexError:
+                Log.warning("subnet %s not found; skipping" % interface_settings.subnet_id)
+
+        if len(settings.network_interfaces) == 0:
+            Log.error("No network interface specifications found for %s!" % availability_zone_group)
+
         settings.settings = None
 
         #INCLUDE EPHEMERAL STORAGE BlockDeviceMapping
@@ -335,7 +347,7 @@ class SpotManager(object):
                 # size=ephemeral_storage[instance_type]["size"],
                 delete_on_termination=True
             )
-        output = list(self.conn.request_spot_instances(**unwrap(settings)))
+        output = list(self.ec2_conn.request_spot_instances(**unwrap(settings)))
         for o in output:
             o.add_tag("Name", self.settings.ec2.instance.name)
         return output
@@ -446,7 +458,7 @@ class SpotManager(object):
 
                 next_token=None
                 while True:
-                    resultset = self.conn.get_spot_price_history(
+                    resultset = self.ec2_conn.get_spot_price_history(
                         product_description="Linux/UNIX (Amazon VPC)",
                         instance_type=instance_type,
                         availability_zone="us-west-2c",

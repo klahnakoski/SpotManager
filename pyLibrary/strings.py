@@ -16,7 +16,7 @@ import re
 import math
 import __builtin__
 
-from pyLibrary.dot import coalesce, wrap
+from pyLibrary.dot import coalesce, wrap, Dict
 
 
 def datetime(value):

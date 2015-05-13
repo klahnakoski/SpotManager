@@ -48,6 +48,32 @@ Each SpotManager instance requires a `settings.json` file that controls the Spot
 * **`instance.class`** - An additional property in `instance`: The full name of the class you are using to setup/teardown an instance.
 * **`debug`** - Settings for the [logging module](https://github.com/klahnakoski/SpotManager/blob/master/pyLibrary/debugs/README.md#configuration)
 
+### More about `utility`
+
+The utility list is a declaration of how much utility each instance type can provide, and  additional configuration that the InstanceManager can use for `setup()`.
+
+### Configuring Volumes
+
+Some workloads require large amounts of storage, but not all instances come with enough.  The **SpotManager** will map the ephemeral and EBS volumes or you.
+
+As an example, the `c3.4xlarge` comes with two ephemeral drives, which can be found at `/dev/sdb` and two new EBS volumes, which will be assigned `device` properties at runtime.
+
+		{
+			"instance_type": "c3.4xlarge",
+			"utility": 15,
+			"drives": [
+				{"path":"/data1", "device":"/dev/sdb"},
+				{"path":"/data2", "device":"/dev/sdc"},
+				{"path":"/data3", "size":1000, "volume_type":"standard"},
+				{"path":"/data4", "size":1000, "volume_type":"standard"}
+			]
+		},
+
+Some caveates:
+
+* ***All volumes will be removed on termination*** - This is obvious for ephemeral drives, but the EBS will be removed too.  If you want the volume to be permanent, you must map the block device yourself.
+* ***block devices will not be formatted nor mounted***.  The `path` is provided only so the InstanceManger.setup() routine can perform the `mkfs` and `mount` commands.
+
 ### Writing a InstanceManager
 
 Conceptually, an instance manager is very simple, with only three methods you need to implement.  This repo has an [example in `active_data.etl`](https://github.com/klahnakoski/SpotManager/blob/master/active_data/etl.py) that you can review. 

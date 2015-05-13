@@ -37,7 +37,6 @@ class ESSpot(InstanceManager):
     @use_settings
     def __init__(self, settings):
         self.settings = settings
-        self.volumes = []
         self.conn = None
         self.instance = None
         self.locker = Lock()
@@ -69,6 +68,8 @@ class ESSpot(InstanceManager):
         env.abort_exception = Log.error
 
     def _install_es(self, gigabytes):
+        volumes = self.instance.markup.drives
+
         if not fabric_files.exists("/home/ec2-user/temp"):
             with cd("/home/ec2-user/"):
                 run("mkdir temp")
@@ -92,16 +93,15 @@ class ESSpot(InstanceManager):
 
         if not fabric_files.exists("/data1"):
             self.conn = self.instance.connection
-            self._add_volumes(self.instance, Math.floor(gigabytes/15))
 
             #MOUNT AND FORMAT THE EBS VOLUME (list with `lsblk`)
-            for i, k in enumerate(self.volumes):
-                si = unicode(i+1)
-                sudo('mkfs -t ext4 /dev/xvd'+k["letter"])
-                sudo('mkdir /data'+si)
+            for i, k in enumerate(volumes):
+
+                sudo('mkfs -t ext4 '+k.device)
+                sudo('mkdir '+k.path)
 
                 #ADD TO /etc/fstab SO AROUND AFTER REBOOT
-                sudo("sed -i '$ a\\/dev/xvd"+k["letter"]+"   /data"+si+"       ext4    defaults,nofail  0   2' /etc/fstab")
+                sudo("sed -i '$ a\\"+k.device+"   "+k.path+"       ext4    defaults,nofail  0   2' /etc/fstab")
 
 
             #TEST IT IS WORKING
@@ -117,7 +117,7 @@ class ESSpot(InstanceManager):
         yml = File("./resources/config/es_spot_config.yml").read().replace("\r", "")
         yml = expand_template(yml, {
             "id": Random.hex(length=8),
-            "data_paths": ",".join("/data"+unicode(i+1) for i, _ in enumerate(self.volumes))
+            "data_paths": ",".join("/data"+unicode(i+1) for i, _ in enumerate(volumes))
         })
         File("./results/temp/elasticsearch.yml").write(yml)
         put("./results/temp/elasticsearch.yml", '/usr/local/elasticsearch/config/elasticsearch.yml', use_sudo=True)
@@ -138,29 +138,3 @@ class ESSpot(InstanceManager):
         with cd("/usr/local/elasticsearch/"):
             sudo("/home/ec2-user/start_es.sh")
 
-    def _add_volumes(self, instance, num_volumes):
-        if instance.markup.drives:
-            self.volumes = [{"letter": v} for v in instance.markup.drives]
-        else:
-            volumes = []
-            for i in range(num_volumes):
-                letter = convert.ascii2char(98 + i)  # START AT 'b'
-                v = self.conn.create_volume(**unwrap(self.settings.new_volume))
-                volumes.append(wrap({"volume": v, "letter": letter}))
-
-            try:
-                status = list(self.conn.get_all_volumes(volume_ids=[v.volume.id for v in volumes]))
-                while any(s for s in status if s.status != "available"):
-                    Thread.sleep(seconds=5)
-                    status = list(self.conn.get_all_volumes(volume_ids=[v.volume.id for v in volumes]))
-
-                for v in volumes:
-                    self.conn.attach_volume(v.volume.id, instance.id, "/dev/xvd" + v.letter)
-
-                Log.note("Volumes attached")
-            except Exception, e:
-                for v in volumes:
-                    self.conn.delete_volume(v.volume.id)
-                Log.error("Can not setup", e)
-
-            self.volumes=volumes

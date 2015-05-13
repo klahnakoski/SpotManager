@@ -344,14 +344,24 @@ class SpotManager(object):
         settings.settings = None
 
         #INCLUDE EPHEMERAL STORAGE BlockDeviceMapping
+        num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]
         settings.block_device_map = BlockDeviceMapping()
-        for i in range(ephemeral_storage[instance_type]["num"]):
+        for i in range(num_ephemeral_volumes):
             letter = convert.ascii2char(98 + i)
             settings.block_device_map["/dev/sd" + letter] = BlockDeviceType(
                 ephemeral_name='ephemeral' + unicode(i),
-                # size=ephemeral_storage[instance_type]["size"],
                 delete_on_termination=True
             )
+        #ATTACH NEW EBS VOLUMES
+        for i, drives in enumerate(self.settings.utility[instance_type].drives):
+            d = drives.copy()
+            d.path = None  # path AND device PROPERTY IS NOT ALLOWED IN THE BlockDeviceType
+            d.device = None
+            if d.size:
+                settings.block_device_map[drives.device] = BlockDeviceType(
+                    delete_on_termination=True,
+                    **unwrap(d)
+                )
         output = list(self.conn.request_spot_instances(**unwrap(settings)))
         for o in output:
             o.add_tag("Name", self.settings.ec2.instance.name)
@@ -533,6 +543,12 @@ def main():
         with SingleInstance(flavor_id=settings.args.filename):
             for u in settings.utility:
                 u.discount = coalesce(u.discount, 0)
+                #MARKUP drives WITH EXPECTED device MAPPING
+                num_ephemeral_volumes = ephemeral_storage[u.instance_type]["num"]
+                for i, d in enumerate(d for d in u.drives if not d.device):
+                    letter = convert.ascii2char(98 + num_ephemeral_volumes + i)
+                    d.device = "/dev/xvd" + letter
+
             settings.utility = UniqueIndex(["instance_type"], data=settings.utility)
             instance_manager = new_instance(settings.instance)
             m = SpotManager(instance_manager, settings=settings)

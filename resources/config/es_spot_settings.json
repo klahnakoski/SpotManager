@@ -8,26 +8,39 @@
 	"aws": {
 		"$ref": "//~/private.json#aws_credentials"
 	},
+	"more_drives":[
+		{"path":"/data1", "size":1000, "volume_type":"standard"},
+		{"path":"/data2", "size":1000, "volume_type":"standard"}
+	],
+	"2_ephemeral_drives":[
+		{"path":"/data1", "device":"/dev/sdb"},
+		{"path":"/data2", "device":"/dev/sdc"}
+	],
+	"3_ephemeral_drives":[
+		{"path":"/data1", "device":"/dev/sdb"},
+		{"path":"/data2", "device":"/dev/sdc"},
+		{"path":"/data3", "device":"/dev/sdd"}
+	],
 	"utility":[ //ONE POINT PER 2GIG OF MEMORY.  IF OVER 1Tb OF DRIVE SPACE INCLUDED (SAVE $0.035/Tb/hour)
-		{"instance_type": "c3.4xlarge", "utility": 15, "discount": -0.07, "drives": [] },
-		{"instance_type": "c3.8xlarge", "utility": 30, "discount": -0.07, "drives": [] },
+		{"instance_type": "c3.4xlarge", "utility": 15, "discount": -0.07, "drives": {"$ref":"#more_drives"}},
+		{"instance_type": "c3.8xlarge", "utility": 30, "discount": -0.07, "drives": {"$ref":"#more_drives"}},
 
-		{"instance_type": "c4.4xlarge", "utility": 15, "discount": -0.07, "drives": [] },
-		{"instance_type": "c4.8xlarge", "utility": 30, "discount": -0.07, "drives": [] },
+		{"instance_type": "c4.4xlarge", "utility": 15, "discount": -0.07, "drives": {"$ref":"#more_drives"}},
+		{"instance_type": "c4.8xlarge", "utility": 30, "discount": -0.07, "drives": {"$ref":"#more_drives"}},
 
-		{"instance_type": "cc2.8xlarge", "utility": 30, "discount": -0.07, "drives": ["b", "c", "d"] },
+		{"instance_type": "cc2.8xlarge", "utility": 30, "discount": 0, "drives": {"$ref":"#3_ephemeral_drives"}},
 
-		{"instance_type": "d2.xlarge", "utility": 15, "discount": 0, "drives":["b", "c", "d"]},
-		{"instance_type": "d2.2xlarge", "utility": 30, "discount": 0, "drives":["b", "c", "d"]},
-		{"instance_type": "d2.4xlarge", "utility": 30, "discount": 0, "drives":["b", "c", "d"]},
-		{"instance_type": "d2.8xlarge", "utility": 30, "discount": 0, "drives":["b", "c", "d"]},
+		{"instance_type": "d2.xlarge", "utility": 15, "discount": 0, "drives":{"$ref":"#3_ephemeral_drives"}},
+		{"instance_type": "d2.2xlarge", "utility": 30, "discount": 0, "drives":{"$ref":"#3_ephemeral_drives"}},
+		{"instance_type": "d2.4xlarge", "utility": 30, "discount": 0, "drives":{"$ref":"#3_ephemeral_drives"}},
+		{"instance_type": "d2.8xlarge", "utility": 30, "discount": 0, "drives":{"$ref":"#3_ephemeral_drives"}},
 
-		{"instance_type": "hi1.4xlarge", "utility": 30, "discount": 0, "drives":["b", "c"]},
+		{"instance_type": "hi1.4xlarge", "utility": 30, "discount": 0, "drives":{"$ref":"#2_ephemeral_drives"}},
 
-		{"instance_type": "m3.2xlarge", "utility": 15, "discount": -0.07, "drives": [] },
+		{"instance_type": "m3.2xlarge", "utility": 15, "discount": -0.07, "drives":{"$ref":"#more_drives"}},
 
-		{"instance_type": "r3.4xlarge", "utility": 30, "discount": -0.07, "drives": [] },
-		{"instance_type": "r3.8xlarge", "utility": 30, "discount": -0.07, "drives": [] }
+		{"instance_type": "r3.4xlarge", "utility": 30, "discount": -0.07, "drives":{"$ref":"#more_drives"}},
+		{"instance_type": "r3.8xlarge", "utility": 30, "discount": -0.07, "drives":{"$ref":"#more_drives"}}
 	],
 	"ec2": {
 		"request": {

@@ -60,7 +60,13 @@ class SpotManager(object):
         spot_requests = self._get_managed_spot_requests()
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
+        all_instances = UniqueIndex("id", data=self._get_managed_instances())
         active = qb.filter(spot_requests, {"terms": {"status.code": RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE}})
+
+        for a in active.copy():
+            if a.status.code == "request-canceled-and-instance-running" and all_instances[a.instance_id] == None:
+                active.remove(a)
+
         used_budget = 0
         current_spending = 0
         for a in active:

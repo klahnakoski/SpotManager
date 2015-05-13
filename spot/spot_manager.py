@@ -320,18 +320,33 @@ class SpotManager(object):
 
         self.watcher = Thread.run("lifecycle watcher", life_cycle_watcher)
 
+    def _get_subnet_availability_zone(self, subnet_id):
+        try:
+            subnet = self.vpc_conn.get_all_subnets(filters={'subnet_id': interface_settings.subnet_id})[0]
+            return subnet.availability_zone
+        except IndexError:
+            Log.warning("subnet {{subnet_id}} not found", interface_settings)
+            return None
+
+    def _get_valid_availability_zones(self):
+        zones_with_interfaces = [self._get_subnet_availability_zone for i in
+                                    listwrap(self.settings.ec2.request.network_interfaces).subnet_id]
+
+        if self.settings.availability_zone:
+            # If they pass a list of zones, constrain it by zones we have an
+            # interface for.
+            return set(zones_with_interfaces) & set(listwrap(self.settings.availability_zone))
+        else:
+            # Otherwise, use all available zones.
+            return zones_with_interfaces
+
     @use_settings
     def _request_spot_instances(self, price, availability_zone_group, instance_type, settings=None):
         settings.network_interfaces = NetworkInterfaceCollection()
 
         for interface_settings in listwrap(settings.network_interfaces):
-            try:
-                subnet = self.vpc_conn.get_all_subnets(filters={'subnet_id': interface_settings.subnet_id})[0]
-
-                if subnet.availability_zone == availability_zone_group:
-                    settings.network_interfaces.append(NetworkInterfaceSpecification(**unwrap(interface_settings)))
-            except IndexError:
-                Log.warning("subnet {{subnet_id}} not found; skipping", interface_settings)
+            if self._get_subnet_availability_zone(interface_settings.subnet_id) == availability_zone_group:
+                settings.network_interfaces.append(NetworkInterfaceSpecification(**unwrap(interface_settings)))
 
         if len(settings.network_interfaces) == 0:
             Log.error("No network interface specifications found for {{availability_zone_group}}!", settings)
@@ -444,6 +459,7 @@ class SpotManager(object):
             "select": {"value": "timestamp", "aggregate": "max"}
         }).data
 
+        zones = self._get_valid_availability_zones()
         prices = set(cache)
         with Timer("Get pricing from AWS"):
             for instance_type in self.settings.utility.instance_type:
@@ -461,29 +477,30 @@ class SpotManager(object):
                         "start_at": start_at
                     })
 
-                next_token=None
-                while True:
-                    resultset = self.ec2_conn.get_spot_price_history(
-                        product_description="Linux/UNIX (Amazon VPC)",
-                        instance_type=instance_type,
-                        availability_zone=self.settings.availability_zone,
-                        start_time=start_at.format(ISO8601),
-                        next_token=next_token
-                    )
-                    next_token = resultset.next_token
+                for zone in zones:
+                    next_token=None
+                    while True:
+                        resultset = self.ec2_conn.get_spot_price_history(
+                            product_description="Linux/UNIX (Amazon VPC)",
+                            instance_type=instance_type,
+                            availability_zone=zone,
+                            start_time=start_at.format(ISO8601),
+                            next_token=next_token
+                        )
+                        next_token = resultset.next_token
 
-                    for p in resultset:
-                        prices.add(wrap({
-                            "availability_zone": p.availability_zone,
-                            "instance_type": p.instance_type,
-                            "price": p.price,
-                            "product_description": p.product_description,
-                            "region": p.region.name,
-                            "timestamp": Date(p.timestamp)
-                        }))
+                        for p in resultset:
+                            prices.add(wrap({
+                                "availability_zone": p.availability_zone,
+                                "instance_type": p.instance_type,
+                                "price": p.price,
+                                "product_description": p.product_description,
+                                "region": p.region.name,
+                                "timestamp": Date(p.timestamp)
+                            }))
 
-                    if not next_token:
-                        break
+                        if not next_token:
+                            break
 
         with Timer("Save prices to (pretty) file"):
             File(self.settings.price_file).write(convert.value2json(prices, pretty=True))

@@ -349,7 +349,7 @@ class SpotManager(object):
             )
 
         if settings.expiration:
-            settings.valid_until = (Date.now() + settings.expiration * SECOND).format("%FT%TZ")
+            settings.valid_until = (Date.now() + Duration(settings.expiration)).format(ISO8601)
             settings.expiration = None
 
         output = list(self.ec2_conn.request_spot_instances(**unwrap(settings)))

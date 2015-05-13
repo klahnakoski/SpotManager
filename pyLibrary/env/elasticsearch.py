@@ -507,8 +507,8 @@ class Cluster(object):
         if self.settings.explore_metadata:
             if not self.cluster_metadata:
                 response = self.get("/_cluster/state")
-                self.cluster_metadata = response.metadata
-                self.cluster_state = self.get("/")
+                self.cluster_metadata = wrap(response.metadata)
+                self.cluster_state = wrap(self.get("/"))
                 self.version = self.cluster_state.version.number
         else:
             Log.error("Metadata exploration has been disabled")

@@ -98,7 +98,6 @@ class Log(object):
         for log in listwrap(settings.log):
             Log.add_log(Log.new_instance(log))
 
-
     @classmethod
     def stop(cls):
         from pyLibrary.debugs import profiles
@@ -240,6 +239,9 @@ class Log(object):
             cause = params
             params = None
 
+        if more_params:
+            params = set_default({}, params, more_params)
+
         if cause and not isinstance(cause, Except):
             cause = Except(ERROR, unicode(cause), trace=extract_tb(0))
 
@@ -255,8 +257,7 @@ class Log(object):
                     "trace": trace
                 }
             },
-            stack_depth=stack_depth + 1,
-            **more_params
+            stack_depth=stack_depth + 1
         )
 
 

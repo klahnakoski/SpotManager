@@ -156,6 +156,8 @@ class ESSpot(InstanceManager):
 
                 for v in volumes:
                     self.conn.attach_volume(v.volume.id, instance.id, "/dev/xvd" + v.letter)
+
+                Log.note("Volumes attached")
             except Exception, e:
                 for v in volumes:
                     self.conn.delete_volume(v.volume.id)

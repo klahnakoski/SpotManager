@@ -95,7 +95,7 @@
 	"debug": {
 		"trace": true,
 		"cprofile": {
-			"enabled": false,
+			"enabled": true,
 			"filename": "results/active_data_spot_profile.tab"
 		},
 		"log": [

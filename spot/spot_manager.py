@@ -73,7 +73,7 @@ class SpotManager(object):
             used_budget += a.price - about.type.discount
             current_spending += about.current_price - about.type.discount
 
-        Log.note("TOTAL BUDGET: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)", {
+        Log.note("Total Exposure: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)", {
             "budget": used_budget,
             "current": current_spending
         })
@@ -286,7 +286,7 @@ class SpotManager(object):
                         if not time_to_stop_trying.get(i.id):
                             time_to_stop_trying[i.id] = Date.now() + TIME_FROM_RUNNING_TO_LOGIN
                         if Date.now() > time_to_stop_trying[i.id]:
-                            # FAIL TO SETUP AFTER 5 MINUTES, THEN TERMINATE INSTANCE
+                            # FAIL TO SETUP AFTER x MINUTES, THEN TERMINATE INSTANCE
                             self.conn.terminate_instances(instance_ids=[i.id])
                             with self.net_new_locker:
                                 self.net_new_spot_requests.remove(r.id)
@@ -375,6 +375,7 @@ class SpotManager(object):
                     {
                         "name": "time",
                         "range": {"min": "timestamp", "max": "expire", "mode": "inclusive"},
+                        "allowNulls": False,
                         "domain": {"type": "time", "min": Date.now().floor(HOUR) - DAY, "max": Date.now().floor(HOUR), "interval": "hour"}
                     }
                 ],
@@ -479,8 +480,8 @@ class SpotManager(object):
                     if not next_token:
                         break
 
-        with Timer("Save prices to (pretty) file"):
-            File(self.settings.price_file).write(convert.value2json(prices, pretty=True))
+        with Timer("Save prices to file"):
+            File(self.settings.price_file).write(convert.value2json(prices))
         return prices
 
 

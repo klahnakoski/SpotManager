@@ -331,10 +331,10 @@ class SpotManager(object):
                 if subnet.availability_zone == availability_zone_group:
                     settings.network_interfaces.append(NetworkInterfaceSpecification(**unwrap(interface_settings)))
             except IndexError:
-                Log.warning("subnet %s not found; skipping" % interface_settings.subnet_id)
+                Log.warning("subnet {{subnet_id}} not found; skipping", interface_settings)
 
         if len(settings.network_interfaces) == 0:
-            Log.error("No network interface specifications found for %s!" % availability_zone_group)
+            Log.error("No network interface specifications found for {{availability_zone_group}}!", settings)
 
         settings.settings = None
 

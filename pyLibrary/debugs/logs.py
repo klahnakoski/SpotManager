@@ -99,8 +99,6 @@ class Log(object):
             Log.add_log(Log.new_instance(log))
 
 
-
-
     @classmethod
     def stop(cls):
         from pyLibrary.debugs import profiles
@@ -166,13 +164,13 @@ class Log(object):
         Log.note(template, params, stack_depth=1)
 
     @classmethod
-    def note(cls, template, params=None, stack_depth=0):
+    def note(cls, template, params=None, stack_depth=0, **more_params):
         if len(template) > 10000:
             template = template[:10000]
 
         log_params = Dict(
             template=template,
-            params=set_default({}, params),
+            params=set_default({}, params, more_params),
             timestamp=datetime.utcnow(),
         )
 
@@ -195,7 +193,7 @@ class Log(object):
         cls.main_log.write(log_template, log_params)
 
     @classmethod
-    def unexpected(cls, template, params=None, cause=None):
+    def unexpected(cls, template, params=None, cause=None, **more_params):
         if isinstance(params, BaseException):
             cause = params
             params = None
@@ -214,19 +212,20 @@ class Log(object):
                     "cause": cause,
                     "trace": trace
                 }
-            }
+            },
+            **more_params
         )
 
     @classmethod
-    def alarm(cls, template, params=None, stack_depth=0):
+    def alarm(cls, template, params=None, stack_depth=0, **more_params):
         # USE replace() AS POOR MAN'S CHILD TEMPLATE
 
         template = ("*" * 80) + "\n" + indent(template, prefix="** ").strip() + "\n" + ("*" * 80)
-        Log.note(template, params=params, stack_depth=stack_depth + 1)
+        Log.note(template, params=params, stack_depth=stack_depth + 1, **more_params)
 
     @classmethod
-    def alert(cls, template, params=None, stack_depth=0):
-        return Log.alarm(template, params, stack_depth+1)
+    def alert(cls, template, params=None, stack_depth=0, **more_params):
+        return Log.alarm(template, params, stack_depth+1, **more_params)
 
     @classmethod
     def warning(
@@ -234,7 +233,8 @@ class Log(object):
         template,
         params=None,
         cause=None,
-        stack_depth=0        # stack trace offset (==1 if you do not want to report self)
+        stack_depth=0,       # stack trace offset (==1 if you do not want to report self)
+        **more_params
     ):
         if isinstance(params, BaseException):
             cause = params
@@ -255,7 +255,8 @@ class Log(object):
                     "trace": trace
                 }
             },
-            stack_depth=stack_depth + 1
+            stack_depth=stack_depth + 1,
+            **more_params
         )
 
 
@@ -265,7 +266,8 @@ class Log(object):
         template, # human readable template
         params=None, # parameters for template
         cause=None, # pausible cause
-        stack_depth=0        # stack trace offset (==1 if you do not want to report self)
+        stack_depth=0,        # stack trace offset (==1 if you do not want to report self)
+        **more_params
     ):
         """
         raise an exception with a trace for the cause too
@@ -273,6 +275,9 @@ class Log(object):
         if params and isinstance(listwrap(params)[0], BaseException):
             cause = params
             params = None
+
+        if more_params:
+            params = set_default({}, params, more_params)
 
         add_to_trace = False
         if cause == None:
@@ -301,7 +306,8 @@ class Log(object):
         template,  # human readable template
         params=None,  # parameters for template
         cause=None,  # pausible cause
-        stack_depth=0  # stack trace offset (==1 if you do not want to report self)
+        stack_depth=0,  # stack trace offset (==1 if you do not want to report self)
+        **more_params
     ):
         """
         SEND TO STDERR
@@ -309,6 +315,9 @@ class Log(object):
         if params and isinstance(listwrap(params)[0], BaseException):
             cause = params
             params = None
+
+        if more_params:
+            params = set_default({}, params, more_params)
 
         if cause == None:
             cause = []

@@ -367,7 +367,7 @@ class SpotManager(object):
                 settings.network_interfaces.append(NetworkInterfaceSpecification(**unwrap(interface_settings)))
 
         if len(settings.network_interfaces) == 0:
-            Log.error("No network interface specifications found for {{availability_zone_group}}!", settings)
+            Log.error("No network interface specifications found for {{availability_zone}}!", availability_zone=settings.availability_zone_group)
 
         settings.settings = None
 

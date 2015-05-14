@@ -371,9 +371,13 @@ class SpotManager(object):
 
         settings.settings = None
 
-        #INCLUDE EPHEMERAL STORAGE BlockDeviceMapping
-        num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]
         settings.block_device_map = BlockDeviceMapping()
+        if settings.block_devices:
+            for dev, dev_settings in settings.block_devices:
+                settings.block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
+
+        #INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping
+        num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]
         for i in range(num_ephemeral_volumes):
             letter = convert.ascii2char(98 + i)
             settings.block_device_map["/dev/sd" + letter] = BlockDeviceType(

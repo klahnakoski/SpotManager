@@ -17,7 +17,7 @@ import os
 import sys
 
 from pyLibrary.debugs import constants
-from pyLibrary.dot import coalesce, Dict, set_default, listwrap, wrap
+from pyLibrary.dot import coalesce, Dict, listwrap, wrap, unwrap, Null
 from pyLibrary.jsons.encoder import json_encoder
 from pyLibrary.thread.threads import Thread, Lock, Queue
 from pyLibrary.strings import indent, expand_template
@@ -146,30 +146,20 @@ class Log(object):
             from .log_usingEmail import Log_usingEmail
             return Log_usingEmail(settings)
 
-
     @classmethod
     def add_log(cls, log):
         cls.logging_multi.add_log(log)
 
     @classmethod
-    def debug(cls, template=None, params=None):
-        """
-        USE THIS FOR DEBUGGING (AND EVENTUAL REMOVAL)
-        """
-        Log.note(coalesce(template, ""), params, stack_depth=1)
-
-    @classmethod
-    def println(cls, template, params=None):
-        Log.note(template, params, stack_depth=1)
-
-    @classmethod
-    def note(cls, template, params=None, stack_depth=0, **more_params):
+    def note(cls, template, params={}, stack_depth=0, **more_params):
         if len(template) > 10000:
             template = template[:10000]
 
+        params = dict(params, **more_params)
+
         log_params = Dict(
             template=template,
-            params=set_default({}, params, more_params),
+            params=params,
             timestamp=datetime.utcnow(),
         )
 
@@ -192,10 +182,12 @@ class Log(object):
         cls.main_log.write(log_template, log_params)
 
     @classmethod
-    def unexpected(cls, template, params=None, cause=None, **more_params):
+    def unexpected(cls, template, params={}, cause=None, **more_params):
         if isinstance(params, BaseException):
             cause = params
-            params = None
+            params = {}
+
+        params = dict(params, **more_params)
 
         if cause and not isinstance(cause, Except):
             cause = Except(UNEXPECTED, unicode(cause), trace=extract_tb(0))
@@ -211,36 +203,34 @@ class Log(object):
                     "cause": cause,
                     "trace": trace
                 }
-            },
-            **more_params
+            }
         )
 
     @classmethod
-    def alarm(cls, template, params=None, stack_depth=0, **more_params):
+    def alarm(cls, template, params={}, stack_depth=0, **more_params):
         # USE replace() AS POOR MAN'S CHILD TEMPLATE
 
         template = ("*" * 80) + "\n" + indent(template, prefix="** ").strip() + "\n" + ("*" * 80)
         Log.note(template, params=params, stack_depth=stack_depth + 1, **more_params)
 
     @classmethod
-    def alert(cls, template, params=None, stack_depth=0, **more_params):
+    def alert(cls, template, params={}, stack_depth=0, **more_params):
         return Log.alarm(template, params, stack_depth+1, **more_params)
 
     @classmethod
     def warning(
         cls,
         template,
-        params=None,
+        params={},
         cause=None,
         stack_depth=0,       # stack trace offset (==1 if you do not want to report self)
         **more_params
     ):
         if isinstance(params, BaseException):
             cause = params
-            params = None
+            params = {}
 
-        if more_params:
-            params = set_default({}, params, more_params)
+        params = dict(params, **more_params)
 
         if cause and not isinstance(cause, Except):
             cause = Except(ERROR, unicode(cause), trace=extract_tb(0))
@@ -265,7 +255,7 @@ class Log(object):
     def error(
         cls,
         template, # human readable template
-        params=None, # parameters for template
+        params={}, # parameters for template
         cause=None, # pausible cause
         stack_depth=0,        # stack trace offset (==1 if you do not want to report self)
         **more_params
@@ -275,10 +265,9 @@ class Log(object):
         """
         if params and isinstance(listwrap(params)[0], BaseException):
             cause = params
-            params = None
+            params = {}
 
-        if more_params:
-            params = set_default({}, params, more_params)
+        params = dict(params, **more_params)
 
         add_to_trace = False
         if cause == None:
@@ -305,7 +294,7 @@ class Log(object):
     def fatal(
         cls,
         template,  # human readable template
-        params=None,  # parameters for template
+        params={},  # parameters for template
         cause=None,  # pausible cause
         stack_depth=0,  # stack trace offset (==1 if you do not want to report self)
         **more_params
@@ -315,10 +304,9 @@ class Log(object):
         """
         if params and isinstance(listwrap(params)[0], BaseException):
             cause = params
-            params = None
+            params = {}
 
-        if more_params:
-            params = set_default({}, params, more_params)
+        params = dict(params, **more_params)
 
         if cause == None:
             cause = []

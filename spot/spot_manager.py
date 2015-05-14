@@ -10,6 +10,8 @@ from __future__ import unicode_literals
 from __future__ import division
 
 import boto
+import boto.vpc
+import boto.ec2
 from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
 from boto.ec2.spotpricehistory import SpotPriceHistory
@@ -164,7 +166,7 @@ class SpotManager(object):
                         for ii in new_requests:
                             self.net_new_spot_requests.add(dictwrap(ii))
                 except Exception, e:
-                    Log.note("Request instance {{type}} failed bcause {{reason}}", {
+                    Log.warning("Request instance {{type}} failed because {{reason}}", {
                         "type": p.type.instance_type,
                         "reason": e.message
                     })
@@ -340,14 +342,14 @@ class SpotManager(object):
 
     def _get_subnet_availability_zone(self, subnet_id):
         try:
-            subnet = self.vpc_conn.get_all_subnets(filters={'subnet_id': interface_settings.subnet_id})[0]
+            subnet = self.vpc_conn.get_all_subnets(filters={'subnet_id': subnet_id})[0]
             return subnet.availability_zone
         except IndexError:
             Log.warning("subnet {{subnet_id}} not found", interface_settings)
             return None
 
     def _get_valid_availability_zones(self):
-        zones_with_interfaces = [self._get_subnet_availability_zone for i in
+        zones_with_interfaces = [self._get_subnet_availability_zone(i) for i in
                                     listwrap(self.settings.ec2.request.network_interfaces).subnet_id]
 
         if self.settings.availability_zone:
@@ -360,21 +362,22 @@ class SpotManager(object):
 
     @use_settings
     def _request_spot_instances(self, price, availability_zone_group, instance_type, settings=None):
-        settings.network_interfaces = NetworkInterfaceCollection()
-
+        network_interfaces = NetworkInterfaceCollection()
         for interface_settings in listwrap(settings.network_interfaces):
             if self._get_subnet_availability_zone(interface_settings.subnet_id) == availability_zone_group:
-                settings.network_interfaces.append(NetworkInterfaceSpecification(**unwrap(interface_settings)))
+                network_interfaces.append(NetworkInterfaceSpecification(**unwrap(interface_settings)))
+        settings.network_interfaces = network_interfaces
 
         if len(settings.network_interfaces) == 0:
             Log.error("No network interface specifications found for {{availability_zone}}!", availability_zone=settings.availability_zone_group)
 
         settings.settings = None
 
-        settings.block_device_map = BlockDeviceMapping()
-        if settings.block_devices:
-            for dev, dev_settings in settings.block_devices:
-                settings.block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
+        block_device_map = BlockDeviceMapping()
+        if settings.block_device_map:
+            for dev, dev_settings in settings.block_devices.iteritems():
+                block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
+        settings.block_device_map = block_device_map
 
         #INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping
         num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]

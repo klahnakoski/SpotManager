@@ -117,6 +117,9 @@ class SpotManager(object):
         prices = self.pricing()
 
         for p in prices:
+            if net_new_utility <= 0 or remaining_budget <= 0:
+                break
+
             if p.current_price==None:
                 Log.note("{{type}} has no price", {
                     "type": p.type.instance_type

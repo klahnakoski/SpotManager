@@ -86,14 +86,14 @@ class One(AggregationFunction):
             self.value = value
             return
         if value != self.value:
-            Log.error("Expecting value to match: {{expecting}}, {{instead}}", {"expecting": self.value, "instead": value})
+            Log.error("Expecting value to match: {{expecting}}, {{instead}}",  expecting= self.value,  instead= value)
 
     def merge(self, agg):
         if self.value is None and agg.value is not None:
             self.value = agg.value
         elif self.value is not None:
             if self.value != agg.value:
-                Log.error("Expecting value to match: {{expecting}}, {{instead}}", {"expecting": self.value, "instead": agg.value})
+                Log.error("Expecting value to match: {{expecting}}, {{instead}}",  expecting= self.value,  instead= agg.value)
 
     def end(self):
         return self.value

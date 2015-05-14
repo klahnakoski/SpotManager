@@ -91,7 +91,7 @@ class _Multiset(Multiset):
         if value not in self.dic:
             from pyLibrary.debugs.logs import Log
 
-            Log.error("{{value}} is not in multiset", {"value": value})
+            Log.error("{{value}} is not in multiset",  value= value)
         self._remove(value)
 
     def copy(self):

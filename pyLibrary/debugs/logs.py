@@ -17,7 +17,7 @@ import os
 import sys
 
 from pyLibrary.debugs import constants
-from pyLibrary.dot import coalesce, Dict, set_default, listwrap, wrap
+from pyLibrary.dot import coalesce, Dict, listwrap, wrap, unwrap, Null
 from pyLibrary.jsons.encoder import json_encoder
 from pyLibrary.thread.threads import Thread, Lock, Queue
 from pyLibrary.strings import indent, expand_template
@@ -65,7 +65,7 @@ class Log(object):
         if cls.trace:
             from pyLibrary.thread.threads import Thread
 
-        if settings.cprofile:
+        if settings.cprofile is True or (isinstance(settings.cprofile, dict) and settings.cprofile.enabled):
             if isinstance(settings.cprofile, bool):
                 settings.cprofile = {"enabled": True, "filename": "cprofile.tab"}
 
@@ -74,7 +74,7 @@ class Log(object):
             cls.cprofiler = cProfile.Profile()
             cls.cprofiler.enable()
 
-        if settings.profile:
+        if settings.profile is True or (isinstance(settings.profile, dict) and settings.profile.enabled):
             from pyLibrary.debugs import profiles
 
             if isinstance(settings.profile, bool):
@@ -91,13 +91,12 @@ class Log(object):
             return
 
         cls.logging_multi = Log_usingMulti()
+        if cls.main_log:
+            cls.main_log.stop()
         cls.main_log = Log_usingThread(cls.logging_multi)
 
         for log in listwrap(settings.log):
             Log.add_log(Log.new_instance(log))
-
-
-
 
     @classmethod
     def stop(cls):
@@ -111,7 +110,7 @@ class Log(object):
         if profiles.ON and hasattr(cls, "settings"):
             profiles.write(cls.settings.profile)
         cls.main_log.stop()
-        cls.main_log = Log_usingStream("sys.stdout")
+        cls.main_log = Log_usingStream(sys.stdout)
 
     @classmethod
     def new_instance(cls, settings):
@@ -135,11 +134,11 @@ class Log(object):
         if settings.log_type == "file" or settings.filename:
             return Log_usingFile(settings.filename)
         if settings.log_type == "console":
-            from .log_usingStream import Log_usingStream
-            return Log_usingStream(sys.stdout)
+            from .log_usingThreadedStream import Log_usingThreadedStream
+            return Log_usingThreadedStream(sys.stdout)
         if settings.log_type == "stream" or settings.stream:
-            from .log_usingStream import Log_usingStream
-            return Log_usingStream(settings.stream)
+            from .log_usingThreadedStream import Log_usingThreadedStream
+            return Log_usingThreadedStream(settings.stream)
         if settings.log_type == "elasticsearch" or settings.stream:
             from .log_usingElasticSearch import Log_usingElasticSearch
             return Log_usingElasticSearch(settings)
@@ -147,30 +146,20 @@ class Log(object):
             from .log_usingEmail import Log_usingEmail
             return Log_usingEmail(settings)
 
-
     @classmethod
     def add_log(cls, log):
         cls.logging_multi.add_log(log)
 
     @classmethod
-    def debug(cls, template=None, params=None):
-        """
-        USE THIS FOR DEBUGGING (AND EVENTUAL REMOVAL)
-        """
-        Log.note(coalesce(template, ""), params, stack_depth=1)
-
-    @classmethod
-    def println(cls, template, params=None):
-        Log.note(template, params, stack_depth=1)
-
-    @classmethod
-    def note(cls, template, params=None, stack_depth=0):
+    def note(cls, template, params={}, stack_depth=0, **more_params):
         if len(template) > 10000:
             template = template[:10000]
 
+        params = dict(params, **more_params)
+
         log_params = Dict(
             template=template,
-            params=set_default({}, params),
+            params=params,
             timestamp=datetime.utcnow(),
         )
 
@@ -193,10 +182,12 @@ class Log(object):
         cls.main_log.write(log_template, log_params)
 
     @classmethod
-    def unexpected(cls, template, params=None, cause=None):
+    def unexpected(cls, template, params={}, cause=None, **more_params):
         if isinstance(params, BaseException):
             cause = params
-            params = None
+            params = {}
+
+        params = dict(params, **more_params)
 
         if cause and not isinstance(cause, Except):
             cause = Except(UNEXPECTED, unicode(cause), trace=extract_tb(0))
@@ -216,27 +207,30 @@ class Log(object):
         )
 
     @classmethod
-    def alarm(cls, template, params=None, stack_depth=0):
+    def alarm(cls, template, params={}, stack_depth=0, **more_params):
         # USE replace() AS POOR MAN'S CHILD TEMPLATE
 
         template = ("*" * 80) + "\n" + indent(template, prefix="** ").strip() + "\n" + ("*" * 80)
-        Log.note(template, params=params, stack_depth=stack_depth + 1)
+        Log.note(template, params=params, stack_depth=stack_depth + 1, **more_params)
 
     @classmethod
-    def alert(cls, template, params=None, stack_depth=0):
-        return Log.alarm(template, params, stack_depth+1)
+    def alert(cls, template, params={}, stack_depth=0, **more_params):
+        return Log.alarm(template, params, stack_depth+1, **more_params)
 
     @classmethod
     def warning(
         cls,
         template,
-        params=None,
+        params={},
         cause=None,
-        stack_depth=0        # stack trace offset (==1 if you do not want to report self)
+        stack_depth=0,       # stack trace offset (==1 if you do not want to report self)
+        **more_params
     ):
         if isinstance(params, BaseException):
             cause = params
-            params = None
+            params = {}
+
+        params = dict(params, **more_params)
 
         if cause and not isinstance(cause, Except):
             cause = Except(ERROR, unicode(cause), trace=extract_tb(0))
@@ -261,16 +255,19 @@ class Log(object):
     def error(
         cls,
         template, # human readable template
-        params=None, # parameters for template
+        params={}, # parameters for template
         cause=None, # pausible cause
-        stack_depth=0        # stack trace offset (==1 if you do not want to report self)
+        stack_depth=0,        # stack trace offset (==1 if you do not want to report self)
+        **more_params
     ):
         """
         raise an exception with a trace for the cause too
         """
         if params and isinstance(listwrap(params)[0], BaseException):
             cause = params
-            params = None
+            params = {}
+
+        params = dict(params, **more_params)
 
         add_to_trace = False
         if cause == None:
@@ -297,16 +294,19 @@ class Log(object):
     def fatal(
         cls,
         template,  # human readable template
-        params=None,  # parameters for template
+        params={},  # parameters for template
         cause=None,  # pausible cause
-        stack_depth=0  # stack trace offset (==1 if you do not want to report self)
+        stack_depth=0,  # stack trace offset (==1 if you do not want to report self)
+        **more_params
     ):
         """
         SEND TO STDERR
         """
         if params and isinstance(listwrap(params)[0], BaseException):
             cause = params
-            params = None
+            params = {}
+
+        params = dict(params, **more_params)
 
         if cause == None:
             cause = []
@@ -618,6 +618,21 @@ class Log_usingMulti(BaseLog):
                 pass
 
 
+class Log_usingStream(BaseLog):
+    def __init__(self, stream):
+        assert stream
+        self.stream = stream
+
+    def write(self, template, params):
+        value = expand_template(template, params)
+        if isinstance(value, unicode):
+            value = value.encode('utf8')
+        self.stream.write(value)
+
+    def stop(self):
+        pass
+
+
 def write_profile(profile_settings, stats):
     from pyLibrary import convert
     from pyLibrary.env.files import File
@@ -643,8 +658,6 @@ def write_profile(profile_settings, stats):
 
 
 if not Log.main_log:
-    from log_usingStream import Log_usingStream
-
-    Log.main_log = Log_usingStream("sys.stdout")
+    Log.main_log = Log_usingStream(sys.stdout)
 
 

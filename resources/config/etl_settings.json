@@ -78,7 +78,7 @@
 	},
 	"instance":{
 		"class":"active_data.etl.ETL",
-		"minimum_utility": 3,
+		"minimum_utility": 2,
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 			"user": "ubuntu",
@@ -96,7 +96,7 @@
 	"debug": {
 		"trace": true,
 		"cprofile": {
-			"enabled": false,
+			"enabled": true,
 			"filename": "results/active_data_spot_profile.tab"
 		},
 		"log": [

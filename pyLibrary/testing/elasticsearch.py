@@ -26,16 +26,14 @@ def make_test_instance(name, settings):
 
 def open_test_instance(name, settings):
     if settings.filename:
-        Log.note("Using {{filename}} as {{type}}", {
-            "filename": settings.filename,
-            "type": name
-        })
+        Log.note("Using {{filename}} as {{type}}",
+            filename= settings.filename,
+            type= name)
         return Fake_ES(settings)
     else:
-        Log.note("Using ES cluster at {{host}} as {{type}}", {
-            "host": settings.host,
-            "type": name
-        })
+        Log.note("Using ES cluster at {{host}} as {{type}}",
+            host= settings.host,
+            type= name)
 
         Index(settings).delete()
 
@@ -75,7 +73,7 @@ class Fake_ES():
         data_as_json = convert.value2json(self.data, pretty=True)
 
         File(self.filename).write(data_as_json)
-        Log.note("{{num}} documents added", {"num": len(records)})
+        Log.note("{{num}} documents added",  num= len(records))
 
     def add(self, record):
         if isinstance(record, list):

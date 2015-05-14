@@ -96,10 +96,11 @@ class MySQL(object):
             )
         except Exception, e:
             if self.settings.host.find("://") == -1:
-                Log.error(u"Failure to connect to {{host}}:{{port}}", {
-                    "host": self.settings.host,
-                    "port": self.settings.port
-                }, e)
+                Log.error(u"Failure to connect to {{host}}:{{port}}",
+                    host= self.settings.host,
+                    port= self.settings.port,
+                    cause=e
+                )
             else:
                 Log.error(u"Failure to connect.  PROTOCOL PREFIX IS PROBABLY BAD", e)
         self.cursor = None
@@ -124,7 +125,7 @@ class MySQL(object):
                 self.cursor = None
                 self.rollback()
             except Exception, e:
-                Log.warning(u"can not rollback()", [value, e])
+                Log.warning(u"can not rollback()", cause=[value, e])
             finally:
                 self.close()
             return
@@ -246,7 +247,7 @@ class MySQL(object):
                 sql = expand_template(sql, self.quote_param(param))
             sql = self.preamble + outdent(sql)
             if self.debug:
-                Log.note("Execute SQL:\n{{sql}}", {"sql": indent(sql)})
+                Log.note("Execute SQL:\n{{sql}}",  sql= indent(sql))
 
             self.cursor.execute(sql)
             columns = [utf8_to_unicode(d[0]) for d in coalesce(self.cursor.description, [])]
@@ -261,7 +262,7 @@ class MySQL(object):
         except Exception, e:
             if isinstance(e, InterfaceError) or e.message.find("InterfaceError") >= 0:
                 Log.error("Did you close the db connection?", e)
-            Log.error("Problem executing SQL:\n{{sql|indent}}", {"sql": sql}, e, stack_depth=1)
+            Log.error("Problem executing SQL:\n{{sql|indent}}",  sql= sql, cause=e, stack_depth=1)
 
     def column_query(self, sql, param=None):
         """
@@ -280,7 +281,7 @@ class MySQL(object):
                 sql = expand_template(sql, self.quote_param(param))
             sql = self.preamble + outdent(sql)
             if self.debug:
-                Log.note("Execute SQL:\n{{sql}}", {"sql": indent(sql)})
+                Log.note("Execute SQL:\n{{sql}}",  sql= indent(sql))
 
             self.cursor.execute(sql)
             grid = [[utf8_to_unicode(c) for c in row] for row in self.cursor]
@@ -295,7 +296,7 @@ class MySQL(object):
         except Exception, e:
             if isinstance(e, InterfaceError) or e.message.find("InterfaceError") >= 0:
                 Log.error("Did you close the db connection?", e)
-            Log.error("Problem executing SQL:\n{{sql|indent}}", {"sql": sql}, e, stack_depth=1)
+            Log.error("Problem executing SQL:\n{{sql|indent}}",  sql= sql, cause=e,stack_depth=1)
 
 
 
@@ -315,7 +316,7 @@ class MySQL(object):
                 sql = expand_template(sql, self.quote_param(param))
             sql = self.preamble + outdent(sql)
             if self.debug:
-                Log.note("Execute SQL:\n{{sql}}", {"sql": indent(sql)})
+                Log.note("Execute SQL:\n{{sql}}",  sql= indent(sql))
             self.cursor.execute(sql)
 
             columns = tuple([utf8_to_unicode(d[0]) for d in self.cursor.description])
@@ -328,7 +329,7 @@ class MySQL(object):
                 self.cursor = None
 
         except Exception, e:
-            Log.error("Problem executing SQL:\n{{sql|indent}}", {"sql": sql}, e, stack_depth=1)
+            Log.error("Problem executing SQL:\n{{sql|indent}}",  sql= sql, cause=e, stack_depth=1)
 
         return num
 
@@ -395,11 +396,11 @@ class MySQL(object):
         if proc.returncode:
             if len(sql) > 10000:
                 sql = "<" + unicode(len(sql)) + " bytes of sql>"
-            Log.error("Unable to execute sql: return code {{return_code}}, {{output}}:\n {{sql}}\n", {
-                "sql": indent(sql),
-                "return_code": proc.returncode,
-                "output": output
-            })
+            Log.error("Unable to execute sql: return code {{return_code}}, {{output}}:\n {{sql}}\n",
+                sql= indent(sql),
+                return_code= proc.returncode,
+                output= output
+            )
 
     @staticmethod
     def execute_file(
@@ -434,10 +435,10 @@ class MySQL(object):
                 sql = self.preamble + b
                 try:
                     if self.debug:
-                        Log.note("Execute SQL:\n{{sql|indent}}", {"sql": sql})
+                        Log.note("Execute SQL:\n{{sql|indent}}",  sql= sql)
                     self.cursor.execute(b)
                 except Exception, e:
-                    Log.error("Can not execute sql:\n{{sql}}", {"sql": sql}, e)
+                    Log.error("Can not execute sql:\n{{sql}}",  sql= sql, cause=e)
 
             self.cursor.close()
             self.cursor = self.db.cursor()
@@ -446,12 +447,12 @@ class MySQL(object):
                 sql = self.preamble + ";\n".join(g)
                 try:
                     if self.debug:
-                        Log.note("Execute block of SQL:\n{{sql|indent}}", {"sql": sql})
+                        Log.note("Execute block of SQL:\n{{sql|indent}}",  sql= sql)
                     self.cursor.execute(sql)
                     self.cursor.close()
                     self.cursor = self.db.cursor()
                 except Exception, e:
-                    Log.error("Problem executing SQL:\n{{sql|indent}}", {"sql": sql}, e, stack_depth=1)
+                    Log.error("Problem executing SQL:\n{{sql|indent}}",  sql= sql, cause=e, stack_depth=1)
 
 
     ## Insert dictionary of values into table
@@ -467,7 +468,7 @@ class MySQL(object):
 
             self.execute(command)
         except Exception, e:
-            Log.error("problem with record: {{record}}", {"record": record}, e)
+            Log.error("problem with record: {{record}}",  record= record, cause=e)
 
     # candidate_key IS LIST OF COLUMNS THAT CAN BE USED AS UID (USUALLY PRIMARY KEY)
     # ONLY INSERT IF THE candidate_key DOES NOT EXIST YET
@@ -509,7 +510,7 @@ class MySQL(object):
                 ])
             self.execute(command)
         except Exception, e:
-            Log.error("problem with record: {{record}}", {"record": records}, e)
+            Log.error("problem with record: {{record}}",  record= records, cause=e)
 
 
     def update(self, table_name, where_slice, new_values):

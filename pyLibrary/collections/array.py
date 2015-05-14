@@ -166,7 +166,7 @@ class _array:
         if item in IGNORE:
             pass
         else:
-            Log.error("operation {{op}} not found", {"op": item})
+            Log.error("operation {{op}} not found", op=item)
 
     def __iter__(self):
         return self._value.__iter__()

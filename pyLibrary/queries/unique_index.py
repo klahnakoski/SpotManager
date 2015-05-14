@@ -51,6 +51,8 @@ class UniqueIndex(object):
         except Exception, e:
             Log.error("something went wrong", e)
 
+    def keys(self):
+        return self._data.keys()
 
     def add(self, val):
         key = value2key(self._keys, val)
@@ -63,13 +65,13 @@ class UniqueIndex(object):
             self.count += 1
         elif d is not val:
             if self.fail_on_dup:
-                Log.error("key {{key|json}} already filled", {"key":key})
+                Log.error("key {{key|json}} already filled",  key=key)
             else:
-                Log.warning("key {{key|json}} already filled\nExisting\n{{existing|json|indent}}\nValue\n{{value|json|indent}}", {
-                    "key": key,
-                    "existing": d,
-                    "value": val
-                })
+                Log.warning("key {{key|json}} already filled\nExisting\n{{existing|json|indent}}\nValue\n{{value|json|indent}}",
+                    key=key,
+                    existing=d,
+                    value=val
+                )
 
     def remove(self, val):
         key = value2key(self._keys, val)

@@ -13,7 +13,7 @@ import itertools
 
 from pyLibrary import convert
 from pyLibrary.collections import OR
-from pyLibrary.dot import coalesce, wrap, set_default
+from pyLibrary.dot import coalesce, wrap, set_default, literal_field
 from pyLibrary.debugs.logs import Log
 from pyLibrary.maths import Math
 from pyLibrary.queries.domains import is_keyword
@@ -37,7 +37,7 @@ def output(row, rownum=None, rows=None):
     try:
         return """ + source + """
     except Exception, e:
-        Log.error("Problem with dynamic function {{func|quote}}", {"func": """ + convert.value2quote(source) + """}, e)
+        Log.error("Problem with dynamic function {{func|quote}}",  func= """ + convert.value2quote(source) + """, cause=e)
 """
     return output
 
@@ -133,7 +133,7 @@ def qb_expression_to_ruby(expr):
         output = cop(term).to_ruby()
         return output
 
-    Log.error("`{{op}}` is not a recognized operation", {"op": op})
+    Log.error("`{{op}}` is not a recognized operation",  op= op)
 
 
 def qb_expression_to_python(expr):
@@ -196,7 +196,7 @@ def qb_expression_to_python(expr):
         output = uop + "(" + qb_expression_to_python(term) + ")"
         return output
 
-    Log.error("`{{op}}` is not a recognized operation", {"op": op})
+    Log.error("`{{op}}` is not a recognized operation",  op= op)
 
 
 def get_all_vars(expr):
@@ -256,7 +256,7 @@ def get_all_vars(expr):
     if cop:
         return cop(op, term).vars()
 
-    Log.error("`{{op}}` is not a recognized operation", {"op": op})
+    Log.error("`{{op}}` is not a recognized operation",  op= op)
 
 
 
@@ -357,7 +357,7 @@ class BinaryOp(object):
         if self.op in ["gt", "gte", "lte", "lt"]:
             return {"range":{self.op: {self.a: self.b}}}
         else:
-            Log.error("Operator {{op}} is not supported by ES", {"op":self.op})
+            Log.error("Operator {{op}} is not supported by ES",  op=self.op)
 
     def vars(self):
         return self.a.vars() | self.b.vars()
@@ -570,7 +570,7 @@ def _normalize(esfilter):
                     f0, tt0 = t0.range.items()[0]
                     f1, tt1 = t1.range.items()[0]
                     if f0 == f1:
-                        set_default(terms[i0].range[f1], tt1)
+                        set_default(terms[i0].range[literal_field(f1)], tt1)
                         terms[i1] = True
                 except Exception, e:
                     pass
@@ -703,6 +703,9 @@ def _convert_not_equal(op, term):
 
 
 def _convert_eq(eq, term):
+    if not term:
+        return {"match_all":{}}
+
     if isinstance(term, list):
         if len(term) != 2:
             Log.error("the 'eq' clause only accepts list of length 2")
@@ -710,20 +713,24 @@ def _convert_eq(eq, term):
         output = {"script": {"script" : qb_expression_to_ruby({"eq":term})}}
         return output
 
+    def _convert(k, v):
+        if isinstance(v, list):
+            return {"terms": {k: v}}
+        else:
+            return {"term": {k: v}}
 
-
-    var, val = term.items()[0]
-    if isinstance(val, list):
-        return {"terms": term}
+    items = term.items()
+    if len(items) > 1:
+        return {"and": [_convert(k, v) for k, v in items]}
     else:
-        return {"term": term}
+        return _convert(*items[0])
 
 
 def _convert_in(op, term):
     if not term:
         Log.error("Expecting a term")
     if not isinstance(term, dict):
-        Log.error("Expecting {{op}} to have dict value", {"op": op})
+        Log.error("Expecting {{op}} to have dict value",  op= op)
     var, val = term.items()[0]
 
     if isinstance(val, list):
@@ -764,7 +771,7 @@ def _convert_field(k, var):
         return {k: {"field": var}}
     if isinstance(var, dict) and var.get("field"):
         return {k: var}
-    Log.error("do not know how to handle {{value}}", {"value": {k: var}})
+    Log.error("do not know how to handle {{value}}",  value= {k: var})
 
 
 converter_map = {

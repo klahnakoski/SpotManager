@@ -52,12 +52,11 @@ def set(constants):
                     if DEBUG:
                         from pyLibrary.debugs.logs import Log
 
-                        Log.note("Changed {{module}}[{{attribute}}] from {{old_value}} to {{new_value}}", {
-                            "module": prefix,
-                            "attribute": name,
-                            "old_value": old_value,
-                            "new_value": new_value
-                        })
+                        Log.note("Changed {{module}}[{{attribute}}] from {{old_value}} to {{new_value}}",
+                            module= prefix,
+                            attribute= name,
+                            old_value= old_value,
+                            new_value= new_value)
                     break
         except Exception, e:
             errors.append[e]
@@ -65,4 +64,4 @@ def set(constants):
         if errors:
             from pyLibrary.debugs.logs import Log
 
-            Log.error("Can not set constant {{path}}", {"path": k}, errors)
+            Log.error("Can not set constant {{path}}", path=k, cause=errors)

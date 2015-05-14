@@ -20,17 +20,18 @@ from pyLibrary.collections import SUM
 from pyLibrary.debugs import startup
 from pyLibrary.debugs.logs import Log
 from pyLibrary.debugs.startup import SingleInstance
-from pyLibrary.dot import wrap, dictwrap, coalesce, listwrap, unwrap, DictList, get_attr
+from pyLibrary.dot import wrap, dictwrap, coalesce, listwrap, unwrap, DictList
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings, new_instance
 from pyLibrary.queries import qb
 from pyLibrary.queries.expressions import CODE
 from pyLibrary.queries.unique_index import UniqueIndex
-from pyLibrary.thread.threads import Lock, Thread, MAIN_THREAD, Signal, Queue
+from pyLibrary.thread.threads import Lock, Thread, MAIN_THREAD, Signal
 from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import DAY, HOUR, WEEK, MINUTE, SECOND, Duration
 from pyLibrary.times.timer import Timer
+
 
 DEBUG_PRICING = False
 TIME_FROM_RUNNING_TO_LOGIN = 5 * MINUTE
@@ -51,7 +52,7 @@ class SpotManager(object):
         self.price_lookup = None
         self.done_spot_requests = Signal()
         self.net_new_locker = Lock()
-        self.net_new_spot_requests = UniqueIndex(("id",))
+        self.net_new_spot_requests = UniqueIndex(("id",))  # SPOT REQUESTS FOR THIS SESSION
         self.watcher = None
         if instance_manager.setup_required():
             self._start_life_cycle_watcher()
@@ -61,7 +62,13 @@ class SpotManager(object):
         spot_requests = self._get_managed_spot_requests()
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
-        active = qb.filter(spot_requests, {"terms": {"status.code": RUNNING_STATUS_CODES | PENDING_STATUS_CODES}})
+        all_instances = UniqueIndex("id", data=self._get_managed_instances())
+        active = qb.filter(spot_requests, {"terms": {"status.code": RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE}})
+
+        for a in active.copy():
+            if a.status.code == "request-canceled-and-instance-running" and all_instances[a.instance_id] == None:
+                active.remove(a)
+
         used_budget = 0
         current_spending = 0
         for a in active:
@@ -74,7 +81,7 @@ class SpotManager(object):
             used_budget += a.price - about.type.discount
             current_spending += about.current_price - about.type.discount
 
-        Log.note("TOTAL BUDGET: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)", {
+        Log.note("Total Exposure: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)", {
             "budget": used_budget,
             "current": current_spending
         })
@@ -113,7 +120,9 @@ class SpotManager(object):
                     "type": p.type.instance_type
                 })
                 continue
-            max_bid = Math.min(p.higher_price, p.type.utility * self.settings.max_utility_price)
+            # DO NOT BID HIGHER THAN WHAT WE ARE WILLING TO PAY
+            max_acceptable_price = p.type.utility * self.settings.max_utility_price
+            max_bid = Math.min(p.higher_price, max_acceptable_price)
             min_bid = p.price_80
 
             if min_bid > max_bid:
@@ -126,7 +135,7 @@ class SpotManager(object):
 
             num = int(Math.round(net_new_utility / p.type.utility))
             if num == 1:
-                min_bid = Math.min(Math.max(p.current_price*1.1, Math.min(min_bid, max_bid)), p.type.utility * self.settings.max_utility_price)
+                min_bid = Math.min(Math.max(p.current_price*1.1, min_bid), max_acceptable_price)
                 price_interval = 0
             else:
                 price_interval = Math.min(min_bid/10, (max_bid - min_bid) / (num - 1))
@@ -214,13 +223,16 @@ class SpotManager(object):
     def save_money(self, remaining_budget, net_new_utility):
         remove_spot_requests = wrap([])
 
-        # IF WE ARE STILL OUT OF MONEY, THEN CANCEL ALL REQUESTS
+        # FIRST CANCEL THE PENDING REQUESTS
         if remaining_budget < 0:
             requests = self._get_managed_spot_requests()
             for r in requests:
-                remove_spot_requests.append(r.id)
+                if r.status.code in PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE:
+                    remove_spot_requests.append(r.id)
+                    net_new_utility += self.settings.utility[r.launch_specification.instance_type].utility
+                    remaining_budget += r.price
 
-        instances = self.running_instances()
+        instances = qb.sort(self.running_instances(), "markup.estimated_value")
 
         remove_list = wrap([])
         for s in instances:
@@ -228,7 +240,7 @@ class SpotManager(object):
                 break
             remove_list.append(s)
             net_new_utility += coalesce(s.markup.type.utility, 0)
-            remaining_budget += coalesce(s.markup.price_80, s.markup.curret_price)
+            remaining_budget += coalesce(s.markup.price_80, s.markup.current_price)
 
         # SEND SHUTDOWN TO EACH INSTANCE
         Log.note("Shutdown {{instances}}", {"instances": remove_list.id})
@@ -272,7 +284,7 @@ class SpotManager(object):
                 please_setup = [(i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests] if i.id and not i.tags.get("Name") and i._state.name == "running"]
                 for i, r in please_setup:
                     try:
-                        p = [u for u in self.settings.utility if u.instance_type == i.instance_type][0]
+                        p = self.settings.utility[i.instance_type]
                         i.markup = p
                         self.instance_manager.setup(i, p.utility)
                         i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
@@ -282,7 +294,7 @@ class SpotManager(object):
                         if not time_to_stop_trying.get(i.id):
                             time_to_stop_trying[i.id] = Date.now() + TIME_FROM_RUNNING_TO_LOGIN
                         if Date.now() > time_to_stop_trying[i.id]:
-                            # FAIL TO SETUP AFTER 5 MINUTES, THEN TERMINATE INSTANCE
+                            # FAIL TO SETUP AFTER x MINUTES, THEN TERMINATE INSTANCE
                             self.ec2_conn.terminate_instances(instance_ids=[i.id])
                             with self.net_new_locker:
                                 self.net_new_spot_requests.remove(r.id)
@@ -295,8 +307,9 @@ class SpotManager(object):
                     spot_requests = self._get_managed_spot_requests()
                     last_get = Date.now()
 
-
                 pending = qb.filter(spot_requests, {"terms": {"status.code": PENDING_STATUS_CODES}})
+                give_up = qb.filter(spot_requests, {"terms": {"status.code": PROBABLY_NOT_FOR_A_WHILE}})
+
                 if self.done_spot_requests:
                     with self.net_new_locker:
                         expired = Date.now() - self.settings.run_interval + 2 * MINUTE
@@ -304,8 +317,13 @@ class SpotManager(object):
                             if Date(ii.create_time) < expired:
                                 ## SOMETIMES REQUESTS NEVER GET INTO THE MAIN LIST OF REQUESTS
                                 self.net_new_spot_requests.remove(ii)
+                        for g in give_up:
+                            self.net_new_spot_requests.remove(g.id)
                         pending = UniqueIndex(("id",), data=pending)
                         pending = pending | self.net_new_spot_requests
+
+                if give_up:
+                    self.conn.cancel_spot_instance_requests(request_ids=give_up.id)
 
                 if not pending and not time_to_stop_trying and self.done_spot_requests:
                     Log.note("No more pending spot requests")
@@ -354,12 +372,12 @@ class SpotManager(object):
         settings.settings = None
 
         #INCLUDE EPHEMERAL STORAGE BlockDeviceMapping
+        num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]
         settings.block_device_map = BlockDeviceMapping()
-        for i in range(ephemeral_storage[instance_type]["num"]):
+        for i in range(num_ephemeral_volumes):
             letter = convert.ascii2char(98 + i)
             settings.block_device_map["/dev/sd" + letter] = BlockDeviceType(
                 ephemeral_name='ephemeral' + unicode(i),
-                # size=ephemeral_storage[instance_type]["size"],
                 delete_on_termination=True
             )
 
@@ -367,6 +385,16 @@ class SpotManager(object):
             settings.valid_until = (Date.now() + Duration(settings.expiration)).format(ISO8601)
             settings.expiration = None
 
+        #ATTACH NEW EBS VOLUMES
+        for i, drives in enumerate(self.settings.utility[instance_type].drives):
+            d = drives.copy()
+            d.path = None  # path AND device PROPERTY IS NOT ALLOWED IN THE BlockDeviceType
+            d.device = None
+            if d.size:
+                settings.block_device_map[drives.device] = BlockDeviceType(
+                    delete_on_termination=True,
+                    **unwrap(d)
+                )
         output = list(self.ec2_conn.request_spot_instances(**unwrap(settings)))
         for o in output:
             o.add_tag("Name", self.settings.ec2.instance.name)
@@ -396,6 +424,7 @@ class SpotManager(object):
                     {
                         "name": "time",
                         "range": {"min": "timestamp", "max": "expire", "mode": "inclusive"},
+                        "allowNulls": False,
                         "domain": {"type": "time", "min": Date.now().floor(HOUR) - DAY, "max": Date.now().floor(HOUR), "interval": "hour"}
                     }
                 ],
@@ -420,7 +449,7 @@ class SpotManager(object):
                         "name": "type",
                         "value": "instance_type",
                         "allowNulls": False,
-                        "domain": {"type": "set", "key": "instance_type", "partitions": self.settings.utility}
+                        "domain": {"type": "set", "key": "instance_type", "partitions": list(self.settings.utility)}
                     }
                 ],
                 "select": [
@@ -462,7 +491,7 @@ class SpotManager(object):
         zones = self._get_valid_availability_zones()
         prices = set(cache)
         with Timer("Get pricing from AWS"):
-            for instance_type in self.settings.utility.instance_type:
+            for instance_type in self.settings.utility.keys():
                 if most_recents:
                     most_recent = most_recents[{"instance_type":instance_type}].timestamp
                     if most_recent == None:
@@ -478,7 +507,7 @@ class SpotManager(object):
                     })
 
                 for zone in zones:
-                    next_token=None
+                    next_token = None
                     while True:
                         resultset = self.ec2_conn.get_spot_price_history(
                             product_description="Linux/UNIX (Amazon VPC)",
@@ -502,8 +531,8 @@ class SpotManager(object):
                         if not next_token:
                             break
 
-        with Timer("Save prices to (pretty) file"):
-            File(self.settings.price_file).write(convert.value2json(prices, pretty=True))
+        with Timer("Save prices to file"):
+            File(self.settings.price_file).write(convert.value2json(prices))
         return prices
 
 
@@ -529,9 +558,11 @@ RETRY_STATUS_CODES = {
 }
 PENDING_STATUS_CODES = {
     "pending-evaluation",
-    "pending-fulfillment",
-    "az-group-constraint",
+    "pending-fulfillment"
     "price-too-low"
+}
+PROBABLY_NOT_FOR_A_WHILE = {
+    "az-group-constraint"
 }
 RUNNING_STATUS_CODES = {
     "fulfilled",
@@ -545,9 +576,16 @@ def main():
         settings.run_interval = Duration(settings.run_interval)
         Log.start(settings.debug)
         with SingleInstance(flavor_id=settings.args.filename):
-            instance_manager = new_instance(settings.instance)
             for u in settings.utility:
                 u.discount = coalesce(u.discount, 0)
+                #MARKUP drives WITH EXPECTED device MAPPING
+                num_ephemeral_volumes = ephemeral_storage[u.instance_type]["num"]
+                for i, d in enumerate(d for d in u.drives if not d.device):
+                    letter = convert.ascii2char(98 + num_ephemeral_volumes + i)
+                    d.device = "/dev/xvd" + letter
+
+            settings.utility = UniqueIndex(["instance_type"], data=settings.utility)
+            instance_manager = new_instance(settings.instance)
             m = SpotManager(instance_manager, settings=settings)
             m.update_spot_requests(instance_manager.required_utility())
 

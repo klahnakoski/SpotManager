@@ -182,7 +182,7 @@ def set_attr(obj, path, value):
     except Exception, e:
         from pyLibrary.debugs.logs import Log
         if PATH_NOT_FOUND in e:
-            Log.error(PATH_NOT_FOUND+": {{path}}", {"path":path})
+            Log.warning(PATH_NOT_FOUND + ": {{path}}",  path= path)
         else:
             Log.error("Problem setting value", e)
 
@@ -196,7 +196,7 @@ def get_attr(obj, path):
     except Exception, e:
         from pyLibrary.debugs.logs import Log
         if PATH_NOT_FOUND in e:
-            Log.error(PATH_NOT_FOUND+": {{path}}", {"path":path}, e)
+            Log.error(PATH_NOT_FOUND+": {{path}}",  path=path, cause=e)
         else:
             Log.error("Problem setting value", e)
 
@@ -237,7 +237,7 @@ def _get_attr(obj, path):
             Log.error(PATH_NOT_FOUND)
         elif len(attr_name)>1:
             from pyLibrary.debugs.logs import Log
-            Log.error(AMBIGUOUS_PATH_FOUND+" {{paths}}", {"paths":attr_name})
+            Log.error(AMBIGUOUS_PATH_FOUND+" {{paths}}",  paths=attr_name)
         else:
             return _get_attr(obj[attr_name[0]], path[1:])
     try:
@@ -376,25 +376,30 @@ def unwrap(v):
 
 def listwrap(value):
     """
-    OFTEN IT IS NICE TO ALLOW FUNCTION PARAMETERS TO BE ASSIGNED A VALUE,
-    OR A list-OF-VALUES, OR NULL.  CHECKING FOR THIS IS TEDIOUS AND WE WANT TO CAST
-    FROM THOSE THREE CASES TO THE SINGLE CASE OF A LIST
-
-    Null -> []
+    PERFORMS THE FOLLOWING TRANSLATION
+    None -> []
     value -> [value]
     [...] -> [...]  (unchanged list)
 
+    ##MOTIVATION##
+    OFTEN IT IS NICE TO ALLOW FUNCTION PARAMETERS TO BE ASSIGNED A VALUE,
+    OR A list-OF-VALUES, OR NULL.  CHECKING FOR WHICH THE CALLER USED IS
+    TEDIOUS.  INSTEAD WE CAST FROM THOSE THREE CASES TO THE SINGLE CASE
+    OF A LIST
+
     # BEFORE
-    if a is not None:
+    def do_it(a):
+        if a is None:
+            return
         if not isinstance(a, list):
             a=[a]
         for x in a:
             # do something
 
-
     # AFTER
-    for x in listwrap(a):
-        # do something
+    def do_it(a):
+        for x in listwrap(a):
+            # do something
 
     """
     if value == None:

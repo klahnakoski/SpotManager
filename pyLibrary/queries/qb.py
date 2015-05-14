@@ -55,7 +55,7 @@ def run(query):
     elif isinstance(frum, Query):
         frum = run(frum).data
     else:
-        Log.error("Do not know how to handle {{type}}", {"type":frum.__class__.__name__})
+        Log.error("Do not know how to handle {{type}}",  type=frum.__class__.__name__)
 
     if is_aggs(query):
         frum = list_aggs(frum, query)
@@ -129,12 +129,13 @@ def unique_index(data, keys=None, fail_on_dup=True):
             o.add(d)
         except Exception, e:
             o.add(d)
-            Log.error("index {{index}} is not unique {{key}} maps to both {{value1}} and {{value2}}", {
-                "index": keys,
-                "key": select([d], keys)[0],
-                "value1": o[d],
-                "value2": d
-            }, e)
+            Log.error("index {{index}} is not unique {{key}} maps to both {{value1}} and {{value2}}",
+                index= keys,
+                key= select([d], keys)[0],
+                value1= o[d],
+                value2= d,
+                cause=e
+            )
     return o
 
 
@@ -379,7 +380,7 @@ def _select_deep(v, field, depth, record):
         else:
             record[field.name] = v.get(f)
     except Exception, e:
-        Log.error("{{value}} does not have {{field}} property", {"value": v, "field": f}, e)
+        Log.error("{{value}} does not have {{field}} property",  value= v, field=f, cause=e)
     return 0, None
 
 
@@ -419,7 +420,7 @@ def _select_deep_meta(field, depth):
                 else:
                     destination[name] = source.get(f)
             except Exception, e:
-                Log.error("{{value}} does not have {{field}} property", {"value": source, "field": f}, e)
+                Log.error("{{value}} does not have {{field}} property",  value= source, field=f, cause=e)
             return 0, None
         return assign
     else:
@@ -434,7 +435,7 @@ def _select_deep_meta(field, depth):
                 try:
                     destination[name] = source.get(f)
                 except Exception, e:
-                    Log.error("{{value}} does not have {{field}} property", {"value": source, "field": f}, e)
+                    Log.error("{{value}} does not have {{field}} property",  value= source, field=f, cause=e)
                 return 0, None
             return assign
 
@@ -459,39 +460,32 @@ def sort(data, fieldnames=None):
             fieldnames = fieldnames[0]
             # SPECIAL CASE, ONLY ONE FIELD TO SORT BY
             if isinstance(fieldnames, (basestring, int)):
-                def comparer(left, right):
-                    return cmp(coalesce(left)[fieldnames], coalesce(right)[fieldnames])
+                fieldnames = wrap({"field": fieldnames, "sort": 1})
 
-                return DictList([unwrap(d) for d in sorted(data, cmp=comparer)])
+            # EXPECTING {"field":f, "sort":i} FORMAT
+            fieldnames.sort = sort_direction.get(fieldnames.sort, 1)
+            fieldnames.field = coalesce(fieldnames.field, fieldnames.value)
+            if fieldnames.field==None:
+                Log.error("Expecting sort to have 'field' attribute")
+
+            if fieldnames.field == ".":
+                #VALUE COMPARE
+                def _compare_v(l, r):
+                    return value_compare(l, r, fieldnames.sort)
+                return DictList([unwrap(d) for d in sorted(data, cmp=_compare_v)])
             else:
-                # EXPECTING {"field":f, "sort":i} FORMAT
-                fieldnames.sort = sort_direction.get(fieldnames.sort, 0)
-                fieldnames.field = coalesce(fieldnames.field, fieldnames.value)
-                if fieldnames.field==None:
-                    Log.error("Expecting sort to have 'field' attribute")
-                def comparer(left, right):
-                    return fieldnames["sort"] * cmp(coalesce(left, Dict())[fieldnames["field"]], coalesce(right, Dict())[fieldnames["field"]])
-
-                return DictList([unwrap(d) for d in sorted(data, cmp=comparer)])
+                def _compare_o(left, right):
+                    return value_compare(coalesce(left)[fieldnames.field], coalesce(right)[fieldnames.field], fieldnames.sort)
+                return DictList([unwrap(d) for d in sorted(data, cmp=_compare_o)])
 
         formal = query._normalize_sort(fieldnames)
 
         def comparer(left, right):
-            left = coalesce(left, Dict())
-            right = coalesce(right, Dict())
+            left = coalesce(left)
+            right = coalesce(right)
             for f in formal:
                 try:
-                    l = left[f["field"]]
-                    r = right[f["field"]]
-                    if l == None:
-                        if r == None:
-                            return 0
-                        else:
-                            return - f["sort"]
-                    elif r == None:
-                        return f["sort"]
-
-                    result = f["sort"] * cmp(l, r)
+                    result = value_compare(left[f.field], right[f.fields], f.sort)
                     if result != 0:
                         return result
                 except Exception, e:
@@ -508,7 +502,22 @@ def sort(data, fieldnames=None):
 
         return output
     except Exception, e:
-        Log.error("Problem sorting\n{{data}}", {"data": data}, e)
+        Log.error("Problem sorting\n{{data}}",  data= data, cause=e)
+
+
+def value_compare(l, r, ordering=1):
+    if l == None:
+        if r == None:
+            return 0
+        else:
+            return - ordering
+    elif r == None:
+        return ordering
+    else:
+        return cmp(l, r) * ordering
+
+
+
 
 
 def pairwise(values):
@@ -766,7 +775,7 @@ def drill_filter(esfilter, data):
         if isinstance(d, dict):
             main([], esfilter, wrap(d), 0)
         else:
-            Log.error("filter is expecting a structure, not {{type}}", {"type": d.__class__})
+            Log.error("filter is expecting a structure, not {{type}}",  type= d.__class__)
 
     # AT THIS POINT THE primary_column[] IS DETERMINED
     # USE IT TO EXPAND output TO ALL NESTED OBJECTS

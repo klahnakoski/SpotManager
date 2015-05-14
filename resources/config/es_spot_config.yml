@@ -28,7 +28,6 @@ index.translog.interval: 60s
 index.translog.flush_threshold_size: 1gb
 
 indices.memory.index_buffer_size: 20%
-indices.fielddata.cache.expire: 20m
 indices.recovery.concurrent_streams: 1
 indices.recovery.max_bytes_per_sec: 1000mb
 

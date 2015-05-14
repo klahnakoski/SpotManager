@@ -36,7 +36,7 @@ class FileString(object):
 
     def decode(self, encoding):
         if encoding != "utf8":
-            Log.error("can not handle {{encoding}}", {"encoding": encoding})
+            Log.error("can not handle {{encoding}}",  encoding= encoding)
         self.encoding = encoding
         return self
 
@@ -112,11 +112,11 @@ def safe_size(source):
                     data.write(b)
                     b = source.read(MIN_READ_SIZE)
                 data.seek(0)
-                Log.note("Using file of size {{length}} instead of str()", {"length": total_bytes})
+                Log.note("Using file of size {{length}} instead of str()",  length= total_bytes)
 
                 return data
             except Exception, e:
-                Log.error("Could not write file > {{num}} bytes", {"num": total_bytes}, e)
+                Log.error("Could not write file > {{num}} bytes",  num= total_bytes, cause=e)
         b = source.read(MIN_READ_SIZE)
 
     data = b"".join(bytes)
@@ -301,6 +301,6 @@ class ZipfileLines(CompressedLines):
         archive = zipfile.ZipFile(buff, mode='r')
         names = archive.namelist()
         if len(names) != 1:
-            Log.error("*.zip file has {{num}} files, expecting only one.", {"num": len(names)})
+            Log.error("*.zip file has {{num}} files, expecting only one.",  num= len(names))
         stream = archive.open(names[0], "r")
         return LazyLines(sbytes2ilines(stream)).__iter__()

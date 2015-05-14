@@ -198,7 +198,7 @@ class Matrix(object):
     def aggregate(self, type):
         func = aggregates[type]
         if not type:
-            Log.error("Aggregate of type {{type}} is not supported yet", {"type": type})
+            Log.error("Aggregate of type {{type}} is not supported yet",  type= type)
 
         return func(self.num, self.cube)
 

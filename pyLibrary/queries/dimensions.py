@@ -70,7 +70,7 @@ class Dimension(Container):
                 "esfilter": self.esfilter,
                 "limit": self.limit
             })
-            Log.note("{{name}} has {{num}} parts", {"name": self.name, "num": len(parts)})
+            Log.note("{{name}} has {{num}} parts",  name= self.name,  num= len(parts))
 
         d = parts.edges[0].domain
 
@@ -324,10 +324,9 @@ def parse_partition(part):
 
     if not part.esfilter:
         if len(part.partitions) > 100:
-            Log.error("Must define an esfilter on {{name}} there are too many partitions ({{num_parts}})", {
-                "name": part.name,
-                "num_parts": len(part.partitions)
-            })
+            Log.error("Must define an esfilter on {{name}} there are too many partitions ({{num_parts}})",
+                name= part.name,
+                num_parts= len(part.partitions))
 
         # DEFAULT esfilter IS THE UNION OF ALL CHILD FILTERS
         if part.partitions:

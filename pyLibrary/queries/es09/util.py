@@ -166,7 +166,7 @@ def parse_columns(parent_path, esProperties):
                 "useSource": True
             })
         else:
-            Log.warning("unknown type {{type}} for property {{path}}", {"type": property.type, "path": path})
+            Log.warning("unknown type {{type}} for property {{path}}",  type= property.type,  path= path)
 
     return columns
 

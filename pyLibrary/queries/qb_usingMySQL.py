@@ -101,14 +101,14 @@ class MySQL(object):
         # RETURN SINGLE OBJECT WITH AGGREGATES
         for s in select:
             if s.aggregate not in aggregates:
-                Log.error("Expecting all columns to have an aggregate: {{select}}", {"select": s})
+                Log.error("Expecting all columns to have an aggregate: {{select}}",  select= s)
 
         selects = DictList()
         groups = DictList()
         edges = query.edges
         for e in edges:
             if e.domain.type != "default":
-                Log.error("domain of type {{type}} not supported, yet", {"type": e.domain.type})
+                Log.error("domain of type {{type}} not supported, yet",  type= e.domain.type)
             groups.append(e.value)
             selects.append(e.value + " AS " + self.db.quote_column(e.name))
 
@@ -173,7 +173,7 @@ class MySQL(object):
             # RETURN SINGLE OBJECT WITH AGGREGATES
             for s in query.select:
                 if s.aggregate not in aggregates:
-                    Log.error("Expecting all columns to have an aggregate: {{select}}", {"select": s})
+                    Log.error("Expecting all columns to have an aggregate: {{select}}",  select= s)
 
             selects = DictList()
             for s in query.select:
@@ -196,7 +196,7 @@ class MySQL(object):
             # RETURN SINGLE VALUE
             s0 = query.select
             if s0.aggregate not in aggregates:
-                Log.error("Expecting all columns to have an aggregate: {{select}}", {"select": s0})
+                Log.error("Expecting all columns to have an aggregate: {{select}}",  select= s0)
 
             select = aggregates[s0.aggregate].replace("{{code}}", s0.value) + " AS " + self.db.quote_column(s0.name)
 
@@ -331,10 +331,11 @@ def _isolate(separator, list):
         else:
             return list[0]
     except Exception, e:
-        Log.error("Programming problem: separator={{separator}}, list={{list}", {
-            "list": list,
-            "separator": separator
-        }, e)
+        Log.error("Programming problem: separator={{separator}}, list={{list}",
+            list=list,
+            separator=separator,
+            cause=e
+        )
 
 
 def esfilter2sqlwhere(db, esfilter):
@@ -423,7 +424,7 @@ def _esfilter2sqlwhere(db, esfilter):
     elif esfilter.instr:
         return _isolate("AND", ["instr(" + db.quote_column(col) + ", " + db.quote_value(val) + ")>0" for col, val in esfilter.instr.items()])
     else:
-        Log.error("Can not convert esfilter to SQL: {{esfilter}}", {"esfilter": esfilter})
+        Log.error("Can not convert esfilter to SQL: {{esfilter}}",  esfilter= esfilter)
 
 
 def expand_json(rows):

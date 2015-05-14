@@ -55,7 +55,7 @@ def run(query):
     elif isinstance(frum, Query):
         frum = run(frum).data
     else:
-        Log.error("Do not know how to handle {{type}}", {"type":frum.__class__.__name__})
+        Log.error("Do not know how to handle {{type}}",  type=frum.__class__.__name__)
 
     if is_aggs(query):
         frum = list_aggs(frum, query)
@@ -129,12 +129,13 @@ def unique_index(data, keys=None, fail_on_dup=True):
             o.add(d)
         except Exception, e:
             o.add(d)
-            Log.error("index {{index}} is not unique {{key}} maps to both {{value1}} and {{value2}}", {
-                "index": keys,
-                "key": select([d], keys)[0],
-                "value1": o[d],
-                "value2": d
-            }, e)
+            Log.error("index {{index}} is not unique {{key}} maps to both {{value1}} and {{value2}}",
+                index= keys,
+                key= select([d], keys)[0],
+                value1= o[d],
+                value2= d,
+                cause=e
+            )
     return o
 
 
@@ -379,7 +380,7 @@ def _select_deep(v, field, depth, record):
         else:
             record[field.name] = v.get(f)
     except Exception, e:
-        Log.error("{{value}} does not have {{field}} property", {"value": v, "field": f}, e)
+        Log.error("{{value}} does not have {{field}} property",  value= v, field=f, cause=e)
     return 0, None
 
 
@@ -419,7 +420,7 @@ def _select_deep_meta(field, depth):
                 else:
                     destination[name] = source.get(f)
             except Exception, e:
-                Log.error("{{value}} does not have {{field}} property", {"value": source, "field": f}, e)
+                Log.error("{{value}} does not have {{field}} property",  value= source, field=f, cause=e)
             return 0, None
         return assign
     else:
@@ -434,7 +435,7 @@ def _select_deep_meta(field, depth):
                 try:
                     destination[name] = source.get(f)
                 except Exception, e:
-                    Log.error("{{value}} does not have {{field}} property", {"value": source, "field": f}, e)
+                    Log.error("{{value}} does not have {{field}} property",  value= source, field=f, cause=e)
                 return 0, None
             return assign
 
@@ -501,7 +502,7 @@ def sort(data, fieldnames=None):
 
         return output
     except Exception, e:
-        Log.error("Problem sorting\n{{data}}", {"data": data}, e)
+        Log.error("Problem sorting\n{{data}}",  data= data, cause=e)
 
 
 def value_compare(l, r, ordering=1):
@@ -774,7 +775,7 @@ def drill_filter(esfilter, data):
         if isinstance(d, dict):
             main([], esfilter, wrap(d), 0)
         else:
-            Log.error("filter is expecting a structure, not {{type}}", {"type": d.__class__})
+            Log.error("filter is expecting a structure, not {{type}}",  type= d.__class__)
 
     # AT THIS POINT THE primary_column[] IS DETERMINED
     # USE IT TO EXPAND output TO ALL NESTED OBJECTS

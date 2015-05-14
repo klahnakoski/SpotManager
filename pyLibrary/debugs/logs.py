@@ -658,8 +658,6 @@ def write_profile(profile_settings, stats):
 
 
 if not Log.main_log:
-    from log_usingThreadedStream import Log_usingThreadedStream
-
-    Log.main_log = Log_usingThreadedStream("sys.stdout")
+    Log.main_log = Log_usingStream(sys.stdout)
 
 

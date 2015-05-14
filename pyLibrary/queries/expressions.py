@@ -37,7 +37,7 @@ def output(row, rownum=None, rows=None):
     try:
         return """ + source + """
     except Exception, e:
-        Log.error("Problem with dynamic function {{func|quote}}", {"func": """ + convert.value2quote(source) + """}, e)
+        Log.error("Problem with dynamic function {{func|quote}}",  func= """ + convert.value2quote(source) + """, cause=e)
 """
     return output
 
@@ -133,7 +133,7 @@ def qb_expression_to_ruby(expr):
         output = cop(term).to_ruby()
         return output
 
-    Log.error("`{{op}}` is not a recognized operation", {"op": op})
+    Log.error("`{{op}}` is not a recognized operation",  op= op)
 
 
 def qb_expression_to_python(expr):
@@ -196,7 +196,7 @@ def qb_expression_to_python(expr):
         output = uop + "(" + qb_expression_to_python(term) + ")"
         return output
 
-    Log.error("`{{op}}` is not a recognized operation", {"op": op})
+    Log.error("`{{op}}` is not a recognized operation",  op= op)
 
 
 def get_all_vars(expr):
@@ -256,7 +256,7 @@ def get_all_vars(expr):
     if cop:
         return cop(op, term).vars()
 
-    Log.error("`{{op}}` is not a recognized operation", {"op": op})
+    Log.error("`{{op}}` is not a recognized operation",  op= op)
 
 
 
@@ -357,7 +357,7 @@ class BinaryOp(object):
         if self.op in ["gt", "gte", "lte", "lt"]:
             return {"range":{self.op: {self.a: self.b}}}
         else:
-            Log.error("Operator {{op}} is not supported by ES", {"op":self.op})
+            Log.error("Operator {{op}} is not supported by ES",  op=self.op)
 
     def vars(self):
         return self.a.vars() | self.b.vars()
@@ -730,7 +730,7 @@ def _convert_in(op, term):
     if not term:
         Log.error("Expecting a term")
     if not isinstance(term, dict):
-        Log.error("Expecting {{op}} to have dict value", {"op": op})
+        Log.error("Expecting {{op}} to have dict value",  op= op)
     var, val = term.items()[0]
 
     if isinstance(val, list):
@@ -771,7 +771,7 @@ def _convert_field(k, var):
         return {k: {"field": var}}
     if isinstance(var, dict) and var.get("field"):
         return {k: var}
-    Log.error("do not know how to handle {{value}}", {"value": {k: var}})
+    Log.error("do not know how to handle {{value}}",  value= {k: var})
 
 
 converter_map = {

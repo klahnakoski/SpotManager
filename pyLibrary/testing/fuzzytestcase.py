@@ -93,10 +93,11 @@ def assertAlmostEqual(test, expected, digits=None, places=None, msg=None, delta=
         else:
             assertAlmostEqualValue(test, expected, msg=msg, digits=digits, places=places, delta=delta)
     except Exception, e:
-        Log.error("{{test|json}} does not match expected {{expected|json}}", {
-            "test": test if show_detail else "[can not show]",
-            "expected": expected if show_detail else "[can not show]"
-        }, e)
+        Log.error("{{test|json}} does not match expected {{expected|json}}",
+            test= test if show_detail else "[can not show]",
+            expected= expected if show_detail else "[can not show]",
+            cause=e
+        )
 
 
 def assertAlmostEqualValue(test, expected, digits=None, places=None, msg=None, delta=None):

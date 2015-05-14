@@ -40,11 +40,11 @@ def value2json(obj, pretty=False):
     try:
         json = json_encoder(obj, pretty=pretty)
         if json == None:
-            Log.note(str(type(obj)) + " is not valid{{type}}JSON", {"type": " (pretty) " if pretty else " "})
+            Log.note(str(type(obj)) + " is not valid{{type}}JSON",  type= " (pretty) " if pretty else " ")
             Log.error("Not valid JSON: " + str(obj) + " of type " + str(type(obj)))
         return json
     except Exception, e:
-        Log.error("Can not encode into JSON: {{value}}", {"value": repr(obj)}, e)
+        Log.error("Can not encode into JSON: {{value}}",  value= repr(obj), cause=e)
 
 
 def remove_line_comment(line):
@@ -159,12 +159,12 @@ def datetime2unix(d):
         elif isinstance(d, datetime.date):
             epoch = datetime.date(1970, 1, 1)
         else:
-            Log.error("Can not convert {{value}} of type {{type}}", {"value": d, "type": d.__class__})
+            Log.error("Can not convert {{value}} of type {{type}}",  value= d,  type= d.__class__)
 
         diff = d - epoch
         return Decimal(long(diff.total_seconds() * 1000000)) / 1000000
     except Exception, e:
-        Log.error("Can not convert {{value}}", {"value": d}, e)
+        Log.error("Can not convert {{value}}",  value= d, cause=e)
 
 
 def datetime2milli(d):
@@ -183,7 +183,7 @@ def unix2datetime(u):
             return datetime.datetime(2286, 11, 20, 17, 46, 39)
         return datetime.datetime.utcfromtimestamp(u)
     except Exception, e:
-        Log.error("Can not convert {{value}} to datetime", {"value": u}, e)
+        Log.error("Can not convert {{value}} to datetime",  value= u, cause=e)
 
 
 def milli2datetime(u):
@@ -453,7 +453,7 @@ def value2number(v):
         try:
             return float(v)
         except Exception, e:
-            Log.error("Not a number ({{value}})", {"value": v}, e)
+            Log.error("Not a number ({{value}})",  value= v, cause=e)
 
 
 def utf82unicode(value):
@@ -470,7 +470,7 @@ def latin12unicode(value):
     try:
         return unicode(value.decode('iso-8859-1'))
     except Exception, e:
-        Log.error("Can not convert {{value|quote}} to unicode", {"value": value})
+        Log.error("Can not convert {{value|quote}} to unicode",  value= value)
 
 
 def pipe2value(value):
@@ -481,7 +481,7 @@ def pipe2value(value):
         return value2number(value[1::])
 
     if type != 's' and type != 'a':
-        Log.error("unknown pipe type ({{type}}) in {{value}}", {"type": type, "value": value})
+        Log.error("unknown pipe type ({{type}}) in {{value}}",  type= type,  value= value)
 
     # EXPECTING MOST STRINGS TO NOT HAVE ESCAPED CHARS
     output = _unPipe(value)

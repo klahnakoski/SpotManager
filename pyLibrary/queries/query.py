@@ -158,7 +158,7 @@ def _normalize_selects(selects, schema=None):
         exists = set()
         for s in output:
             if s.name in exists:
-                Log.error("{{name}} has already been defined", {"name": s.name})
+                Log.error("{{name}} has already been defined",  name= s.name)
             exists.add(s.name)
         return output
     else:
@@ -185,7 +185,7 @@ def _normalize_select(select, schema=None):
             Log.error("Must give name to each column in select clause")
 
         if not output.name:
-            Log.error("expecting select to have a name: {{select}}", {"select": select})
+            Log.error("expecting select to have a name: {{select}}",  select= select)
 
         output.aggregate = coalesce(canonical_aggregates.get(select.aggregate), select.aggregate, "none")
         return output
@@ -219,7 +219,7 @@ def _normalize_edge(edge, schema=None):
     else:
         edge = wrap(edge)
         if not edge.name and not isinstance(edge.value, basestring):
-            Log.error("You must name compound edges: {{edge}}", {"edge": edge})
+            Log.error("You must name compound edges: {{edge}}",  edge= edge)
 
         if isinstance(edge.value, (dict, list)) and not edge.domain:
             # COMPLEX EDGE IS SHORT HAND
@@ -261,7 +261,7 @@ def _normalize_group(edge, schema=None):
             Log.error("groupby does not accept complicated domains")
 
         if not edge.name and not isinstance(edge.value, basestring):
-            Log.error("You must name compound edges: {{edge}}", {"edge": edge})
+            Log.error("You must name compound edges: {{edge}}",  edge= edge)
 
         return wrap({
             "name": coalesce(edge.name, edge.value),
@@ -348,7 +348,7 @@ def _map_term_using_schema(master, path, term, schema_edges):
                 if AND(is_keyword(f) for f in dimension.fields):
                     # EXPECTING A TUPLE
                     if not isinstance(v, tuple):
-                        Log.error("expecing {{name}}={{value}} to be a tuple", {"name": k, "value": v})
+                        Log.error("expecing {{name}}={{value}} to be a tuple",  name= k,  value= v)
                     for i, f in enumerate(dimension.fields):
                         vv = v[i]
                         if vv == None:
@@ -562,10 +562,9 @@ def where_get_all_vars(w):
 
     if key in ["gte", "gt", "eq", "ne", "term", "terms", "lt", "lte", "range", "prefix"]:
         if not isinstance(val, dict):
-            Log.error("Expecting `{{key}}` to have a dict value, not a {{type}}", {
-                "key": key,
-                "type": val.__class__.__name__
-            })
+            Log.error("Expecting `{{key}}` to have a dict value, not a {{type}}",
+                key= key,
+                type= val.__class__.__name__)
         return list(val.keys())
 
     if key == "match_all":

@@ -182,7 +182,7 @@ def set_attr(obj, path, value):
     except Exception, e:
         from pyLibrary.debugs.logs import Log
         if PATH_NOT_FOUND in e:
-            Log.error(PATH_NOT_FOUND+": {{path}}", {"path":path})
+            Log.warning(PATH_NOT_FOUND + ": {{path}}",  path= path)
         else:
             Log.error("Problem setting value", e)
 
@@ -196,7 +196,7 @@ def get_attr(obj, path):
     except Exception, e:
         from pyLibrary.debugs.logs import Log
         if PATH_NOT_FOUND in e:
-            Log.error(PATH_NOT_FOUND+": {{path}}", {"path":path}, e)
+            Log.error(PATH_NOT_FOUND+": {{path}}",  path=path, cause=e)
         else:
             Log.error("Problem setting value", e)
 
@@ -237,7 +237,7 @@ def _get_attr(obj, path):
             Log.error(PATH_NOT_FOUND)
         elif len(attr_name)>1:
             from pyLibrary.debugs.logs import Log
-            Log.error(AMBIGUOUS_PATH_FOUND+" {{paths}}", {"paths":attr_name})
+            Log.error(AMBIGUOUS_PATH_FOUND+" {{paths}}",  paths=attr_name)
         else:
             return _get_attr(obj[attr_name[0]], path[1:])
     try:

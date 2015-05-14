@@ -79,7 +79,7 @@ class Redshift(object):
                 self.connection = None
                 self._connect()
                 if not retry:
-                    Log.error("Problem with command:\n{{command|indent}}", {"command": command}, e)
+                    Log.error("Problem with command:\n{{command|indent}}",  command= command, cause=e)
         return output
 
     def insert(self, table_name, record):
@@ -94,7 +94,7 @@ class Redshift(object):
 
             self.execute(command)
         except Exception, e:
-            Log.error("problem with record: {{record}}", {"record": record}, e)
+            Log.error("problem with record: {{record}}",  record= record, cause=e)
 
 
     def insert_list(self, table_name, records):

@@ -74,7 +74,7 @@ def list_aggs(frum, query):
                     if acc == None:
                         acc = windows.name2accumulator.get(agg)
                         if acc == None:
-                            Log.error("select aggregate {{agg}} is not recognized", {"agg": agg})
+                            Log.error("select aggregate {{agg}} is not recognized",  agg= agg)
                         acc = acc(**unwrap(s))
                         mat[c] = acc
                     for e, cc in zip(query.edges, c):  # BECAUSE WE DO NOT KNOW IF s.exec NEEDS THESE EDGES, SO WE PASS THEM ANYWAY

@@ -72,7 +72,7 @@ def make_log_from_settings(settings):
             # PROVIDE A DEFAULT STREAM HANLDER
             constructor = Log_usingThreadedStream
         else:
-            Log.error("Can not find class {{class}}", {"class": path}, e)
+            Log.error("Can not find class {{class}}",  {"class": path}, cause=e)
 
     # IF WE NEED A FILE, MAKE SURE DIRECTORY EXISTS
     if settings.filename:

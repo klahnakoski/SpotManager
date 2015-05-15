@@ -97,9 +97,22 @@ def use_settings(func):
         defaults={}
     else:
         defaults = {k: v for k, v in zip(reversed(params), reversed(func.func_defaults))}
+
     if "settings" not in params:
-        Log.error("Must have an optional 'settings' parameter, which will be "
-                  "filled with dict of all parameter {name:value} pairs")
+        # WE ASSUME WE ARE ONLY ADDING A settings PARAMETER TO SOME REGULAR METHOD
+        def w_settings(*args, **kwargs):
+            settings = wrap(kwargs).settings
+
+            params = func.func_code.co_varnames[:func.func_code.co_argcount]
+            if not func.func_defaults:
+                defaults = {}
+            else:
+                defaults = {k: v for k, v in zip(reversed(params), reversed(func.func_defaults))}
+
+            ordered_params = dict(zip(params, args))
+
+            return func(**params_pack(params, ordered_params, kwargs, settings, defaults))
+        return w_settings
 
     def wrapper(*args, **kwargs):
         try:
@@ -162,5 +175,3 @@ def params_pack(params, *args):
 
     output = {str(k): settings[k] for k in params if k in settings}
     return output
-
-

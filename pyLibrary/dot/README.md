@@ -217,6 +217,20 @@ The dot operator on a `DictList` performs a simple projection; it will return a 
     myList.name == [x["name"] for x in myList]
 ```
 
+DictObject for data
+-------------------
+
+There are two major families of objects in Object Oriented programming.  The first, are ***Actors***: characterized by a number of instance methods and some state bundled into a useful package.  The second are ***Data***: Primarily a set of properties, with only (de)serialization functions, or algebraic operators defined.  Boto has many examples of these *Data* classes, [here is one](https://github.com/boto/boto/blob/4b8269562e663f090403e57ba1a3a471b6e0aa0e/boto/ec2/networkinterface.py).
+
+The problem with *Data* object 
+
+
+
+
+
+
+Appendix
+========
 
 Motivation for DictList (optional reading)
 ------------------------------------------

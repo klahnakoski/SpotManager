@@ -180,20 +180,25 @@ class SpotManager(object):
                         instance_type=p.type.instance_type,
                         settings=self.settings.ec2.request
                     )
-                    Log.note("Request {{num}} instance {{type}} with utility {{utility}} at ${{price}}/hour",
+                    Log.note(
+                        "Request {{num}} instance {{type}} with utility {{utility}} at ${{price}}/hour",
                         num=len(new_requests),
                         type=p.type.instance_type,
                         utility=p.type.utility,
-                        price=bid)
+                        price=bid
+                    )
                     net_new_utility -= p.type.utility * len(new_requests)
                     remaining_budget -= bid * len(new_requests)
                     with self.net_new_locker:
                         for ii in new_requests:
                             self.net_new_spot_requests.add(ii)
                 except Exception, e:
-                    Log.note("Request instance {{type}} failed bcause {{reason}}",
+                    Log.warning(
+                        "Request instance {{type}} failed because {{reason}}",
                         type=p.type.instance_type,
-                        reason=e.message)
+                        reason=e.message,
+                        cause=e
+                    )
 
         return net_new_utility, remaining_budget
 
@@ -377,24 +382,21 @@ class SpotManager(object):
             return zones_with_interfaces
 
     @use_settings
-    def _request_spot_instances(self, price, availability_zone_group, instance_type, settings=None):
-        network_interfaces = NetworkInterfaceCollection()
-        for interface_settings in listwrap(settings.network_interfaces):
-            if self._get_subnet_availability_zone(interface_settings.subnet_id) == availability_zone_group:
-                network_interfaces.append(NetworkInterfaceSpecification(**unwrap(interface_settings)))
-        settings.network_interfaces = network_interfaces
+    def _request_spot_instances(self, price, availability_zone_group, instance_type, settings):
+        settings.network_interfaces = NetworkInterfaceCollection(*(
+            NetworkInterfaceSpecification(settings=i)
+            for i in listwrap(settings.network_interfaces)
+            if self.vpc_conn.get_all_subnets(subnet_ids=i.subnet_id, filters={"availabilityZone": availability_zone_group})
+        ))
 
         if len(settings.network_interfaces) == 0:
             Log.error("No network interface specifications found for {{availability_zone}}!", availability_zone=settings.availability_zone_group)
 
-        settings.settings = None
+        settings.block_device_map = BlockDeviceMapping()
 
         # GENERIC BLOCK DEVICE MAPPING
-        block_device_map = BlockDeviceMapping()
-        if settings.block_device_map:
-            for dev, dev_settings in settings.block_device_map.iteritems():
-                block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
-        settings.block_device_map = block_device_map
+        for dev, dev_settings in settings.block_device_map.items():
+            settings.block_device_map[dev] = BlockDeviceType(settings=dev_settings)
 
         # INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping
         num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]
@@ -406,21 +408,17 @@ class SpotManager(object):
             )
 
         #ATTACH NEW EBS VOLUMES
-        for i, drives in enumerate(self.settings.utility[instance_type].drives):
-            d = drives.copy()
-            d.path = None  # path AND device PROPERTY IS NOT ALLOWED IN THE BlockDeviceType
-            d.device = None
-            if d.size:
-                settings.block_device_map[drives.device] = BlockDeviceType(
+        for i, drive in enumerate(self.settings.utility[instance_type].drives):
+            if drive.size:
+                settings.block_device_map[drive.device] = BlockDeviceType(
                     delete_on_termination=True,
-                    **unwrap(d)
+                    settings=drive
                 )
 
         if settings.expiration:
             settings.valid_until = (Date.now() + Duration(settings.expiration)).format(ISO8601)
-            settings.expiration = None
 
-        output = wrap(self.ec2_conn.request_spot_instances(**unwrap(settings)))
+        output = wrap(use_settings(self.ec2_conn.request_spot_instances)(settings=settings))
         return output
 
     def pricing(self):

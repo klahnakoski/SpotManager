@@ -28,6 +28,8 @@ class DictObject(dict):
     def __getattr__(self, item):
         try:
             output = _get(_get(self, "_obj"), item)
+            if output == None:
+                return None   # So we allow `is` compare to `None`
             return wrap(output)
         except Exception, _:
             return wrap(_get(self, "_dict")[item])
@@ -71,7 +73,7 @@ class DictClass(object):
     def __call__(self, *args, **kwargs):
         settings = wrap(kwargs).settings
 
-        params = self.constructor.func_code.co_varnames[:self.constructor.func_code.co_argcount]
+        params = self.constructor.func_code.co_varnames[1:self.constructor.func_code.co_argcount]
         if not self.constructor.func_defaults:
             defaults = {}
         else:
@@ -79,8 +81,7 @@ class DictClass(object):
 
         ordered_params = dict(zip(params, args))
 
-        output = self.class_.__new__(self.class_)
-        self.constructor.__init__(output, **params_pack(params, ordered_params, kwargs, settings, defaults))
+        output = self.class_(**params_pack(params, ordered_params, kwargs, settings, defaults))
         return DictObject(output)
 
 

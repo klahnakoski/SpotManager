@@ -378,7 +378,7 @@ class SpotManager(object):
 
         block_device_map = BlockDeviceMapping()
         if settings.block_device_map:
-            for dev, dev_settings in settings.block_devices.iteritems():
+            for dev, dev_settings in settings.block_device_map.iteritems():
                 block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
         settings.block_device_map = block_device_map
 

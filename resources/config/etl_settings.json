@@ -5,6 +5,7 @@
 	"price_file": "resources/aws/prices.json",
 	"run_interval": "10minute",
 	"bid_percentile": 0.8,      //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
+	"availability_zone": "us-west-2c",
 	"aws": {
 		"$ref": "//~/private.json#aws_credentials"
 	},

@@ -10,10 +10,13 @@ from __future__ import unicode_literals
 from __future__ import division
 
 import boto
+import boto.vpc
+import boto.ec2
 from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
 from boto.ec2.spotpricehistory import SpotPriceHistory
 from boto.utils import ISO8601
+import time
 
 from pyLibrary import convert
 from pyLibrary.collections import SUM
@@ -42,11 +45,12 @@ class SpotManager(object):
     def __init__(self, instance_manager, settings):
         self.settings = settings
         self.instance_manager = instance_manager
-        self.conn = boto.ec2.connect_to_region(
+        aws_args = dict(
             region_name=settings.aws.region,
             aws_access_key_id=unwrap(settings.aws.aws_access_key_id),
-            aws_secret_access_key=unwrap(settings.aws.aws_secret_access_key)
-        )
+            aws_secret_access_key=unwrap(settings.aws.aws_secret_access_key))
+        self.ec2_conn = boto.ec2.connect_to_region(**aws_args)
+        self.vpc_conn = boto.vpc.connect_to_region(**aws_args)
         self.price_locker = Lock()
         self.prices = None
         self.price_lookup = None
@@ -54,7 +58,8 @@ class SpotManager(object):
         self.net_new_locker = Lock()
         self.net_new_spot_requests = UniqueIndex(("id",))  # SPOT REQUESTS FOR THIS SESSION
         self.watcher = None
-        self._start_life_cycle_watcher()
+        if instance_manager.setup_required():
+            self._start_life_cycle_watcher()
         self.pricing()
 
     def update_spot_requests(self, utility_required):
@@ -88,6 +93,8 @@ class SpotManager(object):
         current_utility = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type].type.utility for r in active), 0)
         net_new_utility = utility_required - current_utility
 
+        Log.note("have {{current_utility}} utility running; need {{need_utility}} more utility", current_utility=current_utility, need_utility=net_new_utility)
+
         if remaining_budget < 0:
             remaining_budget, net_new_utility = self.save_money(remaining_budget, net_new_utility)
 
@@ -104,6 +111,12 @@ class SpotManager(object):
                 expected=self.settings.max_utility_price,
                 budget=remaining_budget)
 
+        # Give EC2 a chance to notice the new requests before tagging them.
+        time.sleep(3)
+        with self.net_new_locker:
+            for req in self.net_new_spot_requests:
+                req.add_tag("Name", self.settings.ec2.instance.name)
+
         Log.note("All requests for new utility have been made")
         self.done_spot_requests.go()
 
@@ -111,6 +124,9 @@ class SpotManager(object):
         prices = self.pricing()
 
         for p in prices:
+            if net_new_utility <= 0 or remaining_budget <= 0:
+                break
+
             if p.current_price == None:
                 Log.note("{{type}} has no price",
                     type=p.type.instance_type
@@ -195,10 +211,10 @@ class SpotManager(object):
         remove_spot_requests = remove_list.spot_instance_request_id
 
         # TERMINATE INSTANCES
-        self.conn.terminate_instances(instance_ids=remove_list.id)
+        self.ec2_conn.terminate_instances(instance_ids=remove_list.id)
 
         # TERMINATE SPOT REQUESTS
-        self.conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
+        self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
 
         return net_new_utility
 
@@ -246,20 +262,20 @@ class SpotManager(object):
         remove_spot_requests.extend(remove_list.spot_instance_request_id)
 
         # TERMINATE INSTANCES
-        self.conn.terminate_instances(instance_ids=remove_list.id)
+        self.ec2_conn.terminate_instances(instance_ids=remove_list.id)
 
         # TERMINATE SPOT REQUESTS
-        self.conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
+        self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
         return remaining_budget, net_new_utility
 
     def _get_managed_spot_requests(self):
-        output = wrap([dictwrap(r) for r in self.conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
+        output = wrap([dictwrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
         # Log.note("got spot from amazon {{spot_ids}}",  spot_ids=output.id}
         return output
 
     def _get_managed_instances(self):
         output = []
-        reservations = self.conn.get_all_instances()
+        reservations = self.ec2_conn.get_all_instances()
         for res in reservations:
             for instance in res.instances:
                 if instance.tags.get('Name', '').startswith(self.settings.ec2.instance.name) and instance._state.name == "running":
@@ -271,7 +287,7 @@ class SpotManager(object):
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
                 last_get = Date.now()
-                instances = wrap({i.id: dictwrap(i) for r in self.conn.get_all_instances() for i in r.instances})
+                instances = wrap({i.id: dictwrap(i) for r in self.ec2_conn.get_all_instances() for i in r.instances})
                 # INSTANCES THAT REQUIRE SETUP
                 time_to_stop_trying = {}
                 please_setup = [(i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests] if i.id and not i.tags.get("Name") and i._state.name == "running"]
@@ -288,7 +304,7 @@ class SpotManager(object):
                             time_to_stop_trying[i.id] = Date.now() + TIME_FROM_RUNNING_TO_LOGIN
                         if Date.now() > time_to_stop_trying[i.id]:
                             # FAIL TO SETUP AFTER x MINUTES, THEN TERMINATE INSTANCE
-                            self.conn.terminate_instances(instance_ids=[i.id])
+                            self.ec2_conn.terminate_instances(instance_ids=[i.id])
                             with self.net_new_locker:
                                 self.net_new_spot_requests.remove(r.id)
                             Log.warning("Second problem with setup of {{instance_id}}.  Instance TERMINATED!", instance_id=i.id, cause=e)
@@ -331,22 +347,58 @@ class SpotManager(object):
 
         self.watcher = Thread.run("lifecycle watcher", life_cycle_watcher)
 
+    def _get_subnet_availability_zone(self, subnet_id):
+        try:
+            subnet = self.vpc_conn.get_all_subnets(filters={'subnet_id': subnet_id})[0]
+            return subnet.availability_zone
+        except IndexError:
+            Log.warning("subnet {{subnet_id}} not found", interface_settings)
+            return None
+
+    def _get_valid_availability_zones(self):
+        zones_with_interfaces = [self._get_subnet_availability_zone(i) for i in
+                                    listwrap(self.settings.ec2.request.network_interfaces).subnet_id]
+
+        if self.settings.availability_zone:
+            # If they pass a list of zones, constrain it by zones we have an
+            # interface for.
+            return set(zones_with_interfaces) & set(listwrap(self.settings.availability_zone))
+        else:
+            # Otherwise, use all available zones.
+            return zones_with_interfaces
+
     @use_settings
     def _request_spot_instances(self, price, availability_zone_group, instance_type, settings=None):
-        settings.network_interfaces = NetworkInterfaceCollection(
-            *unwrap(NetworkInterfaceSpecification(**unwrap(s)) for s in listwrap(settings.network_interfaces))
-        )
+        network_interfaces = NetworkInterfaceCollection()
+        for interface_settings in listwrap(settings.network_interfaces):
+            if self._get_subnet_availability_zone(interface_settings.subnet_id) == availability_zone_group:
+                network_interfaces.append(NetworkInterfaceSpecification(**unwrap(interface_settings)))
+        settings.network_interfaces = network_interfaces
+
+        if len(settings.network_interfaces) == 0:
+            Log.error("No network interface specifications found for {{availability_zone}}!", availability_zone=settings.availability_zone_group)
+
         settings.settings = None
 
-        # INCLUDE EPHEMERAL STORAGE BlockDeviceMapping
+        block_device_map = BlockDeviceMapping()
+        if settings.block_device_map:
+            for dev, dev_settings in settings.block_device_map.iteritems():
+                block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
+        settings.block_device_map = block_device_map
+
+        # INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping
         num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]
-        settings.block_device_map = BlockDeviceMapping()
         for i in range(num_ephemeral_volumes):
             letter = convert.ascii2char(98 + i)
             settings.block_device_map["/dev/sd" + letter] = BlockDeviceType(
                 ephemeral_name='ephemeral' + unicode(i),
                 delete_on_termination=True
             )
+
+        if settings.expiration:
+            settings.valid_until = (Date.now() + Duration(settings.expiration)).format(ISO8601)
+            settings.expiration = None
+
         #ATTACH NEW EBS VOLUMES
         for i, drives in enumerate(self.settings.utility[instance_type].drives):
             d = drives.copy()
@@ -357,9 +409,7 @@ class SpotManager(object):
                     delete_on_termination=True,
                     **unwrap(d)
                 )
-        output = list(self.conn.request_spot_instances(**unwrap(settings)))
-        for o in output:
-            o.add_tag("Name", self.settings.ec2.instance.name)
+        output = list(self.ec2_conn.request_spot_instances(**unwrap(settings)))
         return output
 
     def pricing(self):
@@ -369,71 +419,72 @@ class SpotManager(object):
 
             prices = self._get_spot_prices_from_aws()
 
-            hourly_pricing = qb.run({
-                "from": {
-                    # AWS PRICING ONLY SENDS timestamp OF CHANGES, MATCH WITH NEXT INSTANCE
-                    "from": prices,
-                    "window": {
-                        "name": "expire",
-                        "value": CODE("coalesce(rows[rownum+1].timestamp, Date.eod())"),
-                        "edges": ["availability_zone", "instance_type"],
-                        "sort": "timestamp"
-                    }
-                },
-                "edges": [
-                    "availability_zone",
-                    "instance_type",
-                    {
-                        "name": "time",
-                        "range": {"min": "timestamp", "max": "expire", "mode": "inclusive"},
-                        "allowNulls": False,
-                        "domain": {"type": "time", "min": Date.now().floor(HOUR) - DAY, "max": Date.now().floor(HOUR), "interval": "hour"}
-                    }
-                ],
-                "select": [
-                    {"value": "price", "aggregate": "max"},
-                    {"aggregate": "count"}
-                ],
-                "where": {"gt": {"timestamp": Date.now().floor(HOUR) - DAY}},
-                "window": {
-                    "name": "current_price", "value": CODE("rows.last().price"), "edges": ["availability_zone", "instance_type"], "sort": "time",
-                }
-            }).data
-
-            bid80 = qb.run({
-                "from": hourly_pricing,
-                "edges": [
-                    {
-                        "value": "availability_zone",
-                        "allowNulls": False
+            with Timer("processing pricing data"):
+                hourly_pricing = qb.run({
+                    "from": {
+                        # AWS PRICING ONLY SENDS timestamp OF CHANGES, MATCH WITH NEXT INSTANCE
+                        "from": prices,
+                        "window": {
+                            "name": "expire",
+                            "value": CODE("coalesce(rows[rownum+1].timestamp, Date.eod())"),
+                            "edges": ["availability_zone", "instance_type"],
+                            "sort": "timestamp"
+                        }
                     },
-                    {
-                        "name": "type",
-                        "value": "instance_type",
-                        "allowNulls": False,
-                        "domain": {"type": "set", "key": "instance_type", "partitions": list(self.settings.utility)}
+                    "edges": [
+                        "availability_zone",
+                        "instance_type",
+                        {
+                            "name": "time",
+                            "range": {"min": "timestamp", "max": "expire", "mode": "inclusive"},
+                            "allowNulls": False,
+                            "domain": {"type": "time", "min": Date.now().floor(HOUR) - DAY, "max": Date.now().floor(HOUR), "interval": "hour"}
+                        }
+                    ],
+                    "select": [
+                        {"value": "price", "aggregate": "max"},
+                        {"aggregate": "count"}
+                    ],
+                    "where": {"gt": {"timestamp": Date.now().floor(HOUR) - DAY}},
+                    "window": {
+                        "name": "current_price", "value": CODE("rows.last().price"), "edges": ["availability_zone", "instance_type"], "sort": "time",
                     }
-                ],
-                "select": [
-                    {"name": "price_80", "value": "price", "aggregate": "percentile", "percentile": self.settings.bid_percentile},
-                    {"name": "max_price", "value": "price", "aggregate": "max"},
-                    {"aggregate": "count"},
-                    {"value": "current_price", "aggregate": "one"},
-                    {"name": "all_price", "value": "price", "aggregate": "list"}
-                ],
-                "window": [
-                    {"name": "estimated_value", "value": {"div": ["type.utility", "price_80"]}},
-                    {"name": "higher_price", "value": lambda row: find_higher(row.all_price, row.price_80)}
-                ]
-            })
+                }).data
 
-            output = qb.run({
-                "from": bid80.data,
-                "sort": {"value": "estimated_value", "sort": -1}
-            })
+                bid80 = qb.run({
+                    "from": hourly_pricing,
+                    "edges": [
+                        {
+                            "value": "availability_zone",
+                            "allowNulls": False
+                        },
+                        {
+                            "name": "type",
+                            "value": "instance_type",
+                            "allowNulls": False,
+                            "domain": {"type": "set", "key": "instance_type", "partitions": list(self.settings.utility)}
+                        }
+                    ],
+                    "select": [
+                        {"name": "price_80", "value": "price", "aggregate": "percentile", "percentile": self.settings.bid_percentile},
+                        {"name": "max_price", "value": "price", "aggregate": "max"},
+                        {"aggregate": "count"},
+                        {"value": "current_price", "aggregate": "one"},
+                        {"name": "all_price", "value": "price", "aggregate": "list"}
+                    ],
+                    "window": [
+                        {"name": "estimated_value", "value": {"div": ["type.utility", "price_80"]}},
+                        {"name": "higher_price", "value": lambda row: find_higher(row.all_price, row.price_80)}
+                    ]
+                })
 
-            self.prices = output.data
-            self.price_lookup = {p.type.instance_type: p for p in self.prices}
+                output = qb.run({
+                    "from": bid80.data,
+                    "sort": {"value": "estimated_value", "sort": -1}
+                })
+
+                self.prices = output.data
+                self.price_lookup = {p.type.instance_type: p for p in self.prices}
             return self.prices
 
     def _get_spot_prices_from_aws(self):
@@ -450,6 +501,7 @@ class SpotManager(object):
             "select": {"value": "timestamp", "aggregate": "max"}
         }).data
 
+        zones = self._get_valid_availability_zones()
         prices = set(cache)
         with Timer("Get pricing from AWS"):
             for instance_type in self.settings.utility.keys():
@@ -467,29 +519,30 @@ class SpotManager(object):
                         start_at=start_at
                     )
 
-                next_token = None
-                while True:
-                    resultset = self.conn.get_spot_price_history(
-                        product_description="Linux/UNIX",
-                        instance_type=instance_type,
-                        availability_zone="us-west-2c",
-                        start_time=start_at.format(ISO8601),
-                        next_token=next_token
-                    )
-                    next_token = resultset.next_token
+                for zone in zones:
+                    next_token = None
+                    while True:
+                        resultset = self.ec2_conn.get_spot_price_history(
+                            product_description="Linux/UNIX (Amazon VPC)",
+                            instance_type=instance_type,
+                            availability_zone=zone,
+                            start_time=start_at.format(ISO8601),
+                            next_token=next_token
+                        )
+                        next_token = resultset.next_token
 
-                    for p in resultset:
-                        prices.add(wrap({
-                            "availability_zone": p.availability_zone,
-                            "instance_type": p.instance_type,
-                            "price": p.price,
-                            "product_description": p.product_description,
-                            "region": p.region.name,
-                            "timestamp": Date(p.timestamp)
-                        }))
+                        for p in resultset:
+                            prices.add(wrap({
+                                "availability_zone": p.availability_zone,
+                                "instance_type": p.instance_type,
+                                "price": p.price,
+                                "product_description": p.product_description,
+                                "region": p.region.name,
+                                "timestamp": Date(p.timestamp)
+                            }))
 
-                    if not next_token:
-                        break
+                        if not next_token:
+                            break
 
         with Timer("Save prices to file"):
             File(self.settings.price_file).write(convert.value2json(prices))
@@ -512,7 +565,6 @@ TERMINATED_STATUS_CODES = {
 }
 RETRY_STATUS_CODES = {
     "instance-terminated-by-price",
-    "price-too-low",
     "bad-parameters",
     "canceled-before-fulfillment",
     "instance-terminated-by-user"
@@ -520,6 +572,7 @@ RETRY_STATUS_CODES = {
 PENDING_STATUS_CODES = {
     "pending-evaluation",
     "pending-fulfillment"
+    "price-too-low"
 }
 PROBABLY_NOT_FOR_A_WHILE = {
     "az-group-constraint"
@@ -548,7 +601,9 @@ def main():
             instance_manager = new_instance(settings.instance)
             m = SpotManager(instance_manager, settings=settings)
             m.update_spot_requests(instance_manager.required_utility())
-            m.watcher.join()
+
+            if m.watcher:
+                m.watcher.join()
     except Exception, e:
         Log.warning("Problem with spot manager", e)
     finally:

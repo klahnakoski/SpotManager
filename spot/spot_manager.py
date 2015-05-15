@@ -93,6 +93,8 @@ class SpotManager(object):
         current_utility = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type].type.utility for r in active), 0)
         net_new_utility = utility_required - current_utility
 
+        Log.note("need {{utility}} more utility", utility=net_new_utility)
+
         if remaining_budget < 0:
             remaining_budget, net_new_utility = self.save_money(remaining_budget, net_new_utility)
 
@@ -414,71 +416,72 @@ class SpotManager(object):
 
             prices = self._get_spot_prices_from_aws()
 
-            hourly_pricing = qb.run({
-                "from": {
-                    # AWS PRICING ONLY SENDS timestamp OF CHANGES, MATCH WITH NEXT INSTANCE
-                    "from": prices,
-                    "window": {
-                        "name": "expire",
-                        "value": CODE("coalesce(rows[rownum+1].timestamp, Date.eod())"),
-                        "edges": ["availability_zone", "instance_type"],
-                        "sort": "timestamp"
-                    }
-                },
-                "edges": [
-                    "availability_zone",
-                    "instance_type",
-                    {
-                        "name": "time",
-                        "range": {"min": "timestamp", "max": "expire", "mode": "inclusive"},
-                        "allowNulls": False,
-                        "domain": {"type": "time", "min": Date.now().floor(HOUR) - DAY, "max": Date.now().floor(HOUR), "interval": "hour"}
-                    }
-                ],
-                "select": [
-                    {"value": "price", "aggregate": "max"},
-                    {"aggregate": "count"}
-                ],
-                "where": {"gt": {"timestamp": Date.now().floor(HOUR) - DAY}},
-                "window": {
-                    "name": "current_price", "value": CODE("rows.last().price"), "edges": ["availability_zone", "instance_type"], "sort": "time",
-                }
-            }).data
-
-            bid80 = qb.run({
-                "from": hourly_pricing,
-                "edges": [
-                    {
-                        "value": "availability_zone",
-                        "allowNulls": False
+            with Timer("processing pricing data"):
+                hourly_pricing = qb.run({
+                    "from": {
+                        # AWS PRICING ONLY SENDS timestamp OF CHANGES, MATCH WITH NEXT INSTANCE
+                        "from": prices,
+                        "window": {
+                            "name": "expire",
+                            "value": CODE("coalesce(rows[rownum+1].timestamp, Date.eod())"),
+                            "edges": ["availability_zone", "instance_type"],
+                            "sort": "timestamp"
+                        }
                     },
-                    {
-                        "name": "type",
-                        "value": "instance_type",
-                        "allowNulls": False,
-                        "domain": {"type": "set", "key": "instance_type", "partitions": list(self.settings.utility)}
+                    "edges": [
+                        "availability_zone",
+                        "instance_type",
+                        {
+                            "name": "time",
+                            "range": {"min": "timestamp", "max": "expire", "mode": "inclusive"},
+                            "allowNulls": False,
+                            "domain": {"type": "time", "min": Date.now().floor(HOUR) - DAY, "max": Date.now().floor(HOUR), "interval": "hour"}
+                        }
+                    ],
+                    "select": [
+                        {"value": "price", "aggregate": "max"},
+                        {"aggregate": "count"}
+                    ],
+                    "where": {"gt": {"timestamp": Date.now().floor(HOUR) - DAY}},
+                    "window": {
+                        "name": "current_price", "value": CODE("rows.last().price"), "edges": ["availability_zone", "instance_type"], "sort": "time",
                     }
-                ],
-                "select": [
-                    {"name": "price_80", "value": "price", "aggregate": "percentile", "percentile": self.settings.bid_percentile},
-                    {"name": "max_price", "value": "price", "aggregate": "max"},
-                    {"aggregate": "count"},
-                    {"value": "current_price", "aggregate": "one"},
-                    {"name": "all_price", "value": "price", "aggregate": "list"}
-                ],
-                "window": [
-                    {"name": "estimated_value", "value": {"div": ["type.utility", "price_80"]}},
-                    {"name": "higher_price", "value": lambda row: find_higher(row.all_price, row.price_80)}
-                ]
-            })
+                }).data
 
-            output = qb.run({
-                "from": bid80.data,
-                "sort": {"value": "estimated_value", "sort": -1}
-            })
+                bid80 = qb.run({
+                    "from": hourly_pricing,
+                    "edges": [
+                        {
+                            "value": "availability_zone",
+                            "allowNulls": False
+                        },
+                        {
+                            "name": "type",
+                            "value": "instance_type",
+                            "allowNulls": False,
+                            "domain": {"type": "set", "key": "instance_type", "partitions": list(self.settings.utility)}
+                        }
+                    ],
+                    "select": [
+                        {"name": "price_80", "value": "price", "aggregate": "percentile", "percentile": self.settings.bid_percentile},
+                        {"name": "max_price", "value": "price", "aggregate": "max"},
+                        {"aggregate": "count"},
+                        {"value": "current_price", "aggregate": "one"},
+                        {"name": "all_price", "value": "price", "aggregate": "list"}
+                    ],
+                    "window": [
+                        {"name": "estimated_value", "value": {"div": ["type.utility", "price_80"]}},
+                        {"name": "higher_price", "value": lambda row: find_higher(row.all_price, row.price_80)}
+                    ]
+                })
 
-            self.prices = output.data
-            self.price_lookup = {p.type.instance_type: p for p in self.prices}
+                output = qb.run({
+                    "from": bid80.data,
+                    "sort": {"value": "estimated_value", "sort": -1}
+                })
+
+                self.prices = output.data
+                self.price_lookup = {p.type.instance_type: p for p in self.prices}
             return self.prices
 
     def _get_spot_prices_from_aws(self):

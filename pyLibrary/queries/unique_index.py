@@ -55,6 +55,7 @@ class UniqueIndex(object):
         return self._data.keys()
 
     def add(self, val):
+        val = wrap(val)
         key = value2key(self._keys, val)
         if key == None:
             Log.error("Expecting key to not be None")

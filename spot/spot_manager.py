@@ -156,7 +156,7 @@ class SpotManager(object):
                     remaining_budget -= bid * len(new_requests)
                     with self.net_new_locker:
                         for ii in new_requests:
-                            self.net_new_spot_requests.add(dictwrap(ii))
+                            self.net_new_spot_requests.add(ii)
                 except Exception, e:
                     Log.note("Request instance {{type}} failed bcause {{reason}}",
                         type=p.type.instance_type,
@@ -253,7 +253,7 @@ class SpotManager(object):
         return remaining_budget, net_new_utility
 
     def _get_managed_spot_requests(self):
-        output = wrap([dictwrap(r) for r in self.conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
+        output = wrap([r for r in self.conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
         # Log.note("got spot from amazon {{spot_ids}}",  spot_ids=output.id}
         return output
 
@@ -263,7 +263,7 @@ class SpotManager(object):
         for res in reservations:
             for instance in res.instances:
                 if instance.tags.get('Name', '').startswith(self.settings.ec2.instance.name) and instance._state.name == "running":
-                    output.append(dictwrap(instance))
+                    output.append(instance)
         return wrap(output)
 
     def _start_life_cycle_watcher(self):
@@ -271,7 +271,7 @@ class SpotManager(object):
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
                 last_get = Date.now()
-                instances = wrap({i.id: dictwrap(i) for r in self.conn.get_all_instances() for i in r.instances})
+                instances = wrap({i.id: i for r in self.conn.get_all_instances() for i in r.instances})
                 # INSTANCES THAT REQUIRE SETUP
                 time_to_stop_trying = {}
                 please_setup = [(i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests] if i.id and not i.tags.get("Name") and i._state.name == "running"]

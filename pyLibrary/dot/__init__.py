@@ -124,7 +124,7 @@ def _all_default(d, default, seen=None):
     """
     if default is None:
         return
-    for k, default_value in dictwrap(default).items():
+    for k, default_value in wrap(default).items():
         # existing_value = d.get(k)
         existing_value = _get_attr(d, [k])
 
@@ -300,8 +300,10 @@ def wrap(v):
         return DictList(v)
     elif type_ is GeneratorType:
         return (wrap(vv) for vv in v)
-    else:
+    elif type_ in (str, unicode, int, float, set, Decimal, NullType):
         return v
+    else:
+        return DictWrap(v)
 
 
 def wrap_dot(value):
@@ -446,15 +448,15 @@ class DictWrap(dict):
     def __getattr__(self, item):
         try:
             output = _get(_get(self, "_obj"), item)
-            return dictwrap(output)
+            return wrap(output)
         except Exception, _:
-            return dictwrap(_get(self, "_dict")[item])
+            return wrap(_get(self, "_dict")[item])
 
     def __setattr__(self, key, value):
         _get(self, "_dict")[key] = value
 
     def __getitem__(self, item):
-        return dictwrap(_get(self, "_dict")[item])
+        return wrap(_get(self, "_dict")[item])
 
     def keys(self):
         return _get(self, "_dict").keys()
@@ -473,6 +475,7 @@ class DictWrap(dict):
 
     def __call__(self, *args, **kwargs):
         return _get(self, "_obj")(*args, **kwargs)
+
 
 def dictwrap(obj):
     """

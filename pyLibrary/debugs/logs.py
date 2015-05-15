@@ -155,7 +155,7 @@ class Log(object):
         if len(template) > 10000:
             template = template[:10000]
 
-        params = dict(params, **more_params)
+        params = dict(unwrap(params), **more_params)
 
         log_params = Dict(
             template=template,
@@ -187,7 +187,7 @@ class Log(object):
             cause = params
             params = {}
 
-        params = dict(params, **more_params)
+        params = dict(unwrap(params), **more_params)
 
         if cause and not isinstance(cause, Except):
             cause = Except(UNEXPECTED, unicode(cause), trace=extract_tb(0))
@@ -230,7 +230,7 @@ class Log(object):
             cause = params
             params = {}
 
-        params = dict(params, **more_params)
+        params = dict(unwrap(params), **more_params)
 
         if cause and not isinstance(cause, Except):
             cause = Except(ERROR, unicode(cause), trace=extract_tb(0))
@@ -267,7 +267,7 @@ class Log(object):
             cause = params
             params = {}
 
-        params = dict(params, **more_params)
+        params = dict(unwrap(params), **more_params)
 
         add_to_trace = False
         if cause == None:
@@ -306,7 +306,7 @@ class Log(object):
             cause = params
             params = {}
 
-        params = dict(params, **more_params)
+        params = dict(unwrap(params), **more_params)
 
         if cause == None:
             cause = []

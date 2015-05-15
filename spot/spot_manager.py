@@ -144,7 +144,7 @@ class SpotManager(object):
                     limit=p.type.utility * self.settings.max_utility_price)
                 continue
 
-            num = int(Math.round(net_new_utility / p.type.utility))
+            num = Math.min(int(Math.round(net_new_utility / p.type.utility)), coalesce(self.settings.max_requests_per_type, 10000000))
             if num == 1:
                 min_bid = Math.min(Math.max(p.current_price * 1.1, min_bid), max_acceptable_price)
                 price_interval = 0

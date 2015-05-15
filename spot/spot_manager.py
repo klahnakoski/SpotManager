@@ -93,7 +93,7 @@ class SpotManager(object):
         current_utility = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type].type.utility for r in active), 0)
         net_new_utility = utility_required - current_utility
 
-        Log.note("need {{utility}} more utility", utility=net_new_utility)
+        Log.note("have {{current_utility}} utility running; need {{need_utility}} more utility", current_utility=current_utility, need_utility=net_new_utility)
 
         if remaining_budget < 0:
             remaining_budget, net_new_utility = self.save_money(remaining_budget, net_new_utility)

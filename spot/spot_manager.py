@@ -111,6 +111,12 @@ class SpotManager(object):
                 expected=self.settings.max_utility_price,
                 budget=remaining_budget)
 
+        # Give EC2 a chance to notice the new requests before tagging them.
+        time.sleep(3)
+        with self.net_new_locker:
+            for req in self.net_new_spot_requests:
+                req.add_tag("Name", self.settings.ec2.instance.name)
+
         Log.note("All requests for new utility have been made")
         self.done_spot_requests.go()
 
@@ -404,9 +410,6 @@ class SpotManager(object):
                     **unwrap(d)
                 )
         output = list(self.ec2_conn.request_spot_instances(**unwrap(settings)))
-        time.sleep(3)  # EC2 needs a moment to realize the request exists before we tag it
-        for o in output:
-            o.add_tag("Name", self.settings.ec2.instance.name)
         return output
 
     def pricing(self):

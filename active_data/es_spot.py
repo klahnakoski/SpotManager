@@ -9,24 +9,18 @@
 from __future__ import unicode_literals
 from __future__ import division
 
-import boto
-
-from fabric.api import settings as fabric_settings
 from fabric.context_managers import cd, hide
 from fabric.contrib import files as fabric_files
 from fabric.operations import sudo, run, put
 from fabric.state import env
 
-from pyLibrary import convert
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import unwrap, dictwrap, wrap
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
 from pyLibrary.maths.randoms import Random
 from pyLibrary.meta import use_settings
-from pyLibrary.strings import expand_template, between
-from pyLibrary.thread.threads import Thread, Lock
-
+from pyLibrary.strings import expand_template
+from pyLibrary.thread.threads import Lock
 from spot.instance_manager import InstanceManager
 
 
@@ -52,7 +46,7 @@ class ESSpot(InstanceManager):
         with self.locker:
             self.instance = instance
             gigabytes = Math.floor(utility, 15)
-            Log.note("setup {{instance}}", {"instance": instance.id})
+            Log.note("setup {{instance}}",  instance= instance.id)
             with hide('output'):
                 self._config_fabric(instance)
                 self._install_es(gigabytes)
@@ -60,7 +54,7 @@ class ESSpot(InstanceManager):
 
     def _config_fabric(self, instance):
         if not instance.ip_address:
-            Log.error("Expecting an ip address for {{instance_id}}", {"instance_id": instance.id})
+            Log.error("Expecting an ip address for {{instance_id}}",  instance_id= instance.id)
 
         for k, v in self.settings.connect.items():
             env[k] = v

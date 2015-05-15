@@ -36,6 +36,7 @@ from pyLibrary.times.timer import Timer
 DEBUG_PRICING = False
 TIME_FROM_RUNNING_TO_LOGIN = 5 * MINUTE
 
+
 class SpotManager(object):
     @use_settings
     def __init__(self, instance_manager, settings):
@@ -71,18 +72,16 @@ class SpotManager(object):
         current_spending = 0
         for a in active:
             about = self.price_lookup[a.launch_specification.instance_type]
-            Log.note("Active Spot Request {{id}}: {{type}} @ {{price|round(decimal=4)}}", {
-                "id": a.id,
-                "type": a.launch_specification.instance_type,
-                "price": a.price - about.type.discount
-            })
+            Log.note("Active Spot Request {{id}}: {{type}} @ {{price|round(decimal=4)}}",
+                id=a.id,
+                type=a.launch_specification.instance_type,
+                price=a.price - about.type.discount)
             used_budget += a.price - about.type.discount
             current_spending += about.current_price - about.type.discount
 
-        Log.note("Total Exposure: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)", {
-            "budget": used_budget,
-            "current": current_spending
-        })
+        Log.note("Total Exposure: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)",
+            budget=used_budget,
+            current=current_spending)
 
         remaining_budget = self.settings.budget - used_budget
 
@@ -100,11 +99,10 @@ class SpotManager(object):
             net_new_utility, remaining_budget = self.add_instances(net_new_utility, remaining_budget)
 
         if net_new_utility > 0:
-            Log.alert("Can not fund {{num|round(places=2)}} more utility (all utility costs more than ${{expected|round(decimal=2)}}/hour).  Remaining budget is ${{budget|round(decimal=2)}} ", {
-                "num": net_new_utility,
-                "expected": self.settings.max_utility_price,
-                "budget": remaining_budget
-            })
+            Log.alert("Can not fund {{num|round(places=2)}} more utility (all utility costs more than ${{expected|round(decimal=2)}}/hour).  Remaining budget is ${{budget|round(decimal=2)}} ",
+                num=net_new_utility,
+                expected=self.settings.max_utility_price,
+                budget=remaining_budget)
 
         Log.note("All requests for new utility have been made")
         self.done_spot_requests.go()
@@ -113,10 +111,10 @@ class SpotManager(object):
         prices = self.pricing()
 
         for p in prices:
-            if p.current_price==None:
-                Log.note("{{type}} has no price", {
-                    "type": p.type.instance_type
-                })
+            if p.current_price == None:
+                Log.note("{{type}} has no price",
+                    type=p.type.instance_type
+                )
                 continue
             # DO NOT BID HIGHER THAN WHAT WE ARE WILLING TO PAY
             max_acceptable_price = p.type.utility * self.settings.max_utility_price
@@ -124,19 +122,18 @@ class SpotManager(object):
             min_bid = p.price_80
 
             if min_bid > max_bid:
-                Log.note("{{type}} @ {{price|round(decimal=4)}}/hour is over budget of {{limit}}", {
-                    "type": p.type.instance_type,
-                    "price": min_bid,
-                    "limit": p.type.utility * self.settings.max_utility_price
-                })
+                Log.note("{{type}} @ {{price|round(decimal=4)}}/hour is over budget of {{limit}}",
+                    type=p.type.instance_type,
+                    price=min_bid,
+                    limit=p.type.utility * self.settings.max_utility_price)
                 continue
 
             num = int(Math.round(net_new_utility / p.type.utility))
             if num == 1:
-                min_bid = Math.min(Math.max(p.current_price*1.1, min_bid), max_acceptable_price)
+                min_bid = Math.min(Math.max(p.current_price * 1.1, min_bid), max_acceptable_price)
                 price_interval = 0
             else:
-                price_interval = Math.min(min_bid/10, (max_bid - min_bid) / (num - 1))
+                price_interval = Math.min(min_bid / 10, (max_bid - min_bid) / (num - 1))
 
             for i in range(num):
                 bid = min_bid + (i * price_interval)
@@ -150,22 +147,20 @@ class SpotManager(object):
                         instance_type=p.type.instance_type,
                         settings=self.settings.ec2.request
                     )
-                    Log.note("Request {{num}} instance {{type}} with utility {{utility}} at ${{price}}/hour", {
-                        "num": len(new_requests),
-                        "type": p.type.instance_type,
-                        "utility": p.type.utility,
-                        "price": bid
-                    })
+                    Log.note("Request {{num}} instance {{type}} with utility {{utility}} at ${{price}}/hour",
+                        num=len(new_requests),
+                        type=p.type.instance_type,
+                        utility=p.type.utility,
+                        price=bid)
                     net_new_utility -= p.type.utility * len(new_requests)
                     remaining_budget -= bid * len(new_requests)
                     with self.net_new_locker:
                         for ii in new_requests:
                             self.net_new_spot_requests.add(dictwrap(ii))
                 except Exception, e:
-                    Log.note("Request instance {{type}} failed bcause {{reason}}", {
-                        "type": p.type.instance_type,
-                        "reason": e.message
-                    })
+                    Log.note("Request instance {{type}} failed bcause {{reason}}",
+                        type=p.type.instance_type,
+                        reason=e.message)
 
         return net_new_utility, remaining_budget
 
@@ -190,12 +185,12 @@ class SpotManager(object):
             return net_new_utility
 
         # SEND SHUTDOWN TO EACH INSTANCE
-        Log.note("Shutdown {{instances}}", {"instances": remove_list.id})
+        Log.note("Shutdown {{instances}}", instances=remove_list.id)
         for i in remove_list:
             try:
                 self.instance_manager.teardown(i)
             except Exception, e:
-                Log.warning("Teardown of {{id}} failed", {"id": i.id}, e)
+                Log.warning("Teardown of {{id}} failed", id=i.id, cause=e)
 
         remove_spot_requests = remove_list.spot_instance_request_id
 
@@ -241,12 +236,12 @@ class SpotManager(object):
             remaining_budget += coalesce(s.markup.price_80, s.markup.current_price)
 
         # SEND SHUTDOWN TO EACH INSTANCE
-        Log.note("Shutdown {{instances}}", {"instances": remove_list.id})
+        Log.note("Shutdown {{instances}}", instances=remove_list.id)
         for i in remove_list:
             try:
                 self.instance_manager.teardown(i)
             except Exception, e:
-                Log.warning("Teardown of {{id}} failed", {"id": i.id}, e)
+                Log.warning("Teardown of {{id}} failed", id=i.id, cause=e)
 
         remove_spot_requests.extend(remove_list.spot_instance_request_id)
 
@@ -259,11 +254,11 @@ class SpotManager(object):
 
     def _get_managed_spot_requests(self):
         output = wrap([dictwrap(r) for r in self.conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
-        # Log.note("got spot from amazon {{spot_ids}}", {"spot_ids":output.id})
+        # Log.note("got spot from amazon {{spot_ids}}",  spot_ids=output.id}
         return output
 
     def _get_managed_instances(self):
-        output =[]
+        output = []
         reservations = self.conn.get_all_instances()
         for res in reservations:
             for instance in res.instances:
@@ -296,9 +291,9 @@ class SpotManager(object):
                             self.conn.terminate_instances(instance_ids=[i.id])
                             with self.net_new_locker:
                                 self.net_new_spot_requests.remove(r.id)
-                            Log.warning("Second problem with setup of {{instance_id}}.  Instance TERMINATED!", {"instance_id": i.id}, e)
+                            Log.warning("Second problem with setup of {{instance_id}}.  Instance TERMINATED!", instance_id=i.id, cause=e)
                         else:
-                            Log.warning("Problem with setup of {{instance_id}}", {"instance_id": i.id}, e)
+                            Log.warning("Problem with setup of {{instance_id}}", instance_id=i.id, cause=e)
 
                 if Date.now() - last_get > 5 * SECOND:
                     # REFRESH STALE
@@ -328,7 +323,7 @@ class SpotManager(object):
                     please_stop.go()
                     break
                 elif pending:
-                    Log.note("waiting for spot requests: {{pending}}", {"pending": qb.select(pending, "id")})
+                    Log.note("waiting for spot requests: {{pending}}", pending=qb.select(pending, "id"))
 
                 Thread.sleep(seconds=10, please_stop=please_stop)
 
@@ -343,7 +338,7 @@ class SpotManager(object):
         )
         settings.settings = None
 
-        #INCLUDE EPHEMERAL STORAGE BlockDeviceMapping
+        # INCLUDE EPHEMERAL STORAGE BlockDeviceMapping
         num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]
         settings.block_device_map = BlockDeviceMapping()
         for i in range(num_ephemeral_volumes):
@@ -459,7 +454,7 @@ class SpotManager(object):
         with Timer("Get pricing from AWS"):
             for instance_type in self.settings.utility.keys():
                 if most_recents:
-                    most_recent = most_recents[{"instance_type":instance_type}].timestamp
+                    most_recent = most_recents[{"instance_type": instance_type}].timestamp
                     if most_recent == None:
                         start_at = Date.today() - WEEK
                     else:
@@ -467,10 +462,10 @@ class SpotManager(object):
                 else:
                     start_at = Date.today() - WEEK
                 if DEBUG_PRICING:
-                    Log.note("get pricing for {{instance_type}} starting at {{start_at}}", {
-                        "instance_type": instance_type,
-                        "start_at": start_at
-                    })
+                    Log.note("get pricing for {{instance_type}} starting at {{start_at}}",
+                        instance_type=instance_type,
+                        start_at=start_at
+                    )
 
                 next_token = None
                 while True:
@@ -543,7 +538,7 @@ def main():
         with SingleInstance(flavor_id=settings.args.filename):
             for u in settings.utility:
                 u.discount = coalesce(u.discount, 0)
-                #MARKUP drives WITH EXPECTED device MAPPING
+                # MARKUP drives WITH EXPECTED device MAPPING
                 num_ephemeral_volumes = ephemeral_storage[u.instance_type]["num"]
                 for i, d in enumerate(d for d in u.drives if not d.device):
                     letter = convert.ascii2char(98 + num_ephemeral_volumes + i)
@@ -609,8 +604,6 @@ ephemeral_storage = {
     "t2.micro": {"num": 0, "size": 0},
     "t2.small": {"num": 0, "size": 0}
 }
-
-
 
 if __name__ == "__main__":
     main()

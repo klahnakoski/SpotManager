@@ -30,7 +30,7 @@ class ETL(InstanceManager):
     def __init__(
         self,
         work_queue,  # SETTINGS FOR AWS QUEUE
-        connect,     # SETTINGS FOR Fabric `env` TO CONNECT TO INSTANCE
+        connect,  # SETTINGS FOR Fabric `env` TO CONNECT TO INSTANCE
         minimum_utility,
         settings=None
     ):
@@ -41,13 +41,13 @@ class ETL(InstanceManager):
     def required_utility(self):
         queue = aws.Queue(self.settings.work_queue)
         pending = len(queue)
-        return max(self.settings.minimum_utility, Math.ceiling(pending/40))
+        return max(self.settings.minimum_utility, Math.ceiling(pending / 40))
 
     def setup(self, instance, utility):
         with self.locker:
             cpu_count = int(round(utility))
 
-            Log.note("setup {{instance}}", {"instance": instance.id})
+            Log.note("setup {{instance}}", instance=instance.id)
             with hide('output'):
                 self._config_fabric(instance)
                 self._setup_etl_code()
@@ -56,7 +56,7 @@ class ETL(InstanceManager):
 
     def teardown(self, instance):
         with self.locker:
-            Log.note("teardown {{instance}}", {"instance": instance.id})
+            Log.note("teardown {{instance}}", instance=instance.id)
             self._config_fabric(instance)
             sudo("supervisorctl stop all")
 
@@ -64,7 +64,7 @@ class ETL(InstanceManager):
         sudo("apt-get update")
         sudo("apt-get clean")
 
-        if not fabric_files.exists("/home/ubuntu/temp"):
+        if not fabric_files.exists("/usr/local/bin/pip"):
             run("mkdir -p /home/ubuntu/temp")
 
             with cd("/home/ubuntu/temp"):
@@ -114,7 +114,7 @@ class ETL(InstanceManager):
 
     def _config_fabric(self, instance):
         if not instance.ip_address:
-            Log.error("Expecting an ip address for {{instance_id}}", {"instance_id": instance.id})
+            Log.error("Expecting an ip address for {{instance_id}}", instance_id=instance.id)
 
         for k, v in self.settings.connect.items():
             env[k] = v

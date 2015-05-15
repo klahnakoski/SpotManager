@@ -16,6 +16,7 @@ from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
 from boto.ec2.spotpricehistory import SpotPriceHistory
 from boto.utils import ISO8601
+import time
 
 from pyLibrary import convert
 from pyLibrary.collections import SUM
@@ -406,6 +407,7 @@ class SpotManager(object):
                     **unwrap(d)
                 )
         output = list(self.ec2_conn.request_spot_instances(**unwrap(settings)))
+        time.sleep(3)  # EC2 needs a moment to realize the request exists before we tag it
         for o in output:
             o.add_tag("Name", self.settings.ec2.instance.name)
         return output

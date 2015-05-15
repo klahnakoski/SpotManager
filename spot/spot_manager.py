@@ -9,21 +9,13 @@
 from __future__ import unicode_literals
 from __future__ import division
 
-import boto
-import boto.vpc
-import boto.ec2
-from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
-from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
-from boto.ec2.spotpricehistory import SpotPriceHistory
-from boto.utils import ISO8601
-import time
-
 from pyLibrary import convert
 from pyLibrary.collections import SUM
 from pyLibrary.debugs import startup
 from pyLibrary.debugs.logs import Log
 from pyLibrary.debugs.startup import SingleInstance
-from pyLibrary.dot import wrap, dictwrap, coalesce, listwrap, unwrap, DictList
+from pyLibrary.dot import wrap, coalesce, listwrap, unwrap, DictList
+from pyLibrary.dot.objects import DictClass
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings, new_instance
@@ -34,6 +26,31 @@ from pyLibrary.thread.threads import Lock, Thread, MAIN_THREAD, Signal
 from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import DAY, HOUR, WEEK, MINUTE, SECOND, Duration
 from pyLibrary.times.timer import Timer
+
+
+import boto
+import boto.vpc
+import boto.ec2
+from boto.ec2.spotinstancerequest import SpotInstanceRequest, SpotInstanceStatus
+from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
+from boto.ec2.instance import Instance
+from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
+from boto.ec2.spotpricehistory import SpotPriceHistory
+from boto.vpc.subnet import Subnet
+
+BlockDeviceType = DictClass(BlockDeviceType)
+SpotInstanceRequest = DictClass(SpotInstanceRequest)
+SpotInstanceStatus = DictClass(SpotInstanceStatus)
+Instance = DictClass(Instance)
+Subnet = DictClass(Subnet)
+# BlockDeviceMapping = wrap(BlockDeviceMapping)
+NetworkInterfaceSpecification = DictClass(NetworkInterfaceSpecification)
+# NetworkInterfaceCollection = wrap(NetworkInterfaceCollection)
+SpotPriceHistory = DictClass(SpotPriceHistory)
+
+
+from boto.utils import ISO8601
+
 
 
 DEBUG_PRICING = False
@@ -112,7 +129,7 @@ class SpotManager(object):
                 budget=remaining_budget)
 
         # Give EC2 a chance to notice the new requests before tagging them.
-        time.sleep(3)
+        Thread.sleep(3)
         with self.net_new_locker:
             for req in self.net_new_spot_requests:
                 req.add_tag("Name", self.settings.ec2.instance.name)
@@ -332,7 +349,7 @@ class SpotManager(object):
                         pending = pending | self.net_new_spot_requests
 
                 if give_up:
-                    self.conn.cancel_spot_instance_requests(request_ids=give_up.id)
+                    self.ec2_conn.cancel_spot_instance_requests(request_ids=give_up.id)
 
                 if not pending and not time_to_stop_trying and self.done_spot_requests:
                     Log.note("No more pending spot requests")
@@ -347,17 +364,9 @@ class SpotManager(object):
 
         self.watcher = Thread.run("lifecycle watcher", life_cycle_watcher)
 
-    def _get_subnet_availability_zone(self, subnet_id):
-        try:
-            subnet = self.vpc_conn.get_all_subnets(filters={'subnet_id': subnet_id})[0]
-            return subnet.availability_zone
-        except IndexError:
-            Log.warning("subnet {{subnet_id}} not found", subnet_id)
-            return None
-
     def _get_valid_availability_zones(self):
-        zones_with_interfaces = [self._get_subnet_availability_zone(i) for i in
-                                    listwrap(self.settings.ec2.request.network_interfaces).subnet_id]
+        subnets = wrap(list(self.vpc_conn.get_all_subnets(subnet_ids=self.settings.ec2.request.network_interfaces.subnet_id)))
+        zones_with_interfaces = qb.select(subnets, "availability_zone")
 
         if self.settings.availability_zone:
             # If they pass a list of zones, constrain it by zones we have an
@@ -380,6 +389,7 @@ class SpotManager(object):
 
         settings.settings = None
 
+        # GENERIC BLOCK DEVICE MAPPING
         block_device_map = BlockDeviceMapping()
         if settings.block_device_map:
             for dev, dev_settings in settings.block_device_map.iteritems():
@@ -395,10 +405,6 @@ class SpotManager(object):
                 delete_on_termination=True
             )
 
-        if settings.expiration:
-            settings.valid_until = (Date.now() + Duration(settings.expiration)).format(ISO8601)
-            settings.expiration = None
-
         #ATTACH NEW EBS VOLUMES
         for i, drives in enumerate(self.settings.utility[instance_type].drives):
             d = drives.copy()
@@ -409,7 +415,12 @@ class SpotManager(object):
                     delete_on_termination=True,
                     **unwrap(d)
                 )
-        output = list(self.ec2_conn.request_spot_instances(**unwrap(settings)))
+
+        if settings.expiration:
+            settings.valid_until = (Date.now() + Duration(settings.expiration)).format(ISO8601)
+            settings.expiration = None
+
+        output = wrap(self.ec2_conn.request_spot_instances(**unwrap(settings)))
         return output
 
     def pricing(self):
@@ -462,7 +473,7 @@ class SpotManager(object):
                             "name": "type",
                             "value": "instance_type",
                             "allowNulls": False,
-                            "domain": {"type": "set", "key": "instance_type", "partitions": list(self.settings.utility)}
+                            "domain": {"type": "set", "key": "instance_type", "partitions": self.settings.utility}
                         }
                     ],
                     "select": [
@@ -497,7 +508,7 @@ class SpotManager(object):
 
         most_recents = qb.run({
             "from": cache,
-            "edges": ["instance_type"],
+            "edges": ["instance_type", "availability_zone"],
             "select": {"value": "timestamp", "aggregate": "max"}
         }).data
 
@@ -505,21 +516,25 @@ class SpotManager(object):
         prices = set(cache)
         with Timer("Get pricing from AWS"):
             for instance_type in self.settings.utility.keys():
-                if most_recents:
-                    most_recent = most_recents[{"instance_type": instance_type}].timestamp
-                    if most_recent == None:
-                        start_at = Date.today() - WEEK
-                    else:
-                        start_at = Date(most_recent)
-                else:
-                    start_at = Date.today() - WEEK
-                if DEBUG_PRICING:
-                    Log.note("get pricing for {{instance_type}} starting at {{start_at}}",
-                        instance_type=instance_type,
-                        start_at=start_at
-                    )
-
                 for zone in zones:
+                    if most_recents:
+                        most_recent = most_recents[{
+                            "instance_type": instance_type,
+                            "availability_zone": zone
+                        }].timestamp
+                        if most_recent == None:
+                            start_at = Date.today() - WEEK
+                        else:
+                            start_at = Date(most_recent)
+                    else:
+                        start_at = Date.today() - WEEK
+
+                    if DEBUG_PRICING:
+                        Log.note("get pricing for {{instance_type}} starting at {{start_at}}",
+                            instance_type=instance_type,
+                            start_at=start_at
+                        )
+
                     next_token = None
                     while True:
                         resultset = self.ec2_conn.get_spot_price_history(
@@ -572,10 +587,10 @@ RETRY_STATUS_CODES = {
 PENDING_STATUS_CODES = {
     "pending-evaluation",
     "pending-fulfillment"
-    "price-too-low"
 }
 PROBABLY_NOT_FOR_A_WHILE = {
-    "az-group-constraint"
+    "az-group-constraint",
+    "price-too-low"
 }
 RUNNING_STATUS_CODES = {
     "fulfilled",

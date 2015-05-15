@@ -775,7 +775,7 @@ def drill_filter(esfilter, data):
         if isinstance(d, dict):
             main([], esfilter, wrap(d), 0)
         else:
-            Log.error("filter is expecting a structure, not {{type}}",  type= d.__class__)
+            Log.error("filter is expecting a structure, not {{type}}", type=d.__class__)
 
     # AT THIS POINT THE primary_column[] IS DETERMINED
     # USE IT TO EXPAND output TO ALL NESTED OBJECTS

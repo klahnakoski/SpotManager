@@ -245,8 +245,8 @@ class SimpleSetDomain(Domain):
 
         self.label = coalesce(self.label, "name")
 
-        if isinstance(desc.partitions, list):
-            self.partitions = desc.partitions.copy()
+        if hasattr(desc.partitions, "__iter__"):
+            self.partitions = list(desc.partitions)
         else:
             Log.error("expecting a list of partitions")
 

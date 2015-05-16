@@ -9,6 +9,17 @@
 from __future__ import unicode_literals
 from __future__ import division
 
+import boto
+import boto.vpc
+import boto.ec2
+from boto.ec2.spotinstancerequest import SpotInstanceRequest, SpotInstanceStatus
+from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
+from boto.ec2.instance import Instance
+from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
+from boto.ec2.spotpricehistory import SpotPriceHistory
+from boto.vpc.subnet import Subnet
+from boto.utils import ISO8601
+
 from pyLibrary import convert
 from pyLibrary.collections import SUM
 from pyLibrary.debugs import startup
@@ -27,29 +38,16 @@ from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import DAY, HOUR, WEEK, MINUTE, SECOND, Duration
 from pyLibrary.times.timer import Timer
 
-
-import boto
-import boto.vpc
-import boto.ec2
-from boto.ec2.spotinstancerequest import SpotInstanceRequest, SpotInstanceStatus
-from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
-from boto.ec2.instance import Instance
-from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
-from boto.ec2.spotpricehistory import SpotPriceHistory
-from boto.vpc.subnet import Subnet
-
+# More flexible constructors
 BlockDeviceType = DictClass(BlockDeviceType)
 SpotInstanceRequest = DictClass(SpotInstanceRequest)
 SpotInstanceStatus = DictClass(SpotInstanceStatus)
 Instance = DictClass(Instance)
 Subnet = DictClass(Subnet)
-# BlockDeviceMapping = wrap(BlockDeviceMapping)
 NetworkInterfaceSpecification = DictClass(NetworkInterfaceSpecification)
-# NetworkInterfaceCollection = wrap(NetworkInterfaceCollection)
 SpotPriceHistory = DictClass(SpotPriceHistory)
 
 
-from boto.utils import ISO8601
 
 
 
@@ -94,16 +92,21 @@ class SpotManager(object):
         current_spending = 0
         for a in active:
             about = self.price_lookup[a.launch_specification.instance_type]
-            Log.note("Active Spot Request {{id}}: {{type}} @ {{price|round(decimal=4)}}",
+            Log.note(
+                "Active Spot Request {{id}}: {{type}} {{instance_id}} @ {{price|round(decimal=4)}}",
                 id=a.id,
                 type=a.launch_specification.instance_type,
-                price=a.price - about.type.discount)
+                instance_id=a.instance_id,
+                price=a.price - about.type.discount
+            )
             used_budget += a.price - about.type.discount
             current_spending += about.current_price - about.type.discount
 
-        Log.note("Total Exposure: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)",
+        Log.note(
+            "Total Exposure: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)",
             budget=used_budget,
-            current=current_spending)
+            current=current_spending
+        )
 
         remaining_budget = self.settings.budget - used_budget
 
@@ -123,10 +126,12 @@ class SpotManager(object):
             net_new_utility, remaining_budget = self.add_instances(net_new_utility, remaining_budget)
 
         if net_new_utility > 0:
-            Log.alert("Can not fund {{num|round(places=2)}} more utility (all utility costs more than ${{expected|round(decimal=2)}}/hour).  Remaining budget is ${{budget|round(decimal=2)}} ",
+            Log.alert(
+                "Can not fund {{num|round(places=2)}} more utility (all utility costs more than ${{expected|round(decimal=2)}}/hour).  Remaining budget is ${{budget|round(decimal=2)}} ",
                 num=net_new_utility,
                 expected=self.settings.max_utility_price,
-                budget=remaining_budget)
+                budget=remaining_budget
+            )
 
         # Give EC2 a chance to notice the new requests before tagging them.
         Thread.sleep(3)
@@ -155,10 +160,12 @@ class SpotManager(object):
             min_bid = p.price_80
 
             if min_bid > max_bid:
-                Log.note("{{type}} @ {{price|round(decimal=4)}}/hour is over budget of {{limit}}",
+                Log.note(
+                    "{{type}} @ {{price|round(decimal=4)}}/hour is over budget of {{limit}}",
                     type=p.type.instance_type,
                     price=min_bid,
-                    limit=p.type.utility * self.settings.max_utility_price)
+                    limit=p.type.utility * self.settings.max_utility_price
+                )
                 continue
 
             num = int(Math.round(net_new_utility / p.type.utility))
@@ -396,7 +403,7 @@ class SpotManager(object):
 
         # GENERIC BLOCK DEVICE MAPPING
         for dev, dev_settings in settings.block_device_map.items():
-            settings.block_device_map[dev] = BlockDeviceType(settings=dev_settings)
+            settings.block_device_map[dev] = BlockDeviceType(**dev_settings)
 
         # INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping
         num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]

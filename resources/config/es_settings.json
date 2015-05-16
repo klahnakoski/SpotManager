@@ -82,7 +82,7 @@
 		}
 	},
 	"instance":{
-		"class":"active_data.es_spot.ESSpot",
+		"class":"active_data.es.ESSpot",
 		"minimum_utility": 120,
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
@@ -111,7 +111,7 @@
 		"log": [
 			{
 				"class": "logging.handlers.RotatingFileHandler",
-				"filename": "results/logs/active_data_es_spot.log",
+				"filename": "results/logs/active_data_es.log",
 				"maxBytes": 10000000,
 				"backupCount": 100,
 				"encoding": "utf8"

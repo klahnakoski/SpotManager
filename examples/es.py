@@ -108,7 +108,7 @@ class ESSpot(InstanceManager):
             sudo("sysctl -w fs.file-max=64000")
 
         # COPY CONFIG FILE TO ES DIR
-        yml = File("./resources/config/es_config.yml").read().replace("\r", "")
+        yml = File("./examples/config/es_config.yml").read().replace("\r", "")
         yml = expand_template(yml, {
             "id": Random.hex(length=8),
             "data_paths": ",".join("/data"+unicode(i+1) for i, _ in enumerate(volumes))
@@ -118,7 +118,7 @@ class ESSpot(InstanceManager):
 
         # FOR SOME REASON THE export COMMAND DOES NOT SEEM TO WORK
         # THIS SCRIPT SETS THE ES_MIN_MEM/ES_MAX_MEM EXPLICITLY
-        sh = File("./resources/config/es_run.sh").read().replace("\r", "")
+        sh = File("./examples/config/es_run.sh").read().replace("\r", "")
         sh = expand_template(sh, {"memory": unicode(int(gigabytes))})
         File("./results/temp/elasticsearch.in.sh").write(sh)
         put("./results/temp/elasticsearch.in.sh", '/usr/local/elasticsearch/bin/elasticsearch.in.sh', use_sudo=True)

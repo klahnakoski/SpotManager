@@ -93,13 +93,13 @@ class ETL(InstanceManager):
             run("service supervisor start")
 
         # READ LOCAL CONFIG FILE, ALTER IT FOR THIS MACHINE RESOURCES, AND PUSH TO REMOTE
-        conf_file = File("./resources/supervisor/etl.conf")
+        conf_file = File("./examples/config/etl_supervisor.conf")
         content = conf_file.read_bytes()
         find = between(content, "numprocs=", "\n")
         content = content.replace("numprocs=" + find + "\n", "numprocs=" + str(cpu_count) + "\n")
-        File("./resources/supervisor/etl.conf.alt").write_bytes(content)
-        sudo("rm -f /etc/supervisor/conf.d/etl.conf")
-        put("./resources/supervisor/etl.conf.alt", '/etc/supervisor/conf.d/etl.conf', use_sudo=True)
+        File("./examples/config/etl_supervisor.conf.alt").write_bytes(content)
+        sudo("rm -f /etc/supervisor/conf.d/etl_supervisor.conf")
+        put("./examples/config/etl_supervisor.conf.alt", '/etc/supervisor/conf.d/etl_supervisor.conf', use_sudo=True)
         run("mkdir -p /home/ubuntu/TestLog-ETL/results/logs")
 
         # POKE supervisor TO NOTICE THE CHANGE

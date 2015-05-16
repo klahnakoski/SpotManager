@@ -48,7 +48,7 @@ For now, you must clone the repo
 ## Configuration
 
 Each SpotManager instance requires a `settings.json` file that controls the 
-SpotManager behaviour.  We will use the [ActiveData ETL settings file](resources/config/etl_settings.json) 
+SpotManager behaviour.  We will use the [ActiveData ETL settings file](examples/config/etl_settings.json) 
 as an example to explain the parameters
 
 	

@@ -102,7 +102,8 @@ class UniqueIndex(object):
     def __and__(self, other):
         output = UniqueIndex(self._keys)
         for v in self:
-            if v in other: output.add(v)
+            if v in other:
+                output.add(v)
         return output
 
     def __or__(self, other):

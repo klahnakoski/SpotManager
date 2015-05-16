@@ -111,12 +111,18 @@
 		"log": [
 			{
 				"class": "logging.handlers.RotatingFileHandler",
-				"filename": "results/logs/examples_es.log",
+				"filename": "examples/logs/examples_es.log",
 				"maxBytes": 10000000,
 				"backupCount": 100,
 				"encoding": "utf8"
 			},
-
+			{
+				"log_type": "email",
+				"from_address": "klahnakoski@mozilla.com",
+				"to_address": "klahnakoski@mozilla.com",
+				"subject": "[ALERT][DEV] Problem in ES Spot",
+				"$ref": "file://~/private.json#email"
+			},
 			{
 				"log_type": "console"
 			}

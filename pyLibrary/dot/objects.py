@@ -9,7 +9,10 @@
 
 from __future__ import unicode_literals
 from __future__ import division
-from pyLibrary.dot import wrap, unwrap
+from datetime import date, datetime
+from decimal import Decimal
+from types import NoneType
+from pyLibrary.dot import wrap, unwrap, Dict, Null, NullType, get_attr
 
 _get = object.__getattribute__
 _set = object.__setattr__
@@ -20,49 +23,68 @@ class DictObject(dict):
     def __init__(self, obj):
         dict.__init__(self)
         _set(self, "_obj", obj)
-        try:
-            if isinstance(obj, dict):
-                _set(self, "_dict", wrap(obj))
-            else:
-                _set(self, "_dict", wrap(_get(obj, "__dict__")))
-        except Exception, _:
-            pass
 
     def __getattr__(self, item):
+        obj = _get(self, "_obj")
         try:
-            output = _get(_get(self, "_obj"), item)
-            if output == None:
-                return None   # So we allow `is` compare to `None`
-            return wrap(output)
+            output = _get(obj, item)
         except Exception, _:
-            return wrap(_get(self, "_dict")[item])
+            try:
+                output = obj[item]
+            except Exception, _:
+                from pyLibrary.debugs.logs import Log
+                Log.error(
+                    "Can not find {{item|quote}} in {{type}}",
+                    item=item,
+                    type=obj.__class__.__name__
+                )
+
+        if output == None:
+            return None   # So we allow `is` compare to `None`
+        return object_wrap(output)
 
     def __setattr__(self, key, value):
         _get(self, "_dict")[key] = value
 
     def __getitem__(self, item):
+        obj = _get(self, "_obj")
+        output = get_attr(obj, item)
+        return object_wrap(output)
+
+    def keys(self):
+        obj = _get(self, "_obj")
         try:
-            return wrap(_get(self, "_dict")[item])
+            return obj.__dict__.keys()
         except Exception, e:
             raise e
 
-    def keys(self):
-        return _get(self, "_dict").keys()
-
     def items(self):
-        return _get(self, "_dict").items()
-
-    def __iter__(self):
-        return _get(self, "_dict").__iter__()
+        obj = _get(self, "_obj")
+        try:
+            return obj.__dict__.items()
+        except Exception, e:
+            raise e
 
     def __str__(self):
-        return _get(self, "_dict").__str__()
+        obj = _get(self, "_obj")
+        return str(obj)
 
     def __len__(self):
-        return _get(self, "_dict").__len__()
+        obj = _get(self, "_obj")
+        return len(obj)
 
     def __call__(self, *args, **kwargs):
-        return _get(self, "_obj")(*args, **kwargs)
+        obj = _get(self, "_obj")
+        return obj(*args, **kwargs)
+
+
+def object_wrap(value):
+    if value == None:
+        return None   # So we allow `is None`
+    elif isinstance(value, (basestring, int, float, Decimal, datetime, date, Dict, DictList, NullType, NoneType)):
+        return value
+    else:
+        return DictObject(value)
 
 
 class DictClass(object):
@@ -104,3 +126,4 @@ def params_pack(params, *args):
     return output
 
 
+from pyLibrary.dot import DictList

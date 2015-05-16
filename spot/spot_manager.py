@@ -23,6 +23,7 @@ from pyLibrary.debugs import startup
 from pyLibrary.debugs.logs import Log
 from pyLibrary.debugs.startup import SingleInstance
 from pyLibrary.dot import unwrap, coalesce, DictList, wrap, listwrap
+from pyLibrary.dot.objects import object_wrap
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings, new_instance
@@ -75,11 +76,12 @@ class SpotManager(object):
         used_budget = 0
         current_spending = 0
         for a in active:
-            about = self.price_lookup[a.launch_specification.instance_type]
+            about = self.price_lookup[a.launch_specification.instance_type, a.launched_availability_zone]
             Log.note(
-                "Active Spot Request {{id}}: {{type}} {{instance_id}} @ {{price|round(decimal=4)}}",
+                "Active Spot Request {{id}}: {{type}} {{instance_id}} in {{zone}} @ {{price|round(decimal=4)}}",
                 id=a.id,
                 type=a.launch_specification.instance_type,
+                zone=a.launched_availability_zone,
                 instance_id=a.instance_id,
                 price=a.price - about.type.discount
             )
@@ -94,7 +96,7 @@ class SpotManager(object):
 
         remaining_budget = self.settings.budget - used_budget
 
-        current_utility = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type].type.utility for r in active), 0)
+        current_utility = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type, r.launched_availability_zone].type.utility for r in active), 0)
         net_new_utility = utility_required - current_utility
 
         Log.note("have {{current_utility}} utility running; need {{need_utility}} more utility", current_utility=current_utility, need_utility=net_new_utility)
@@ -235,7 +237,10 @@ class SpotManager(object):
         # FIND THE BIGGEST, MOST EXPENSIVE REQUESTS
         instances = self._get_managed_instances()
         for r in instances:
-            r.markup = self.price_lookup[r.instance_type]
+            try:
+                r.markup = self.price_lookup[r.instance_type, r.placement]
+            except Exception, e:
+                Log.error("No pricing!!!", e)
         instances = qb.sort(instances, [
             {"value": "markup.type.utility", "sort": -1},
             {"value": "markup.estimated_value", "sort": 1}
@@ -282,8 +287,7 @@ class SpotManager(object):
         return remaining_budget, net_new_utility
 
     def _get_managed_spot_requests(self):
-        output = wrap([r for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
-        # Log.note("got spot from amazon {{spot_ids}}",  spot_ids=output.id}
+        output = wrap([object_wrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
         return output
 
     def _get_managed_instances(self):
@@ -292,7 +296,7 @@ class SpotManager(object):
         for res in reservations:
             for instance in res.instances:
                 if instance.tags.get('Name', '').startswith(self.settings.ec2.instance.name) and instance._state.name == "running":
-                    output.append(instance)
+                    output.append(object_wrap(instance))
         return wrap(output)
 
     def _start_life_cycle_watcher(self):
@@ -488,7 +492,7 @@ class SpotManager(object):
                 })
 
                 self.prices = output.data
-                self.price_lookup = {p.type.instance_type: p for p in self.prices}
+                self.price_lookup = UniqueIndex(("type.instance_type", "availability_zone"), data=self.prices)
             return self.prices
 
     def _get_spot_prices_from_aws(self):

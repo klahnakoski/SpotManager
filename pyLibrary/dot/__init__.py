@@ -297,8 +297,6 @@ def wrap(v):
         return DictList(v)
     elif type_ is GeneratorType:
         return (wrap(vv) for vv in v)
-    elif type_ in WRAPPED_CLASSES:
-        return DictObject(v)
     else:
         return v
 
@@ -369,8 +367,6 @@ def unwrap(v):
         return None
     elif _type is GeneratorType:
         return (unwrap(vv) for vv in v)
-    elif _type is DictObject:
-        return _get(v, "_obj")
     else:
         return v
 
@@ -436,5 +432,4 @@ def tuplewrap(value):
 
 from pyLibrary.dot.nones import Null, NullType
 from pyLibrary.dot.dicts import Dict
-from pyLibrary.dot.objects import DictObject, WRAPPED_CLASSES
 from pyLibrary.dot.lists import DictList

@@ -116,6 +116,7 @@
 				"backupCount": 100,
 				"encoding": "utf8"
 			},
+
 			{
 				"log_type": "console"
 			}

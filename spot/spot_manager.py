@@ -12,12 +12,9 @@ from __future__ import division
 import boto
 import boto.vpc
 import boto.ec2
-from boto.ec2.spotinstancerequest import SpotInstanceRequest, SpotInstanceStatus
 from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
-from boto.ec2.instance import Instance
 from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
 from boto.ec2.spotpricehistory import SpotPriceHistory
-from boto.vpc.subnet import Subnet
 from boto.utils import ISO8601
 
 from pyLibrary import convert
@@ -25,8 +22,7 @@ from pyLibrary.collections import SUM
 from pyLibrary.debugs import startup
 from pyLibrary.debugs.logs import Log
 from pyLibrary.debugs.startup import SingleInstance
-from pyLibrary.dot import wrap, coalesce, listwrap, unwrap, DictList
-from pyLibrary.dot.objects import DictClass
+from pyLibrary.dot import unwrap, coalesce, DictList, wrap, listwrap
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings, new_instance
@@ -37,18 +33,6 @@ from pyLibrary.thread.threads import Lock, Thread, MAIN_THREAD, Signal
 from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import DAY, HOUR, WEEK, MINUTE, SECOND, Duration
 from pyLibrary.times.timer import Timer
-
-# More flexible constructors
-BlockDeviceType = DictClass(BlockDeviceType)
-SpotInstanceRequest = DictClass(SpotInstanceRequest)
-SpotInstanceStatus = DictClass(SpotInstanceStatus)
-Instance = DictClass(Instance)
-Subnet = DictClass(Subnet)
-NetworkInterfaceSpecification = DictClass(NetworkInterfaceSpecification)
-SpotPriceHistory = DictClass(SpotPriceHistory)
-
-
-
 
 
 DEBUG_PRICING = False
@@ -82,7 +66,7 @@ class SpotManager(object):
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
         all_instances = UniqueIndex("id", data=self._get_managed_instances())
-        active = qb.filter(spot_requests, {"terms": {"status.code": RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE}})
+        active = wrap([r for r in spot_requests if r.status.code in RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE])
 
         for a in active.copy():
             if a.status.code == "request-canceled-and-instance-running" and all_instances[a.instance_id] == None:
@@ -345,8 +329,8 @@ class SpotManager(object):
                     spot_requests = self._get_managed_spot_requests()
                     last_get = Date.now()
 
-                pending = qb.filter(spot_requests, {"terms": {"status.code": PENDING_STATUS_CODES}})
-                give_up = qb.filter(spot_requests, {"terms": {"status.code": PROBABLY_NOT_FOR_A_WHILE}})
+                pending = [r for r in spot_requests if r.status.code in PENDING_STATUS_CODES]
+                give_up = [r for r in spot_requests if r.status.code in PROBABLY_NOT_FOR_A_WHILE]
 
                 if self.done_spot_requests:
                     with self.net_new_locker:
@@ -368,7 +352,7 @@ class SpotManager(object):
                     please_stop.go()
                     break
                 elif pending:
-                    Log.note("waiting for spot requests: {{pending}}", pending=qb.select(pending, "id"))
+                    Log.note("waiting for spot requests: {{pending}}", pending=[p.id for p in pending])
 
                 Thread.sleep(seconds=10, please_stop=please_stop)
 
@@ -377,8 +361,8 @@ class SpotManager(object):
         self.watcher = Thread.run("lifecycle watcher", life_cycle_watcher)
 
     def _get_valid_availability_zones(self):
-        subnets = wrap(list(self.vpc_conn.get_all_subnets(subnet_ids=self.settings.ec2.request.network_interfaces.subnet_id)))
-        zones_with_interfaces = qb.select(subnets, "availability_zone")
+        subnets = list(self.vpc_conn.get_all_subnets(subnet_ids=self.settings.ec2.request.network_interfaces.subnet_id))
+        zones_with_interfaces = [s.availability_zone for s in subnets]
 
         if self.settings.availability_zone:
             # If they pass a list of zones, constrain it by zones we have an
@@ -391,7 +375,7 @@ class SpotManager(object):
     @use_settings
     def _request_spot_instances(self, price, availability_zone_group, instance_type, settings):
         settings.network_interfaces = NetworkInterfaceCollection(*(
-            NetworkInterfaceSpecification(settings=i)
+            NetworkInterfaceSpecification(**unwrap(i))
             for i in listwrap(settings.network_interfaces)
             if self.vpc_conn.get_all_subnets(subnet_ids=i.subnet_id, filters={"availabilityZone": availability_zone_group})
         ))
@@ -399,11 +383,12 @@ class SpotManager(object):
         if len(settings.network_interfaces) == 0:
             Log.error("No network interface specifications found for {{availability_zone}}!", availability_zone=settings.availability_zone_group)
 
+        settings.settings = None
         settings.block_device_map = BlockDeviceMapping()
 
         # GENERIC BLOCK DEVICE MAPPING
         for dev, dev_settings in settings.block_device_map.items():
-            settings.block_device_map[dev] = BlockDeviceType(**dev_settings)
+            settings.block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
 
         # INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping
         num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]
@@ -414,18 +399,21 @@ class SpotManager(object):
                 delete_on_termination=True
             )
 
-        #ATTACH NEW EBS VOLUMES
-        for i, drive in enumerate(self.settings.utility[instance_type].drives):
-            if drive.size:
-                settings.block_device_map[drive.device] = BlockDeviceType(
-                    delete_on_termination=True,
-                    settings=drive
-                )
-
         if settings.expiration:
             settings.valid_until = (Date.now() + Duration(settings.expiration)).format(ISO8601)
+            settings.expiration = None
 
-        output = wrap(use_settings(self.ec2_conn.request_spot_instances)(settings=settings))
+        #ATTACH NEW EBS VOLUMES
+        for i, drive in enumerate(self.settings.utility[instance_type].drives):
+            d = drive.copy()
+            d.path = None  # path AND device PROPERTY IS NOT ALLOWED IN THE BlockDeviceType
+            d.device = None
+            if d.size:
+                settings.block_device_map[drive.device] = BlockDeviceType(
+                    delete_on_termination=True,
+                    **unwrap(d)
+                )
+        output = list(self.ec2_conn.request_spot_instances(**unwrap(settings)))
         return output
 
     def pricing(self):

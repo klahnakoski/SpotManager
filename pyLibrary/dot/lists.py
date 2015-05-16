@@ -11,7 +11,7 @@ from __future__ import unicode_literals
 from __future__ import division
 from copy import deepcopy
 from pyLibrary.dot.nones import Null
-from pyLibrary.dot import wrap, unwrap
+from pyLibrary.dot import wrap, unwrap, DictObject
 
 
 _get = object.__getattribute__
@@ -70,7 +70,10 @@ class DictList(list):
         return DictList.select(self, key)
 
     def select(self, key):
-        return DictList(vals=[unwrap(wrap(v)[key]) for v in _get(self, "list")])
+        """
+        simple `select`
+        """
+        return DictList(vals=[unwrap(DictObject(v)[key]) for v in _get(self, "list")])
 
     def filter(self, _filter):
         return DictList(vals=[unwrap(u) for u in (wrap(v) for v in _get(self, "list")) if _filter(u)])

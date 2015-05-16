@@ -21,7 +21,10 @@ class DictObject(dict):
         dict.__init__(self)
         _set(self, "_obj", obj)
         try:
-            _set(self, "_dict", wrap(_get(obj, "__dict__")))
+            if isinstance(obj, dict):
+                _set(self, "_dict", wrap(obj))
+            else:
+                _set(self, "_dict", wrap(_get(obj, "__dict__")))
         except Exception, _:
             pass
 
@@ -38,7 +41,10 @@ class DictObject(dict):
         _get(self, "_dict")[key] = value
 
     def __getitem__(self, item):
-        return wrap(_get(self, "_dict")[item])
+        try:
+            return wrap(_get(self, "_dict")[item])
+        except Exception, e:
+            raise e
 
     def keys(self):
         return _get(self, "_dict").keys()

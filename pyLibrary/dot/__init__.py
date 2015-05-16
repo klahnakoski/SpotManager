@@ -436,5 +436,5 @@ def tuplewrap(value):
 
 from pyLibrary.dot.nones import Null, NullType
 from pyLibrary.dot.dicts import Dict
-from pyLibrary.dot.lists import DictList
 from pyLibrary.dot.objects import DictObject, WRAPPED_CLASSES
+from pyLibrary.dot.lists import DictList

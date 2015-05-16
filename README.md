@@ -114,12 +114,12 @@ and `mount` commands.
 ### Writing a InstanceManager
 
 Conceptually, an instance manager is very simple, with only three methods 
-you need to implement.  This repo has an [example in `./active_data/etl.py`](https://github.com/klahnakoski/SpotManager/blob/master/active_data/etl.py) 
+you need to implement.  This repo has an [example in `./examples/etl.py`](https://github.com/klahnakoski/SpotManager/blob/master/examples/etl.py) 
 that you can review. 
 
 * **`required_utility()`** - function to determine how much utility is 
 needed.  Since you are the one defining utility, the amount you need is 
-also up to you.  The `active_data` uses the size of the pending queue to 
+also up to you.  The `examples` uses the size of the pending queue to 
 determine, roughly, how much utility is required.
 * **`setup()`** - function is called to setup an instance.  It is passed 
 both a boto ec2 instance object, and the utility this instance is 

@@ -108,7 +108,7 @@ class ETL(InstanceManager):
 
     def _add_private_file(self):
         run('rm -f /home/ubuntu/private.json')
-        put('~/private_examples_etl.json', '/home/ubuntu/private.json')
+        put('~/private_active_data_etl.json', '/home/ubuntu/private.json')
         with cd("/home/ubuntu"):
             run("chmod o-r private.json")
 

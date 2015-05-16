@@ -12,7 +12,7 @@ from __future__ import division
 from datetime import date, datetime
 from decimal import Decimal
 from types import NoneType
-from pyLibrary.dot import wrap, unwrap, Dict, Null, NullType, get_attr
+from pyLibrary.dot import wrap, unwrap, Dict, Null, NullType, get_attr, set_attr
 
 _get = object.__getattribute__
 _set = object.__setattr__
@@ -26,25 +26,12 @@ class DictObject(dict):
 
     def __getattr__(self, item):
         obj = _get(self, "_obj")
-        try:
-            output = _get(obj, item)
-        except Exception, _:
-            try:
-                output = obj[item]
-            except Exception, _:
-                from pyLibrary.debugs.logs import Log
-                Log.error(
-                    "Can not find {{item|quote}} in {{type}}",
-                    item=item,
-                    type=obj.__class__.__name__
-                )
-
-        if output == None:
-            return None   # So we allow `is` compare to `None`
+        output = get_attr(obj, item)
         return object_wrap(output)
 
     def __setattr__(self, key, value):
-        _get(self, "_dict")[key] = value
+        obj = _get(self, "_obj")
+        set_attr(obj, key, value)
 
     def __getitem__(self, item):
         obj = _get(self, "_obj")

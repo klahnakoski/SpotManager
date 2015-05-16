@@ -77,6 +77,9 @@ class SpotManager(object):
         current_spending = 0
         for a in active:
             about = self.price_lookup[a.launch_specification.instance_type, a.launched_availability_zone]
+            if about == None:
+                # HAPPENS WHEN THE OTHER SpotManger INSTANCE FAILS TO NAME THE REQUEST, OR THOSE PESKY HUMANS CAUSE TROUBLE
+                Log.error("It would seem there is an unnamed spot request, and it is not a valid instance type.  Who does it belong to ")
             Log.note(
                 "Active Spot Request {{id}}: {{type}} {{instance_id}} in {{zone}} @ {{price|round(decimal=4)}}",
                 id=a.id,
@@ -240,6 +243,7 @@ class SpotManager(object):
             try:
                 r.markup = self.price_lookup[r.instance_type, r.placement]
             except Exception, e:
+                r.markup = self.price_lookup[r.instance_type, r.placement]
                 Log.error("No pricing!!!", e)
         instances = qb.sort(instances, [
             {"value": "markup.type.utility", "sort": -1},

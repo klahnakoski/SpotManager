@@ -132,6 +132,12 @@ class SpotManager(object):
                     type=p.type.instance_type
                 )
                 continue
+
+            if self.settings.utility[p.type.instance_type].blacklist or \
+                    p.availability_zone in listwrap(self.settings.utility[p.type.instance_type].blacklist_zones):
+                Log.note("{{type}} in {{zone}} skipped due to blacklist", type=p.type.instance_type, zone=p.availability_zone)
+                continue
+
             # DO NOT BID HIGHER THAN WHAT WE ARE WILLING TO PAY
             max_acceptable_price = p.type.utility * self.settings.max_utility_price
             max_bid = Math.min(p.higher_price, max_acceptable_price)
@@ -163,9 +169,10 @@ class SpotManager(object):
                         instance_type=p.type.instance_type,
                         settings=self.settings.ec2.request
                     )
-                    Log.note("Request {{num}} instance {{type}} with utility {{utility}} at ${{price}}/hour",
+                    Log.note("Request {{num}} instance {{type}} in {{zone}} with utility {{utility}} at ${{price}}/hour",
                         num=len(new_requests),
                         type=p.type.instance_type,
+                        zone=p.availability_zone,
                         utility=p.type.utility,
                         price=bid)
                     net_new_utility -= p.type.utility * len(new_requests)

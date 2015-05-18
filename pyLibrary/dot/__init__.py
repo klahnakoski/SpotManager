@@ -9,10 +9,7 @@
 
 from __future__ import unicode_literals
 from __future__ import division
-from decimal import Decimal
-import os
 from types import GeneratorType, NoneType, ModuleType
-import sys
 
 _get = object.__getattribute__
 _set = object.__setattr__
@@ -124,7 +121,7 @@ def _all_default(d, default, seen=None):
     """
     if default is None:
         return
-    for k, default_value in dictwrap(default).items():
+    for k, default_value in wrap(default).items():
         # existing_value = d.get(k)
         existing_value = _get_attr(d, [k])
 
@@ -431,56 +428,6 @@ def tuplewrap(value):
     if isinstance(value, (list, set, tuple, GeneratorType)):
         return tuple(tuplewrap(v) if isinstance(v, (list, tuple, GeneratorType)) else v for v in value)
     return unwrap(value),
-
-
-class DictWrap(dict):
-
-    def __init__(self, obj):
-        dict.__init__(self)
-        _set(self, "_obj", obj)
-        try:
-            _set(self, "_dict", wrap(_get(obj, "__dict__")))
-        except Exception, _:
-            pass
-
-    def __getattr__(self, item):
-        try:
-            output = _get(_get(self, "_obj"), item)
-            return dictwrap(output)
-        except Exception, _:
-            return dictwrap(_get(self, "_dict")[item])
-
-    def __setattr__(self, key, value):
-        _get(self, "_dict")[key] = value
-
-    def __getitem__(self, item):
-        return dictwrap(_get(self, "_dict")[item])
-
-    def keys(self):
-        return _get(self, "_dict").keys()
-
-    def items(self):
-        return _get(self, "_dict").items()
-
-    def __iter__(self):
-        return _get(self, "_dict").__iter__()
-
-    def __str__(self):
-        return _get(self, "_dict").__str__()
-
-    def __len__(self):
-        return _get(self, "_dict").__len__()
-
-    def __call__(self, *args, **kwargs):
-        return _get(self, "_obj")(*args, **kwargs)
-
-def dictwrap(obj):
-    """
-    wrap object as Dict
-    """
-    if isinstance(obj, (dict, basestring, int, float, list, set, Decimal, NoneType, NullType)):
-        return wrap(obj)
-    return DictWrap(obj)
 
 
 from pyLibrary.dot.nones import Null, NullType

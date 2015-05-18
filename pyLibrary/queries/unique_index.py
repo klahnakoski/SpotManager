@@ -10,7 +10,6 @@
 
 from __future__ import unicode_literals
 from __future__ import division
-from pyLibrary import convert
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import wrap, unwrap, tuplewrap
 
@@ -39,22 +38,23 @@ class UniqueIndex(object):
             Log.error("something went wrong", e)
 
     def __setitem__(self, key, value):
-        try:
-            key = value2key(self._keys, key)
-            d = self._data.get(key)
-            if d != None:
-                Log.error("key already filled")
-
-            self._data[key] = unwrap(value)
-            self.count += 1
-
-        except Exception, e:
-            Log.error("something went wrong", e)
+        Log.error("Use add() to ad to an index")
+        # try:
+        #     key = value2key(self._keys, key)
+        #     d = self._data.get(key)
+        #     if d != None:
+        #         Log.error("key already filled")
+        #     self._data[key] = unwrap(value)
+        #     self.count += 1
+        #
+        # except Exception, e:
+        #     Log.error("something went wrong", e)
 
     def keys(self):
         return self._data.keys()
 
     def add(self, val):
+        val = wrap(val)
         key = value2key(self._keys, val)
         if key == None:
             Log.error("Expecting key to not be None")
@@ -74,7 +74,7 @@ class UniqueIndex(object):
                 )
 
     def remove(self, val):
-        key = value2key(self._keys, val)
+        key = value2key(self._keys, wrap(val))
         if key == None:
             Log.error("Expecting key to not be None")
 

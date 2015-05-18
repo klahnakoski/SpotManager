@@ -16,14 +16,14 @@ from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
 from boto.ec2.spotpricehistory import SpotPriceHistory
 from boto.utils import ISO8601
-import time
 
 from pyLibrary import convert
 from pyLibrary.collections import SUM
 from pyLibrary.debugs import startup
 from pyLibrary.debugs.logs import Log
 from pyLibrary.debugs.startup import SingleInstance
-from pyLibrary.dot import wrap, dictwrap, coalesce, listwrap, unwrap, DictList
+from pyLibrary.dot import unwrap, coalesce, DictList, wrap, listwrap
+from pyLibrary.dot.objects import object_wrap
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings, new_instance
@@ -67,7 +67,7 @@ class SpotManager(object):
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
         all_instances = UniqueIndex("id", data=self._get_managed_instances())
-        active = qb.filter(spot_requests, {"terms": {"status.code": RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE}})
+        active = wrap([r for r in spot_requests if r.status.code in RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE])
 
         for a in active.copy():
             if a.status.code == "request-canceled-and-instance-running" and all_instances[a.instance_id] == None:
@@ -76,21 +76,30 @@ class SpotManager(object):
         used_budget = 0
         current_spending = 0
         for a in active:
-            about = self.price_lookup[a.launch_specification.instance_type]
-            Log.note("Active Spot Request {{id}}: {{type}} @ {{price|round(decimal=4)}}",
+            about = self.price_lookup[a.launch_specification.instance_type, a.launched_availability_zone]
+            if about == None:
+                # HAPPENS WHEN THE OTHER SpotManger INSTANCE FAILS TO NAME THE REQUEST, OR THOSE PESKY HUMANS CAUSE TROUBLE
+                Log.error("It would seem there is an unnamed spot request, and it is not a valid instance type.  Who does it belong to ")
+            Log.note(
+                "Active Spot Request {{id}}: {{type}} {{instance_id}} in {{zone}} @ {{price|round(decimal=4)}}",
                 id=a.id,
                 type=a.launch_specification.instance_type,
-                price=a.price - about.type.discount)
+                zone=a.launched_availability_zone,
+                instance_id=a.instance_id,
+                price=a.price - about.type.discount
+            )
             used_budget += a.price - about.type.discount
             current_spending += about.current_price - about.type.discount
 
-        Log.note("Total Exposure: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)",
+        Log.note(
+            "Total Exposure: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)",
             budget=used_budget,
-            current=current_spending)
+            current=current_spending
+        )
 
         remaining_budget = self.settings.budget - used_budget
 
-        current_utility = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type].type.utility for r in active), 0)
+        current_utility = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type, r.launched_availability_zone].type.utility for r in active), 0)
         net_new_utility = utility_required - current_utility
 
         Log.note("have {{current_utility}} utility running; need {{need_utility}} more utility", current_utility=current_utility, need_utility=net_new_utility)
@@ -106,13 +115,15 @@ class SpotManager(object):
             net_new_utility, remaining_budget = self.add_instances(net_new_utility, remaining_budget)
 
         if net_new_utility > 0:
-            Log.alert("Can not fund {{num|round(places=2)}} more utility (all utility costs more than ${{expected|round(decimal=2)}}/hour).  Remaining budget is ${{budget|round(decimal=2)}} ",
+            Log.alert(
+                "Can not fund {{num|round(places=2)}} more utility (all utility costs more than ${{expected|round(decimal=2)}}/hour).  Remaining budget is ${{budget|round(decimal=2)}} ",
                 num=net_new_utility,
                 expected=self.settings.max_utility_price,
-                budget=remaining_budget)
+                budget=remaining_budget
+            )
 
         # Give EC2 a chance to notice the new requests before tagging them.
-        time.sleep(3)
+        Thread.sleep(3)
         with self.net_new_locker:
             for req in self.net_new_spot_requests:
                 req.add_tag("Name", self.settings.ec2.instance.name)
@@ -144,10 +155,12 @@ class SpotManager(object):
             min_bid = p.price_80
 
             if min_bid > max_bid:
-                Log.note("{{type}} @ {{price|round(decimal=4)}}/hour is over budget of {{limit}}",
+                Log.note(
+                    "{{type}} @ {{price|round(decimal=4)}}/hour is over budget of {{limit}}",
                     type=p.type.instance_type,
                     price=min_bid,
-                    limit=p.type.utility * self.settings.max_utility_price)
+                    limit=p.type.utility * self.settings.max_utility_price
+                )
                 continue
 
             num = Math.min(int(Math.round(net_new_utility / p.type.utility)), coalesce(self.settings.max_requests_per_type, 10000000))
@@ -169,21 +182,26 @@ class SpotManager(object):
                         instance_type=p.type.instance_type,
                         settings=self.settings.ec2.request
                     )
-                    Log.note("Request {{num}} instance {{type}} in {{zone}} with utility {{utility}} at ${{price}}/hour",
+                    Log.note(
+                        "Request {{num}} instance {{type}} in {{zone}} with utility {{utility}} at ${{price}}/hour",
                         num=len(new_requests),
                         type=p.type.instance_type,
                         zone=p.availability_zone,
                         utility=p.type.utility,
-                        price=bid)
+                        price=bid
+                    )
                     net_new_utility -= p.type.utility * len(new_requests)
                     remaining_budget -= bid * len(new_requests)
                     with self.net_new_locker:
                         for ii in new_requests:
-                            self.net_new_spot_requests.add(dictwrap(ii))
+                            self.net_new_spot_requests.add(ii)
                 except Exception, e:
-                    Log.note("Request instance {{type}} failed bcause {{reason}}",
+                    Log.warning(
+                        "Request instance {{type}} failed because {{reason}}",
                         type=p.type.instance_type,
-                        reason=e.message)
+                        reason=e.message,
+                        cause=e
+                    )
 
         return net_new_utility, remaining_budget
 
@@ -229,7 +247,11 @@ class SpotManager(object):
         # FIND THE BIGGEST, MOST EXPENSIVE REQUESTS
         instances = self._get_managed_instances()
         for r in instances:
-            r.markup = self.price_lookup[r.instance_type]
+            try:
+                r.markup = self.price_lookup[r.instance_type, r.placement]
+            except Exception, e:
+                r.markup = self.price_lookup[r.instance_type, r.placement]
+                Log.error("No pricing!!!", e)
         instances = qb.sort(instances, [
             {"value": "markup.type.utility", "sort": -1},
             {"value": "markup.estimated_value", "sort": 1}
@@ -276,8 +298,7 @@ class SpotManager(object):
         return remaining_budget, net_new_utility
 
     def _get_managed_spot_requests(self):
-        output = wrap([dictwrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
-        # Log.note("got spot from amazon {{spot_ids}}",  spot_ids=output.id}
+        output = wrap([object_wrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
         return output
 
     def _get_managed_instances(self):
@@ -286,7 +307,7 @@ class SpotManager(object):
         for res in reservations:
             for instance in res.instances:
                 if instance.tags.get('Name', '').startswith(self.settings.ec2.instance.name) and instance._state.name == "running":
-                    output.append(dictwrap(instance))
+                    output.append(object_wrap(instance))
         return wrap(output)
 
     def _start_life_cycle_watcher(self):
@@ -294,7 +315,7 @@ class SpotManager(object):
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
                 last_get = Date.now()
-                instances = wrap({i.id: dictwrap(i) for r in self.ec2_conn.get_all_instances() for i in r.instances})
+                instances = wrap({i.id: i for r in self.ec2_conn.get_all_instances() for i in r.instances})
                 # INSTANCES THAT REQUIRE SETUP
                 time_to_stop_trying = {}
                 please_setup = [(i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests] if i.id and not i.tags.get("Name") and i._state.name == "running"]
@@ -323,8 +344,8 @@ class SpotManager(object):
                     spot_requests = self._get_managed_spot_requests()
                     last_get = Date.now()
 
-                pending = qb.filter(spot_requests, {"terms": {"status.code": PENDING_STATUS_CODES}})
-                give_up = qb.filter(spot_requests, {"terms": {"status.code": PROBABLY_NOT_FOR_A_WHILE}})
+                pending = [r for r in spot_requests if r.status.code in PENDING_STATUS_CODES]
+                give_up = [r for r in spot_requests if r.status.code in PROBABLY_NOT_FOR_A_WHILE]
 
                 if self.done_spot_requests:
                     with self.net_new_locker:
@@ -339,14 +360,14 @@ class SpotManager(object):
                         pending = pending | self.net_new_spot_requests
 
                 if give_up:
-                    self.conn.cancel_spot_instance_requests(request_ids=give_up.id)
+                    self.ec2_conn.cancel_spot_instance_requests(request_ids=give_up.id)
 
                 if not pending and not time_to_stop_trying and self.done_spot_requests:
                     Log.note("No more pending spot requests")
                     please_stop.go()
                     break
                 elif pending:
-                    Log.note("waiting for spot requests: {{pending}}", pending=qb.select(pending, "id"))
+                    Log.note("waiting for spot requests: {{pending}}", pending=[p.id for p in pending])
 
                 Thread.sleep(seconds=10, please_stop=please_stop)
 
@@ -354,17 +375,9 @@ class SpotManager(object):
 
         self.watcher = Thread.run("lifecycle watcher", life_cycle_watcher)
 
-    def _get_subnet_availability_zone(self, subnet_id):
-        try:
-            subnet = self.vpc_conn.get_all_subnets(filters={'subnet_id': subnet_id})[0]
-            return subnet.availability_zone
-        except IndexError:
-            Log.warning("subnet {{subnet_id}} not found", interface_settings)
-            return None
-
     def _get_valid_availability_zones(self):
-        zones_with_interfaces = [self._get_subnet_availability_zone(i) for i in
-                                    listwrap(self.settings.ec2.request.network_interfaces).subnet_id]
+        subnets = list(self.vpc_conn.get_all_subnets(subnet_ids=self.settings.ec2.request.network_interfaces.subnet_id))
+        zones_with_interfaces = [s.availability_zone for s in subnets]
 
         if self.settings.availability_zone:
             # If they pass a list of zones, constrain it by zones we have an
@@ -375,23 +388,22 @@ class SpotManager(object):
             return zones_with_interfaces
 
     @use_settings
-    def _request_spot_instances(self, price, availability_zone_group, instance_type, settings=None):
-        network_interfaces = NetworkInterfaceCollection()
-        for interface_settings in listwrap(settings.network_interfaces):
-            if self._get_subnet_availability_zone(interface_settings.subnet_id) == availability_zone_group:
-                network_interfaces.append(NetworkInterfaceSpecification(**unwrap(interface_settings)))
-        settings.network_interfaces = network_interfaces
+    def _request_spot_instances(self, price, availability_zone_group, instance_type, settings):
+        settings.network_interfaces = NetworkInterfaceCollection(*(
+            NetworkInterfaceSpecification(**unwrap(i))
+            for i in listwrap(settings.network_interfaces)
+            if self.vpc_conn.get_all_subnets(subnet_ids=i.subnet_id, filters={"availabilityZone": availability_zone_group})
+        ))
 
         if len(settings.network_interfaces) == 0:
             Log.error("No network interface specifications found for {{availability_zone}}!", availability_zone=settings.availability_zone_group)
 
         settings.settings = None
+        settings.block_device_map = BlockDeviceMapping()
 
-        block_device_map = BlockDeviceMapping()
-        if settings.block_device_map:
-            for dev, dev_settings in settings.block_device_map.iteritems():
-                block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
-        settings.block_device_map = block_device_map
+        # GENERIC BLOCK DEVICE MAPPING
+        for dev, dev_settings in settings.block_device_map.items():
+            settings.block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
 
         # INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping
         num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]
@@ -407,12 +419,12 @@ class SpotManager(object):
             settings.expiration = None
 
         #ATTACH NEW EBS VOLUMES
-        for i, drives in enumerate(self.settings.utility[instance_type].drives):
-            d = drives.copy()
+        for i, drive in enumerate(self.settings.utility[instance_type].drives):
+            d = drive.copy()
             d.path = None  # path AND device PROPERTY IS NOT ALLOWED IN THE BlockDeviceType
             d.device = None
             if d.size:
-                settings.block_device_map[drives.device] = BlockDeviceType(
+                settings.block_device_map[drive.device] = BlockDeviceType(
                     delete_on_termination=True,
                     **unwrap(d)
                 )
@@ -469,7 +481,7 @@ class SpotManager(object):
                             "name": "type",
                             "value": "instance_type",
                             "allowNulls": False,
-                            "domain": {"type": "set", "key": "instance_type", "partitions": list(self.settings.utility)}
+                            "domain": {"type": "set", "key": "instance_type", "partitions": self.settings.utility}
                         }
                     ],
                     "select": [
@@ -491,7 +503,7 @@ class SpotManager(object):
                 })
 
                 self.prices = output.data
-                self.price_lookup = {p.type.instance_type: p for p in self.prices}
+                self.price_lookup = UniqueIndex(("type.instance_type", "availability_zone"), data=self.prices)
             return self.prices
 
     def _get_spot_prices_from_aws(self):
@@ -504,7 +516,7 @@ class SpotManager(object):
 
         most_recents = qb.run({
             "from": cache,
-            "edges": ["instance_type"],
+            "edges": ["instance_type", "availability_zone"],
             "select": {"value": "timestamp", "aggregate": "max"}
         }).data
 
@@ -512,21 +524,25 @@ class SpotManager(object):
         prices = set(cache)
         with Timer("Get pricing from AWS"):
             for instance_type in self.settings.utility.keys():
-                if most_recents:
-                    most_recent = most_recents[{"instance_type": instance_type}].timestamp
-                    if most_recent == None:
-                        start_at = Date.today() - WEEK
-                    else:
-                        start_at = Date(most_recent)
-                else:
-                    start_at = Date.today() - WEEK
-                if DEBUG_PRICING:
-                    Log.note("get pricing for {{instance_type}} starting at {{start_at}}",
-                        instance_type=instance_type,
-                        start_at=start_at
-                    )
-
                 for zone in zones:
+                    if most_recents:
+                        most_recent = most_recents[{
+                            "instance_type": instance_type,
+                            "availability_zone": zone
+                        }].timestamp
+                        if most_recent == None:
+                            start_at = Date.today() - WEEK
+                        else:
+                            start_at = Date(most_recent)
+                    else:
+                        start_at = Date.today() - WEEK
+
+                    if DEBUG_PRICING:
+                        Log.note("get pricing for {{instance_type}} starting at {{start_at}}",
+                            instance_type=instance_type,
+                            start_at=start_at
+                        )
+
                     next_token = None
                     while True:
                         resultset = self.ec2_conn.get_spot_price_history(
@@ -579,10 +595,10 @@ RETRY_STATUS_CODES = {
 PENDING_STATUS_CODES = {
     "pending-evaluation",
     "pending-fulfillment"
-    "price-too-low"
 }
 PROBABLY_NOT_FOR_A_WHILE = {
-    "az-group-constraint"
+    "az-group-constraint",
+    "price-too-low"
 }
 RUNNING_STATUS_CODES = {
     "fulfilled",

@@ -19,6 +19,7 @@ from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import set_default, Null, Dict, split_field, coalesce, join_field
 from pyLibrary.dot.lists import DictList
 from pyLibrary.dot import listwrap, wrap, unwrap
+from pyLibrary.dot.objects import DictClass, DictObject
 from pyLibrary.maths import Math
 from pyLibrary.queries import flat_list, query, group_by
 from pyLibrary.queries.container import Container
@@ -538,18 +539,24 @@ def filter(data, where):
     """
     where  - a function that accepts (record, rownum, rows) and returns boolean
     """
-    if len(data)==0 or where == None or where == TRUE_FILTER:
+    if len(data) == 0 or where == None or where == TRUE_FILTER:
         return data
 
     if isinstance(data, Cube):
         data.filter(where)
 
-    return drill_filter(where, data)
+    try:
+        return drill_filter(where, data)
+    except Exception, e:
+        # WOW!  THIS IS INEFFICIENT!
+        return wrap([unwrap(d) for d in drill_filter(where, [DictObject(d) for d in data])])
 
 
 def drill_filter(esfilter, data):
     """
     PARTIAL EVALUATE THE FILTER BASED ON DATA GIVEN
+
+    TODO:  FIX THIS MONUMENALLY BAD IDEA
     """
     esfilter = unwrap(esfilter)
     primary_nested = []  # track if nested, changes if not
@@ -775,7 +782,7 @@ def drill_filter(esfilter, data):
         if isinstance(d, dict):
             main([], esfilter, wrap(d), 0)
         else:
-            Log.error("filter is expecting a structure, not {{type}}",  type= d.__class__)
+            Log.error("filter is expecting a dict, not {{type}}", type=d.__class__)
 
     # AT THIS POINT THE primary_column[] IS DETERMINED
     # USE IT TO EXPAND output TO ALL NESTED OBJECTS

@@ -82,7 +82,7 @@
 		}
 	},
 	"instance":{
-		"class":"active_data.es_spot.ESSpot",
+		"class":"examples.es.ESSpot",
 		"minimum_utility": 120,
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
@@ -106,16 +106,17 @@
 		"trace": true,
 		"cprofile": {
 			"enabled": false,
-			"filename": "results/active_data_spot_profile.tab"
+			"filename": "results/examples_spot_profile.tab"
 		},
 		"log": [
 			{
 				"class": "logging.handlers.RotatingFileHandler",
-				"filename": "results/logs/active_data_es_spot.log",
+				"filename": "results/logs/examples_es.log",
 				"maxBytes": 10000000,
 				"backupCount": 100,
 				"encoding": "utf8"
 			},
+
 			{
 				"log_type": "console"
 			}

@@ -54,10 +54,10 @@ a.b.c += [1]
 a.b.c += [42]
 &gt;&gt;&gt; a == {"b": {"c": [1, 42]}}
 </pre>
- 8. attribute names (keys) are corrected to unicode - it appears Python
+ 8. attribute names (keys) are coerced to unicode - it appears Python
  object.getattribute() is called with str() even when using `from __future__
  import unicode_literals`
- 9. by allowing dot notation, the IDE does tab completion and my spelling
+ 9. by allowing dot notation, the IDE does tab completion, plus my spelling
  mistakes get found at "compile time"
 
 ### Examples in the wild ###

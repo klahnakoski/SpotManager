@@ -22,7 +22,7 @@ from pyLibrary.collections import SUM
 from pyLibrary.debugs import startup
 from pyLibrary.debugs.logs import Log
 from pyLibrary.debugs.startup import SingleInstance
-from pyLibrary.dot import unwrap, coalesce, DictList, wrap, listwrap
+from pyLibrary.dot import unwrap, coalesce, DictList, wrap, listwrap, Dict
 from pyLibrary.dot.objects import dictwrap
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
@@ -38,7 +38,7 @@ from pyLibrary.times.timer import Timer
 
 DEBUG_PRICING = False
 TIME_FROM_RUNNING_TO_LOGIN = 5 * MINUTE
-
+ERROR_ON_CALL_TO_SETUP="Problem with setup()"
 
 class SpotManager(object):
     @use_settings
@@ -305,6 +305,8 @@ class SpotManager(object):
 
     def _start_life_cycle_watcher(self):
         def life_cycle_watcher(please_stop):
+            failed_attempts=Dict()
+
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
                 last_get = Date.now()
@@ -316,7 +318,11 @@ class SpotManager(object):
                     try:
                         p = self.settings.utility[i.instance_type]
                         i.markup = p
-                        self.instance_manager.setup(i, p.utility)
+                        try:
+                            self.instance_manager.setup(i, p.utility)
+                        except Exception, e:
+                            failed_attempts+=[e]
+                            Log.error(ERROR_ON_CALL_TO_SETUP, e)
                         i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
                         with self.net_new_locker:
                             self.net_new_spot_requests.remove(r.id)
@@ -328,9 +334,12 @@ class SpotManager(object):
                             self.ec2_conn.terminate_instances(instance_ids=[i.id])
                             with self.net_new_locker:
                                 self.net_new_spot_requests.remove(r.id)
-                            Log.warning("Second problem with setup of {{instance_id}}.  Instance TERMINATED!", instance_id=i.id, cause=e)
+                            Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id, cause=e)
+                        elif ERROR_ON_CALL_TO_SETUP in e:
+                            if failed_attempts > 2:
+                                Log.warning("Problem with setup() of {{instance_id}}", instance_id=i.id, cause=failed_attempts[i.id])
                         else:
-                            Log.warning("Problem with setup of {{instance_id}}", instance_id=i.id, cause=e)
+                            Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
 
                 if Date.now() - last_get > 5 * SECOND:
                     # REFRESH STALE

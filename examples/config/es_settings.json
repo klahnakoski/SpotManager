@@ -1,0 +1,131 @@
+{
+	"budget": 0.70,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"max_utility_price": 0.02,  //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
+	"max_new_utility": 400,     //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
+	"bid_percentile": 0.95,     //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
+	"price_file": "resources/aws/prices.json",
+	"run_interval": "10minute", //HOW LONG BEFORE NEXT RUN
+	"availability_zone": "us-west-2c",
+	"aws": {
+		"$ref": "//~/private.json#aws_credentials"
+	},
+	"more_drives":[
+		{"path":"/data1", "size":1000, "volume_type":"standard"},
+		{"path":"/data2", "size":1000, "volume_type":"standard"}
+	],
+	"2_ephemeral_drives":[
+		{"path":"/data1", "device":"/dev/sdb"},
+		{"path":"/data2", "device":"/dev/sdc"}
+	],
+	"3_ephemeral_drives":[
+		{"path":"/data1", "device":"/dev/sdb"},
+		{"path":"/data2", "device":"/dev/sdc"},
+		{"path":"/data3", "device":"/dev/sdd"}
+	],
+	"utility":[ //ONE POINT PER 2GIG OF MEMORY.  IF OVER 1Tb OF DRIVE SPACE INCLUDED (SAVE $0.035/Tb/hour)
+		{"instance_type": "c3.4xlarge", "utility": 15, "discount": -0.07, "drives": {"$ref":"#more_drives"}},
+		{"instance_type": "c3.8xlarge", "utility": 30, "discount": -0.07, "drives": {"$ref":"#more_drives"}},
+
+		{"instance_type": "c4.4xlarge", "utility": 15, "discount": -0.07, "drives": {"$ref":"#more_drives"}},
+		{"instance_type": "c4.8xlarge", "utility": 30, "discount": -0.07, "drives": {"$ref":"#more_drives"}},
+
+		{"instance_type": "cc2.8xlarge", "utility": 30, "discount": 0, "drives": {"$ref":"#3_ephemeral_drives"}},
+
+		{"instance_type": "d2.xlarge", "utility": 15, "discount": 0, "drives":{"$ref":"#3_ephemeral_drives"}},
+		{"instance_type": "d2.2xlarge", "utility": 30, "discount": 0, "drives":{"$ref":"#3_ephemeral_drives"}},
+		{"instance_type": "d2.4xlarge", "utility": 30, "discount": 0, "drives":{"$ref":"#3_ephemeral_drives"}},
+		{"instance_type": "d2.8xlarge", "utility": 30, "discount": 0, "drives":{"$ref":"#3_ephemeral_drives"}},
+
+		{"instance_type": "hi1.4xlarge", "utility": 30, "discount": 0, "drives":{"$ref":"#2_ephemeral_drives"}},
+
+		{"instance_type": "m3.2xlarge", "utility": 15, "discount": -0.07, "drives":{"$ref":"#more_drives"}},
+
+		{"instance_type": "r3.4xlarge", "utility": 30, "discount": -0.07, "drives":{"$ref":"#more_drives"}},
+		{"instance_type": "r3.8xlarge", "utility": 30, "discount": -0.07, "drives":{"$ref":"#more_drives"}}
+	],
+	"ec2": {
+		"request": {
+			//SEE http://boto.readthedocs.org/en/latest/ref/ec2.html#boto.ec2.connection.EC2Connection.request_spot_instances
+			"price": 0.001,
+			"image_id": "ami-e7527ed7",
+			"count": 1,
+			"type": "one-time",
+			"valid_from": null,
+			"valid_until": null,
+			"launch_group": null,
+			"availability_zone_group": null,
+			"key_name": "aws-pulse-logger",
+			"security_groups": null,
+			"user_data": null,
+			"addressing_type": null,
+			"instance_type": null,
+			"placement": null,
+			"kernel_id": null,
+			"ramdisk_id": null,
+			"monitoring_enabled": false,
+			"subnet_id": null,
+			"placement_group": null,
+			"block_device_map": null,
+			"instance_profile_arn": null,
+			"instance_profile_name": "active-data",
+			"security_group_ids": null,
+			"ebs_optimized": false,
+			"network_interfaces": {
+				"subnet_id": "subnet-b7c137ee",
+				"groups": ["sg-bb542fde"],
+				"associate_public_ip_address": true
+			},
+			"dry_run": false
+		},
+		"instance": {
+			"name": "ActiveData ES Spot Instance"
+		}
+	},
+	"instance":{
+		"class":"examples.es.ESSpot",
+		"minimum_utility": 120,
+		"connect": {
+			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
+			"user": "ec2-user",
+			"key_filename": "~/keys/aws-pulse-logger.pem",
+			"disable_known_hosts": true,
+			"host_string": "",
+			"port": 22,
+			"password": ""
+		},
+		"new_volume":{
+			"size":1000,
+			"volume_type":"magnetic",
+			"zone": "us-west-2c",
+			"snapshot": null,
+			"iops":null,
+			"encrypted":false
+		}
+	},
+	"debug": {
+		"trace": true,
+		"cprofile": {
+			"enabled": false,
+			"filename": "results/examples_spot_profile.tab"
+		},
+		"log": [
+			{
+				"class": "logging.handlers.RotatingFileHandler",
+				"filename": "examples/logs/examples_es.log",
+				"maxBytes": 10000000,
+				"backupCount": 100,
+				"encoding": "utf8"
+			},
+			{
+				"log_type": "email",
+				"from_address": "klahnakoski@mozilla.com",
+				"to_address": "klahnakoski@mozilla.com",
+				"subject": "[ALERT][DEV] Problem in ES Spot",
+				"$ref": "file://~/private.json#email"
+			},
+			{
+				"log_type": "console"
+			}
+		]
+	}
+}

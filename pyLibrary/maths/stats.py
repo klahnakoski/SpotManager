@@ -137,11 +137,12 @@ def ZeroMoment2Stats(z_moment):
             for i in range(5):
                 assertAlmostEqualValue(v.S[i], Z[i], places=7)
         except Exception, e:
-            Log.error("Convertion failed.  Programmer error:\nfrom={{from|indent}},\nresult stats={{stats|indent}},\nexpected param={{expected|indent}}", {
-                "from": Z,
-                "stats": stats,
-                "expected": v.S
-            }, e)
+            Log.error("Convertion failed.  Programmer error:\nfrom={{from|indent}},\nresult stats={{stats|indent}},\nexpected param={{expected|indent}}",
+                {"from": Z},
+                stats=stats,
+                expected=v.S,
+                cause=e
+            )
         globals()["DEBUG"] = True
 
     return stats
@@ -358,7 +359,7 @@ def median(values, simple=True, mean_weight=0.0):
             else:
                 return (_median - 0.5) + (middle + 0.5 - start_index) / num_middle
     except Exception, e:
-        Log.error("problem with median of {{values}}", {"values": values}, e)
+        Log.error("problem with median of {{values}}",  values= values, cause=e)
 
 
 def percentile(values, percent):

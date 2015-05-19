@@ -16,7 +16,7 @@ import requests
 
 from pyLibrary import convert
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import wrap
+from pyLibrary.dot import wrap, unwrap
 from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings
 from pyLibrary.thread.threads import Thread
@@ -29,8 +29,8 @@ class Queue(object):
         self,
         name,
         region,
-        aws_access_key_id,
-        aws_secret_access_key,
+        aws_access_key_id=None,
+        aws_secret_access_key=None,
         debug=False,
         settings=None
     ):
@@ -38,16 +38,16 @@ class Queue(object):
         self.pending = []
 
         if settings.region not in [r.name for r in sqs.regions()]:
-            Log.error("Can not find region {{region}} in {{regions}}", {"region": settings.region, "regions": [r.name for r in sqs.regions()]})
+            Log.error("Can not find region {{region}} in {{regions}}",  region= settings.region,  regions= [r.name for r in sqs.regions()])
 
         conn = sqs.connect_to_region(
-            region_name=settings.region,
-            aws_access_key_id=settings.aws_access_key_id,
-            aws_secret_access_key=settings.aws_secret_access_key,
+            region_name=unwrap(settings.region),
+            aws_access_key_id=unwrap(settings.aws_access_key_id),
+            aws_secret_access_key=unwrap(settings.aws_secret_access_key),
         )
         self.queue = conn.get_queue(settings.name)
         if self.queue == None:
-            Log.error("Can not find queue with name {{queue}} in region {{region}}", {"queue": settings.name, "region": settings.region})
+            Log.error("Can not find queue with name {{queue}} in region {{region}}",  queue= settings.name,  region= settings.region)
 
     def __enter__(self):
         return self
@@ -93,7 +93,7 @@ class Queue(object):
                 self.queue.delete_message(p)
 
             if self.settings.debug:
-                Log.alert("{{num}} messages returned to queue", {"num": len(pending)})
+                Log.alert("{{num}} messages returned to queue",  num= len(pending))
 
     def close(self):
         self.commit()
@@ -106,10 +106,14 @@ def capture_termination_signal(please_stop):
 
     def worker(please_stop):
         while not please_stop:
-            response = requests.get("http://169.254.169.254/latest/meta-data/spot/termination-time")
-            if response.status_code != 400:
-                please_stop.go()
-                return
+            try:
+                response = requests.get("http://169.254.169.254/latest/meta-data/spot/termination-time")
+                if response.status_code != 400:
+                    please_stop.go()
+                    return
+            except Exception, e:
+                pass  # BE QUIET
+                Thread.sleep(seconds=61)
             Thread.sleep(seconds=11)
 
     Thread.run("listen for termination", worker)

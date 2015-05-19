@@ -10,7 +10,7 @@
 from __future__ import unicode_literals
 from __future__ import division
 from pyLibrary import dot
-from pyLibrary.debugs.logs import Log, Except
+from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import unwrap, set_default, wrap, _get_attr
 
 
@@ -23,7 +23,7 @@ def get_class(path):
     except Exception, e:
         from pyLibrary.debugs.logs import Log
 
-        Log.error("Could not find module {{module|quote}}", {"module": ".".join(path)})
+        Log.error("Could not find module {{module|quote}}",  module= ".".join(path))
 
 
 def new_instance(settings):
@@ -45,7 +45,7 @@ def new_instance(settings):
         temp = __import__(path, globals(), locals(), [class_name], -1)
         constructor = object.__getattribute__(temp, class_name)
     except Exception, e:
-        Log.error("Can not find class {{class}}", {"class": path}, e)
+        Log.error("Can not find class {{class}}", {"class": path}, cause=e)
 
     settings['class'] = None
     try:
@@ -56,7 +56,7 @@ def new_instance(settings):
     try:
         return constructor(**unwrap(settings))
     except Exception, e:
-        Log.error("Can not create instance of {{name}}", {"name": ".".join(path)}, e)
+        Log.error("Can not create instance of {{name}}",  name= ".".join(path), cause=e)
 
 
 def get_function_by_name(full_name):
@@ -74,7 +74,7 @@ def get_function_by_name(full_name):
         output = object.__getattribute__(temp, function_name)
         return output
     except Exception, e:
-        Log.error("Can not find function {{name}}", {"name": full_name}, e)
+        Log.error("Can not find function {{name}}",  name= full_name, cause=e)
 
 
 def use_settings(func):
@@ -97,9 +97,22 @@ def use_settings(func):
         defaults={}
     else:
         defaults = {k: v for k, v in zip(reversed(params), reversed(func.func_defaults))}
+
     if "settings" not in params:
-        Log.error("Must have an optional 'settings' parameter, which will be "
-                  "filled with dict of all parameter {name:value} pairs")
+        # WE ASSUME WE ARE ONLY ADDING A settings PARAMETER TO SOME REGULAR METHOD
+        def w_settings(*args, **kwargs):
+            settings = wrap(kwargs).settings
+
+            params = func.func_code.co_varnames[:func.func_code.co_argcount]
+            if not func.func_defaults:
+                defaults = {}
+            else:
+                defaults = {k: v for k, v in zip(reversed(params), reversed(func.func_defaults))}
+
+            ordered_params = dict(zip(params, args))
+
+            return func(**params_pack(params, ordered_params, kwargs, settings, defaults))
+        return w_settings
 
     def wrapper(*args, **kwargs):
         try:
@@ -140,10 +153,12 @@ def use_settings(func):
             if e.message.find("takes at least") >= 0:
                 missing = [p for p in params if str(p) not in packed]
 
-                Log.error("Problem calling {{func_name}}:  Expecting parameter {{missing}}", {
-                    "func_name": func.func_name,
-                    "missing": missing
-                }, e, stack_depth=1)
+                Log.error("Problem calling {{func_name}}:  Expecting parameter {{missing}}",
+                    func_name= func.func_name,
+                    missing= missing,
+                    cause=e,
+                    stack_depth=1
+                )
             Log.error("Unexpected", e)
     return wrapper
 
@@ -160,5 +175,3 @@ def params_pack(params, *args):
 
     output = {str(k): settings[k] for k in params if k in settings}
     return output
-
-

@@ -18,6 +18,7 @@ from fabric.state import env
 from pyLibrary import aws
 from pyLibrary.debugs.logs import Log
 from pyLibrary.env.files import File
+from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings
 from pyLibrary.strings import between
 from pyLibrary.thread.threads import Lock
@@ -29,7 +30,7 @@ class ETL(InstanceManager):
     def __init__(
         self,
         work_queue,  # SETTINGS FOR AWS QUEUE
-        connect,     # SETTINGS FOR Fabric `env` TO CONNECT TO INSTANCE
+        connect,  # SETTINGS FOR Fabric `env` TO CONNECT TO INSTANCE
         minimum_utility,
         settings=None
     ):
@@ -40,17 +41,13 @@ class ETL(InstanceManager):
     def required_utility(self):
         queue = aws.Queue(self.settings.work_queue)
         pending = len(queue)
-        # SINCE EACH ITEM IN QUEUE REPRESENTS SMALL, OR GIGANTIC, AMOUNT
-        # OF TOTAL WORK THE QUEUE SIZE IS TERRIBLE PREDICTOR OF HOW MUCH
-        # UTILITY WE REALLY NEED.  WE USE log10() TO SUPPRESS THE
-        # VARIABILITY, AND HOPE FOR THE BEST
-        return max(self.settings.minimum_utility, max(pending/100, 1))
+        return max(self.settings.minimum_utility, Math.ceiling(pending / 40))
 
     def setup(self, instance, utility):
         with self.locker:
             cpu_count = int(round(utility))
 
-            Log.note("setup {{instance}}", {"instance": instance.id})
+            Log.note("setup {{instance}}", instance=instance.id)
             with hide('output'):
                 self._config_fabric(instance)
                 self._setup_etl_code()
@@ -59,7 +56,7 @@ class ETL(InstanceManager):
 
     def teardown(self, instance):
         with self.locker:
-            Log.note("teardown {{instance}}", {"instance": instance.id})
+            Log.note("teardown {{instance}}", instance=instance.id)
             self._config_fabric(instance)
             sudo("supervisorctl stop all")
 
@@ -67,7 +64,7 @@ class ETL(InstanceManager):
         sudo("apt-get update")
         sudo("apt-get clean")
 
-        if not fabric_files.exists("/home/ubuntu/temp"):
+        if not fabric_files.exists("/usr/local/bin/pip"):
             run("mkdir -p /home/ubuntu/temp")
 
             with cd("/home/ubuntu/temp"):
@@ -96,13 +93,13 @@ class ETL(InstanceManager):
             run("service supervisor start")
 
         # READ LOCAL CONFIG FILE, ALTER IT FOR THIS MACHINE RESOURCES, AND PUSH TO REMOTE
-        conf_file = File("./resources/supervisor/etl.conf")
+        conf_file = File("./examples/config/etl_supervisor.conf")
         content = conf_file.read_bytes()
         find = between(content, "numprocs=", "\n")
         content = content.replace("numprocs=" + find + "\n", "numprocs=" + str(cpu_count) + "\n")
-        File("./resources/supervisor/etl.conf.alt").write_bytes(content)
-        sudo("rm -f /etc/supervisor/conf.d/etl.conf")
-        put("./resources/supervisor/etl.conf.alt", '/etc/supervisor/conf.d/etl.conf', use_sudo=True)
+        File("./examples/config/etl_supervisor.conf.alt").write_bytes(content)
+        sudo("rm -f /etc/supervisor/conf.d/etl_supervisor.conf")
+        put("./examples/config/etl_supervisor.conf.alt", '/etc/supervisor/conf.d/etl_supervisor.conf', use_sudo=True)
         run("mkdir -p /home/ubuntu/TestLog-ETL/results/logs")
 
         # POKE supervisor TO NOTICE THE CHANGE
@@ -117,7 +114,7 @@ class ETL(InstanceManager):
 
     def _config_fabric(self, instance):
         if not instance.ip_address:
-            Log.error("Expecting an ip address for {{instance_id}}", {"instance_id": instance.id})
+            Log.error("Expecting an ip address for {{instance_id}}", instance_id=instance.id)
 
         for k, v in self.settings.connect.items():
             env[k] = v

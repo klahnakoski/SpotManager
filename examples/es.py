@@ -9,24 +9,18 @@
 from __future__ import unicode_literals
 from __future__ import division
 
-import boto
-
-from fabric.api import settings as fabric_settings
 from fabric.context_managers import cd, hide
 from fabric.contrib import files as fabric_files
 from fabric.operations import sudo, run, put
 from fabric.state import env
 
-from pyLibrary import convert
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import unwrap, dictwrap, wrap
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
 from pyLibrary.maths.randoms import Random
 from pyLibrary.meta import use_settings
-from pyLibrary.strings import expand_template, between
-from pyLibrary.thread.threads import Thread, Lock
-
+from pyLibrary.strings import expand_template
+from pyLibrary.thread.threads import Lock
 from spot.instance_manager import InstanceManager
 
 
@@ -37,8 +31,8 @@ class ESSpot(InstanceManager):
     @use_settings
     def __init__(self, settings):
         self.settings = settings
-        self.volumes = []
         self.conn = None
+        self.instance = None
         self.locker = Lock()
 
     def required_utility(self):
@@ -49,11 +43,10 @@ class ESSpot(InstanceManager):
         instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
         utility
     ):
-        self.conn = instance.connection
-        self._add_volumes(instance, Math.floor(utility/15))
         with self.locker:
+            self.instance = instance
             gigabytes = Math.floor(utility, 15)
-            Log.note("setup {{instance}}", {"instance": instance.id})
+            Log.note("setup {{instance}}",  instance= instance.id)
             with hide('output'):
                 self._config_fabric(instance)
                 self._install_es(gigabytes)
@@ -61,7 +54,7 @@ class ESSpot(InstanceManager):
 
     def _config_fabric(self, instance):
         if not instance.ip_address:
-            Log.error("Expecting an ip address for {{instance_id}}", {"instance_id": instance.id})
+            Log.error("Expecting an ip address for {{instance_id}}",  instance_id= instance.id)
 
         for k, v in self.settings.connect.items():
             env[k] = v
@@ -69,6 +62,8 @@ class ESSpot(InstanceManager):
         env.abort_exception = Log.error
 
     def _install_es(self, gigabytes):
+        volumes = self.instance.markup.drives
+
         if not fabric_files.exists("/home/ec2-user/temp"):
             with cd("/home/ec2-user/"):
                 run("mkdir temp")
@@ -91,14 +86,16 @@ class ESSpot(InstanceManager):
                 sudo('bin/plugin -install elasticsearch/elasticsearch-cloud-aws/2.4.1')
 
         if not fabric_files.exists("/data1"):
+            self.conn = self.instance.connection
+
             #MOUNT AND FORMAT THE EBS VOLUME (list with `lsblk`)
-            for i, k in enumerate(self.volumes):
-                si = unicode(i+1)
-                sudo('mkfs -t ext4 /dev/xvd'+k["letter"])
-                sudo('mkdir /data'+si)
+            for i, k in enumerate(volumes):
+
+                sudo('mkfs -t ext4 '+k.device)
+                sudo('mkdir '+k.path)
 
                 #ADD TO /etc/fstab SO AROUND AFTER REBOOT
-                sudo("sed -i '$ a\\/dev/xvd"+k["letter"]+"   /data"+si+"       ext4    defaults,nofail  0   2' /etc/fstab")
+                sudo("sed -i '$ a\\"+k.device+"   "+k.path+"       ext4    defaults,nofail  0   2' /etc/fstab")
 
 
             #TEST IT IS WORKING
@@ -107,53 +104,31 @@ class ESSpot(InstanceManager):
             sudo('mkdir /data1/logs')
             sudo('mkdir /data1/heapdump')
 
+            #INCREASE NUMBER OF FILE HANDLES
+            sudo("sysctl -w fs.file-max=64000")
 
         # COPY CONFIG FILE TO ES DIR
-        yml = File("./resources/config/es_spot_config.yml").read().replace("\r", "")
+        yml = File("./examples/config/es_config.yml").read().replace("\r", "")
         yml = expand_template(yml, {
             "id": Random.hex(length=8),
-            "data_paths": ",".join("/data"+unicode(i+1) for i, _ in enumerate(self.volumes))
+            "data_paths": ",".join("/data"+unicode(i+1) for i, _ in enumerate(volumes))
         })
         File("./results/temp/elasticsearch.yml").write(yml)
         put("./results/temp/elasticsearch.yml", '/usr/local/elasticsearch/config/elasticsearch.yml', use_sudo=True)
 
         # FOR SOME REASON THE export COMMAND DOES NOT SEEM TO WORK
         # THIS SCRIPT SETS THE ES_MIN_MEM/ES_MAX_MEM EXPLICITLY
-        sh = File("./resources/config/es_spot_run.sh").read().replace("\r", "")
+        sh = File("./examples/config/es_run.sh").read().replace("\r", "")
         sh = expand_template(sh, {"memory": unicode(int(gigabytes))})
         File("./results/temp/elasticsearch.in.sh").write(sh)
         put("./results/temp/elasticsearch.in.sh", '/usr/local/elasticsearch/bin/elasticsearch.in.sh', use_sudo=True)
 
     def _start_es(self):
-        File("./result/temp/start_es.sh").write("nohup ./bin/elasticsearch >& /dev/null < /dev/null &\nsleep 20")
+        File("./results/temp/start_es.sh").write("nohup ./bin/elasticsearch >& /dev/null < /dev/null &\nsleep 20")
         with cd("/home/ec2-user/"):
-            put("./result/temp/start_es.sh", "start_es.sh")
+            put("./results/temp/start_es.sh", "start_es.sh")
             run("chmod u+x start_es.sh")
 
         with cd("/usr/local/elasticsearch/"):
             sudo("/home/ec2-user/start_es.sh")
 
-    def _add_volumes(self, instance, num_volumes):
-        if instance.markup.drives:
-            self.volumes = [{"letter": v} for v in instance.markup.drives]
-        else:
-            volumes = []
-            for i in range(num_volumes):
-                letter = convert.ascii2char(98 + i)  # START AT 'b'
-                v = self.conn.create_volume(**unwrap(self.settings.new_volume))
-                volumes.append(wrap({"volume": v, "letter": letter}))
-
-            try:
-                status = list(self.conn.get_all_volumes(volume_ids=[v.volume.id for v in volumes]))
-                while any(s for s in status if s.status != "available"):
-                    Thread.sleep(seconds=5)
-                    status = list(self.conn.get_all_volumes(volume_ids=[v.volume.id for v in volumes]))
-
-                for v in volumes:
-                    self.conn.attach_volume(v.volume.id, instance.id, "/dev/xvd" + v.letter)
-            except Exception, e:
-                for v in volumes:
-                    self.conn.delete_volume(v.volume.id)
-                Log.error("Can not setup")
-
-            self.volumes=volumes

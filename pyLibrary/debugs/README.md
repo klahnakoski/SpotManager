@@ -32,7 +32,7 @@ There is no need to create logger objects.  The `Log` module will keep track of 
 **Use named parameters**
 
 ```python
-    Log.note("Hello, {{name}}!", {"name": "World!"})
+    Log.note("Hello, {{name}}!", name="World!")
 ```
 
 All logs are structured logs; the parameters will be included, unchanged, in the log structure.  This library also expects all parameter values to be JSON-serializable they can be stored/processed by downstream JSON tools.
@@ -65,7 +65,7 @@ All logs are structured logs; the parameters will be included, unchanged, in the
     try:
         # Do something that might raise exception
     except Exception, e:
-        Log.error("Describe what you were trying to do", e)
+        Log.error("Describe what you were trying to do", cause=e)
 ```
 
 **Name your logging parameters for later machine manipulation:**
@@ -73,10 +73,10 @@ All logs are structured logs; the parameters will be included, unchanged, in the
 ```python
     def worker(value):
         try:
-            Log.note("Start working with {{key1}}", {"key1": value1})
+            Log.note("Start working with {{key1}}", key1=value1)
             # Do something that might raise exception
         except Exception, e:
-            Log.error("Failure to work with {{key2}}", {"key2":value2}, e)
+            Log.error("Failure to work with {{key2}}", key2=value2, cause=e)
 ```
 
 
@@ -85,7 +85,7 @@ All logs are structured logs; the parameters will be included, unchanged, in the
 ```python
     def worker(value):
         try:
-            Log.error("Failure to work with {{key3}}", {"key3": value3})
+            Log.error("Failure to work with {{key3}}", key3=value3)
         except Exception, e:
             # Try something else
 ```
@@ -95,10 +95,10 @@ All logs are structured logs; the parameters will be included, unchanged, in the
 ```python
     def worker(value):
         try:
-            Log.note("Start working with {{key4}}", {"key4": value4})
+            Log.note("Start working with {{key4}}", key4=value4)
             # Do something that might raise exception
         except Exception, e:
-            Log.warning("Failure to work with {{key4}}", {"key4":value4}, e)
+            Log.warning("Failure to work with {{key4}}", key4=value4, cause=e)
 ```
 
 Configuration

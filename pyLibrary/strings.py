@@ -16,11 +16,12 @@ import re
 import math
 import __builtin__
 
-from pyLibrary.dot import coalesce, wrap
+from pyLibrary.dot import coalesce, wrap, Dict
 
 
 def datetime(value):
-    from pyLibrary import convert
+    if not convert:
+        _late_import()
 
     if isinstance(value, (date, builtin_datetime)):
         pass
@@ -33,7 +34,8 @@ def datetime(value):
 
 
 def unix(value):
-    from pyLibrary import convert
+    if not convert:
+        _late_import()
 
     if isinstance(value, (date, builtin_datetime)):
         pass
@@ -49,7 +51,8 @@ def url(value):
     """
     CONVERT FROM dict OR string TO URL PARAMETERS
     """
-    from pyLibrary import convert
+    if not convert:
+        _late_import()
 
     return convert.value2url(value)
 
@@ -58,7 +61,8 @@ def html(value):
     """
     CONVERT FROM unicode TO HTML OF THE SAME
     """
-    from pyLibrary import convert
+    if not convert:
+        _late_import()
 
     return convert.unicode2HTML(value)
 
@@ -83,9 +87,10 @@ def replace(value, find, replace):
 
 
 def json(value):
-    from pyLibrary import convert
+    if not convert:
+        _late_import()
 
-    return convert.value2json(value)
+    return convert.value2json(value, pretty=True)
 
 
 def indent(value, prefix=u"\t", indent=None):
@@ -112,7 +117,8 @@ def outdent(value):
                 num = min(num, len(l) - len(l.lstrip()))
         return u"\n".join([l[num:] for l in lines])
     except Exception, e:
-        from pyLibrary.debugs.logs import Log
+        if not Log:
+            _late_import()
 
         Log.error("can not outdent value", e)
 
@@ -264,7 +270,8 @@ def comma(value):
 
 
 def quote(value):
-    from pyLibrary import convert
+    if not convert:
+        _late_import()
 
     return convert.string2quote(value)
 
@@ -338,7 +345,8 @@ def _expand(template, seq):
     elif isinstance(template, list):
         return "".join(_expand(t, seq) for t in template)
     else:
-        from pyLibrary.debugs.logs import Log
+        if not Log:
+            _late_import()
 
         Log.error("can not handle")
 
@@ -374,11 +382,13 @@ def _simple_expand(template, seq):
                     val = toString(val)
                     return val
             except Exception, f:
-                from pyLibrary.debugs.logs import Log
+                if not Log:
+                    _late_import()
 
-                Log.warning("Can not expand " + "|".join(ops) + " in template: {{template|json}}", {
-                    "template": template
-                }, e)
+                Log.warning("Can not expand " + "|".join(ops) + " in template: {{template|json}}",
+                    template=template,
+                    cause=e
+                )
             return "[template expansion error: (" + str(e.message) + ")]"
 
     return pattern.sub(replacer, template)
@@ -419,7 +429,8 @@ def toString(val):
     try:
         return unicode(val)
     except Exception, e:
-        from pyLibrary.debugs.logs import Log
+        if not Log:
+            _late_import()
 
         Log.error(str(type(val)) + " type can not be converted to unicode", e)
 
@@ -480,9 +491,10 @@ def apply_diff(text, diff, reverse=False):
 
     matches = DIFF_PREFIX.match(diff[0].strip())
     if not matches:
-        from pyLibrary.debugs.logs import Log
+        if not Log:
+            _late_import()
 
-        Log.error("Can not handle {{diff}}\n", {"diff": diff[0]})
+        Log.error("Can not handle {{diff}}\n",  diff= diff[0])
 
     remove = [int(i.strip()) for i in matches.group(1).split(",")]
     if len(remove) == 1:
@@ -520,17 +532,18 @@ def utf82unicode(value):
     try:
         return value.decode("utf8")
     except Exception, e:
-        from pyLibrary.debugs.logs import Log, Except
+        if not Log:
+            _late_import()
 
         if not isinstance(value, basestring):
-            Log.error("Can not convert {{type}} to unicode because it's not a string", {"type": type(value).__name__})
+            Log.error("Can not convert {{type}} to unicode because it's not a string",  type= type(value).__name__)
 
         e = Except.wrap(e)
         for i, c in enumerate(value):
             try:
                 c.decode("utf8")
             except Exception, f:
-                Log.error("Can not convert charcode {{c}} in string  index {{i}}", {"i": i, "c": ord(c)}, [e, Except.wrap(f)])
+                Log.error("Can not convert charcode {{c}} in string  index {{i}}", i=i, c=ord(c), cause=[e, Except.wrap(f)])
 
         try:
             latin1 = unicode(value.decode("latin1"))
@@ -545,3 +558,22 @@ def utf82unicode(value):
             pass
 
         Log.error("Can not explain conversion failure of " + type(value).__name__ + "!", e)
+
+
+convert = None
+Log = None
+Except = None
+
+
+def _late_import():
+    global convert
+    global Log
+    global Except
+
+    from pyLibrary import convert
+    from pyLibrary.debugs.logs import Log, Except
+
+    _ = convert
+    _ = Log
+    _ = Except
+

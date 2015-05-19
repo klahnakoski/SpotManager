@@ -48,7 +48,7 @@ class Duration(object):
             else:
                 return None
         if Math.is_number(value):
-            output.milli = value
+            output.milli = value*1000
             output.month = 0
             return output
         elif isinstance(value, basestring):

@@ -328,7 +328,7 @@ class SpotManager(object):
                         try:
                             self.instance_manager.setup(i, p.utility)
                         except Exception, e:
-                            failed_attempts+=[e]
+                            failed_attempts[r.id] += [e]
                             Log.error(ERROR_ON_CALL_TO_SETUP, e)
                         i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
                         with self.net_new_locker:
@@ -343,7 +343,7 @@ class SpotManager(object):
                                 self.net_new_spot_requests.remove(r.id)
                             Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id, cause=e)
                         elif ERROR_ON_CALL_TO_SETUP in e:
-                            if failed_attempts > 2:
+                            if failed_attempts[r.id] > 2:
                                 Log.warning("Problem with setup() of {{instance_id}}", instance_id=i.id, cause=failed_attempts[i.id])
                         else:
                             Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)

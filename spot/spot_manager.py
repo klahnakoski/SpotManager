@@ -23,7 +23,7 @@ from pyLibrary.debugs import startup
 from pyLibrary.debugs.logs import Log
 from pyLibrary.debugs.startup import SingleInstance
 from pyLibrary.dot import unwrap, coalesce, DictList, wrap, listwrap
-from pyLibrary.dot.objects import object_wrap
+from pyLibrary.dot.objects import dictwrap
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings, new_instance
@@ -76,7 +76,7 @@ class SpotManager(object):
         used_budget = 0
         current_spending = 0
         for a in active:
-            about = self.price_lookup[a.launch_specification.instance_type, a.launched_availability_zone]
+            about = self.price_lookup[a.launch_specification.instance_type, a.launch_specification.placement]
             if about == None:
                 # HAPPENS WHEN THE OTHER SpotManger INSTANCE FAILS TO NAME THE REQUEST, OR THOSE PESKY HUMANS CAUSE TROUBLE
                 Log.error("It would seem there is an unnamed spot request, and it is not a valid instance type.  Who does it belong to ")
@@ -84,7 +84,7 @@ class SpotManager(object):
                 "Active Spot Request {{id}}: {{type}} {{instance_id}} in {{zone}} @ {{price|round(decimal=4)}}",
                 id=a.id,
                 type=a.launch_specification.instance_type,
-                zone=a.launched_availability_zone,
+                zone=a.launch_specification.placement,
                 instance_id=a.instance_id,
                 price=a.price - about.type.discount
             )
@@ -99,7 +99,7 @@ class SpotManager(object):
 
         remaining_budget = self.settings.budget - used_budget
 
-        current_utility = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type, r.launched_availability_zone].type.utility for r in active), 0)
+        current_utility = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type, r.launch_specification.placement].type.utility for r in active), 0)
         net_new_utility = utility_required - current_utility
 
         Log.note("have {{current_utility}} utility running; need {{need_utility}} more utility", current_utility=current_utility, need_utility=net_new_utility)
@@ -291,7 +291,7 @@ class SpotManager(object):
         return remaining_budget, net_new_utility
 
     def _get_managed_spot_requests(self):
-        output = wrap([object_wrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
+        output = wrap([dictwrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
         return output
 
     def _get_managed_instances(self):
@@ -300,7 +300,7 @@ class SpotManager(object):
         for res in reservations:
             for instance in res.instances:
                 if instance.tags.get('Name', '').startswith(self.settings.ec2.instance.name) and instance._state.name == "running":
-                    output.append(object_wrap(instance))
+                    output.append(dictwrap(instance))
         return wrap(output)
 
     def _start_life_cycle_watcher(self):
@@ -337,8 +337,8 @@ class SpotManager(object):
                     spot_requests = self._get_managed_spot_requests()
                     last_get = Date.now()
 
-                pending = [r for r in spot_requests if r.status.code in PENDING_STATUS_CODES]
-                give_up = [r for r in spot_requests if r.status.code in PROBABLY_NOT_FOR_A_WHILE]
+                pending = wrap([r for r in spot_requests if r.status.code in PENDING_STATUS_CODES])
+                give_up = wrap([r for r in spot_requests if r.status.code in PROBABLY_NOT_FOR_A_WHILE])
 
                 if self.done_spot_requests:
                     with self.net_new_locker:
@@ -354,6 +354,7 @@ class SpotManager(object):
 
                 if give_up:
                     self.ec2_conn.cancel_spot_instance_requests(request_ids=give_up.id)
+                    Log.note("Cancelled spot requests {{spots}}", spots=give_up.id)
 
                 if not pending and not time_to_stop_trying and self.done_spot_requests:
                     Log.note("No more pending spot requests")

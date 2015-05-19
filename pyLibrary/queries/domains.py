@@ -32,9 +32,9 @@ class Domain(object):
     def __new__(cls, **desc):
         if cls == Domain:
             try:
-                return name2type[desc.get("type")](**desc)
+                return name_to_type[desc.get("type")](**desc)
             except Exception, e:
-                Log.error("Do not know domain of type {{type}}",  type= desc.get("type"))
+                Log.error("Do not know domain of type {{type}}", type=desc.get("type"), cause=e)
         else:
             return object.__new__(cls)
 
@@ -614,7 +614,7 @@ def is_keyword(value):
     return keyword_pattern.match(value).group(0) == value
 
 
-name2type = {
+name_to_type = {
     "value": ValueDomain,
     "default": DefaultDomain,
     "set": SimpleSetDomain,

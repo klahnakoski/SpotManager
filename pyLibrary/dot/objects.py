@@ -11,12 +11,13 @@ from __future__ import unicode_literals
 from __future__ import division
 from datetime import date, datetime
 from decimal import Decimal
-from types import NoneType
+from types import NoneType, GeneratorType
 from pyLibrary.dot import wrap, unwrap, Dict, Null, NullType, get_attr, set_attr
 
 _get = object.__getattribute__
 _set = object.__setattr__
 WRAPPED_CLASSES = set()
+
 
 class DictObject(dict):
 
@@ -27,7 +28,7 @@ class DictObject(dict):
     def __getattr__(self, item):
         obj = _get(self, "_obj")
         output = get_attr(obj, item)
-        return object_wrap(output)
+        return dictwrap(output)
 
     def __setattr__(self, key, value):
         obj = _get(self, "_obj")
@@ -36,7 +37,7 @@ class DictObject(dict):
     def __getitem__(self, item):
         obj = _get(self, "_obj")
         output = get_attr(obj, item)
-        return object_wrap(output)
+        return dictwrap(output)
 
     def keys(self):
         obj = _get(self, "_obj")
@@ -65,13 +66,23 @@ class DictObject(dict):
         return obj(*args, **kwargs)
 
 
-def object_wrap(value):
-    if value == None:
+def dictwrap(v):
+    type_ = _get(v, "__class__")
+
+    if type_ is dict:
+        m = Dict()
+        _set(m, "__dict__", v)  # INJECT m.__dict__=v SO THERE IS NO COPY
+        return m
+    elif type_ is NoneType:
         return None   # So we allow `is None`
-    elif isinstance(value, (basestring, int, float, Decimal, datetime, date, Dict, DictList, NullType, NoneType)):
-        return value
+    elif type_ is list:
+        return DictList(v)
+    elif type_ is GeneratorType:
+        return (wrap(vv) for vv in v)
+    elif isinstance(v, (basestring, int, float, Decimal, datetime, date, Dict, DictList, NullType, NoneType)):
+        return v
     else:
-        return DictObject(value)
+        return DictObject(v)
 
 
 class DictClass(object):

@@ -20,7 +20,7 @@ from boto.utils import ISO8601
 from pyLibrary import convert
 from pyLibrary.collections import SUM
 from pyLibrary.debugs import startup
-from pyLibrary.debugs.logs import Log
+from pyLibrary.debugs.logs import Log, Except
 from pyLibrary.debugs.startup import SingleInstance
 from pyLibrary.dot import unwrap, coalesce, DictList, wrap, listwrap, Dict
 from pyLibrary.dot.objects import dictwrap
@@ -328,7 +328,7 @@ class SpotManager(object):
                         try:
                             self.instance_manager.setup(i, p.utility)
                         except Exception, e:
-                            failed_attempts[r.id] += [e]
+                            failed_attempts[r.id] += [Except.wrap(e)]
                             Log.error(ERROR_ON_CALL_TO_SETUP, e)
                         i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
                         with self.net_new_locker:
@@ -343,7 +343,7 @@ class SpotManager(object):
                                 self.net_new_spot_requests.remove(r.id)
                             Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id, cause=e)
                         elif ERROR_ON_CALL_TO_SETUP in e:
-                            if failed_attempts[r.id] > 2:
+                            if len(failed_attempts[r.id]) > 2:
                                 Log.warning("Problem with setup() of {{instance_id}}", instance_id=i.id, cause=failed_attempts[i.id])
                         else:
                             Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)

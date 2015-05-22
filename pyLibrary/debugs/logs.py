@@ -17,7 +17,7 @@ import os
 import sys
 
 from pyLibrary.debugs import constants
-from pyLibrary.dot import coalesce, Dict, listwrap, wrap, unwrap, Null
+from pyLibrary.dot import coalesce, Dict, listwrap, wrap, unwrap, Null, unwraplist
 from pyLibrary.jsons.encoder import json_encoder
 from pyLibrary.thread.threads import Thread, Lock, Queue
 from pyLibrary.strings import indent, expand_template
@@ -231,9 +231,7 @@ class Log(object):
             params = {}
 
         params = dict(unwrap(params), **more_params)
-
-        if cause and not isinstance(cause, Except):
-            cause = Except(ERROR, unicode(cause), trace=extract_tb(0))
+        cause = unwraplist([Except.wrap(c) for c in listwrap(cause)])
 
         trace = extract_stack(stack_depth + 1)
         e = Except(WARNING, template, params, cause, trace)

@@ -88,8 +88,8 @@ class SpotManager(object):
                 instance_id=a.instance_id,
                 price=a.price - about.type.discount
             )
-            used_budget += a.price - about.type.discount
-            current_spending += about.current_price - about.type.discount
+            used_budget += a.price - coalesce(about.type.discount, 0)
+            current_spending += about.current_price - coalesce(about.type.discount, 0)
 
         Log.note(
             "Total Exposure: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)",

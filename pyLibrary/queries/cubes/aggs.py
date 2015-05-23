@@ -9,6 +9,7 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 import itertools
 
 from pyLibrary.collections.matrix import Matrix
@@ -32,7 +33,7 @@ def cube_aggs(frum, query):
             # DEFAULT DOMAINS CAN EASILY BE LOOKED UP FROM frum
             for fe in frum.edges:
                 if fe.name == e.value:
-                    e.domain = SimpleSetDomain(**unwrap(fe.domain.as_dict()))
+                    e.domain = SimpleSetDomain(**fe.domain.as_dict())
                     e.value = e.value + "." + fe.domain.key
                     break
         else:
@@ -74,7 +75,7 @@ def cube_aggs(frum, query):
                         acc = windows.name2accumulator.get(agg)
                         if acc == None:
                             Log.error("select aggregate {{agg}} is not recognized",  agg= agg)
-                        acc = acc(**unwrap(s))
+                        acc = acc(**s)
                         mat[c] = acc
                     acc.add(val)
 

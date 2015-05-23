@@ -9,10 +9,11 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from collections import Mapping
 from types import GeneratorType, NoneType, ModuleType
 
 _get = object.__getattribute__
-_set = object.__setattr__
 
 
 def inverse(d):
@@ -80,7 +81,7 @@ def join_field(field):
 def hash_value(v):
     if isinstance(v, (set, tuple, list)):
         return hash(tuple(hash_value(vv) for vv in v))
-    elif not isinstance(v, dict):
+    elif not isinstance(v, Mapping):
         return hash(v)
     else:
         return hash(tuple(sorted(hash_value(vv) for vv in v.values())))
@@ -105,7 +106,7 @@ def set_default(*params):
     FOR EACH LEAF, RETURN THE HIGHEST PRIORITY LEAF VALUE
     """
     p0 = params[0]
-    agg = p0 if p0 or isinstance(p0, dict) else {}
+    agg = p0 if p0 or isinstance(p0, Mapping) else {}
     for p in params[1:]:
         p = unwrap(p)
         if p is None:
@@ -128,7 +129,7 @@ def _all_default(d, default, seen=None):
         if existing_value == None:
             if default_value != None:
                 _set_attr(d, [k], default_value)
-        elif (hasattr(existing_value, "__setattr__") or isinstance(existing_value, dict)) and isinstance(default_value, dict):
+        elif (hasattr(existing_value, "__setattr__") or isinstance(existing_value, Mapping)) and isinstance(default_value, Mapping):
             df = seen.get(id(existing_value))
             if df:
                 _set_attr(d, [k], df)
@@ -238,7 +239,7 @@ def _get_attr(obj, path):
         else:
             return _get_attr(obj[attr_name[0]], path[1:])
     try:
-        obj = _get(obj, attr_name)
+        obj = getattr(obj, attr_name)
         return _get_attr(obj, path[1:])
     except Exception, e:
         try:
@@ -269,7 +270,7 @@ def _set_attr(obj, path, value):
         new_value = value
 
     try:
-        _set(obj, attr_name, new_value)
+        _get(obj, "__setattr__")(attr_name, new_value)
         return old_value
     except Exception, e:
         try:
@@ -288,8 +289,7 @@ def wrap(v):
     type_ = _get(v, "__class__")
 
     if type_ is dict:
-        m = Dict()
-        _set(m, "__dict__", v)  # INJECT m.__dict__=v SO THERE IS NO COPY
+        m = Dict(v)
         return m
     elif type_ is NoneType:
         return Null
@@ -313,7 +313,7 @@ def _wrap_dot(value):
         return None
     if isinstance(value, (basestring, int, float)):
         return value
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         if isinstance(value, Dict):
             value = unwrap(value)
 
@@ -359,7 +359,7 @@ def _wrap_dot(value):
 def unwrap(v):
     _type = _get(v, "__class__")
     if _type is Dict:
-        d = _get(v, "__dict__")
+        d = _get(v, "_dict")
         return d
     elif _type is DictList:
         return v.list

@@ -77,19 +77,17 @@ class SpotManager(object):
         current_spending = 0
         for a in active:
             about = self.price_lookup[a.launch_specification.instance_type, a.launch_specification.placement]
-            if about == None:
-                # HAPPENS WHEN THE OTHER SpotManger INSTANCE FAILS TO NAME THE REQUEST, OR THOSE PESKY HUMANS CAUSE TROUBLE
-                Log.error("It would seem there is an unnamed spot request, and it is not a valid instance type.  Who does it belong to ")
+            discount = coalesce(about.type.discount, 0)
             Log.note(
                 "Active Spot Request {{id}}: {{type}} {{instance_id}} in {{zone}} @ {{price|round(decimal=4)}}",
                 id=a.id,
                 type=a.launch_specification.instance_type,
                 zone=a.launch_specification.placement,
                 instance_id=a.instance_id,
-                price=a.price - about.type.discount
+                price=a.price - discount
             )
-            used_budget += a.price - about.type.discount
-            current_spending += about.current_price - about.type.discount
+            used_budget += a.price - discount
+            current_spending += coalesce(about.current_price, a.price) - discount
 
         Log.note(
             "Total Exposure: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)",

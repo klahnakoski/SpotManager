@@ -9,6 +9,8 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from collections import Mapping
 
 from pyLibrary import convert
 from pyLibrary.collections.matrix import Matrix
@@ -229,7 +231,7 @@ class MySQL(object):
             # RETURN BORING RESULT SET
             selects = DictList()
             for s in listwrap(query.select):
-                if isinstance(s.value, dict):
+                if isinstance(s.value, Mapping):
                     for k, v in s.value.items:
                         selects.append(v + " AS " + self.db.quote_column(s.name + "." + k))
                 if isinstance(s.value, list):
@@ -257,7 +259,7 @@ class MySQL(object):
             def post_process(sql):
                 result = self.db.query(sql)
                 for s in listwrap(query.select):
-                    if isinstance(s.value, dict):
+                    if isinstance(s.value, Mapping):
                         for r in result:
                             r[s.name] = {}
                             for k, v in s.value:

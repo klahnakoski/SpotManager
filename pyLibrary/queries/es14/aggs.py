@@ -9,6 +9,8 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from collections import Mapping
 
 from pyLibrary.collections import MAX
 from pyLibrary.debugs.logs import Log
@@ -125,7 +127,7 @@ class AggsDecoder(object):
             # THIS domain IS FROM A dimension THAT IS A SIMPLE LIST OF fields
             # JUST PULL THE FIELDS
             fields = e.domain.dimension.fields
-            if isinstance(fields, dict):
+            if isinstance(fields, Mapping):
                 return object.__new__(DimFieldDictDecoder, e)
             else:
                 return object.__new__(DimFieldListDecoder, e)

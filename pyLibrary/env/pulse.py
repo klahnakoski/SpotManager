@@ -9,6 +9,7 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 
 from mozillapulse.consumers import GenericConsumer
 
@@ -51,7 +52,7 @@ class Pulse(Thread):
         settings.user = coalesce(settings.user, settings.username)
         settings.applabel = coalesce(settings.applable, settings.queue, settings.queue_name)
 
-        self.pulse = GenericConsumer(settings, connect=True, **unwrap(settings))
+        self.pulse = GenericConsumer(settings, connect=True, **settings)
         self.count = coalesce(start, 0)
         self.start()
 

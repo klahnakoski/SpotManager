@@ -9,6 +9,8 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from collections import Mapping
 
 import json
 from json import encoder as json_encoder_module
@@ -273,7 +275,7 @@ def pretty_json(value):
                 except BaseException, f:
                     Log.warning("can not even explicit convert", f)
                     return "null"
-        elif isinstance(value, dict):
+        elif isinstance(value, Mapping):
             try:
                 if not value:
                     return "{}"

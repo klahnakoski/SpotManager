@@ -9,10 +9,14 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from __future__ import absolute_import
+
 import HTMLParser
 import StringIO
 import base64
 import cgi
+from collections import Mapping
 import datetime
 from decimal import Decimal
 import gzip
@@ -280,7 +284,7 @@ def value2url(value):
     if value == None:
         Log.error("")
 
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         output = "&".join([value2url(k) + "=" + (value2url(v) if isinstance(v, basestring) else value2url(value2json(v))) for k,v in value.items()])
     elif isinstance(value, unicode):
         output = "".join([_map2url[c] for c in unicode2latin1(value)])

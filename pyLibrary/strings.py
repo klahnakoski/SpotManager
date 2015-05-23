@@ -10,6 +10,9 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+
+from collections import Mapping
 from datetime import timedelta, date
 from datetime import datetime as builtin_datetime
 import re
@@ -207,16 +210,16 @@ def trim(value):
     return strip(value)
 
 
-def between(value, prefix, suffix):
+def between(value, prefix, suffix, start=0):
     value = toString(value)
     if prefix == None:
-        e = value.find(suffix)
+        e = value.find(suffix, start)
         if e == -1:
             return None
         else:
             return value[:e]
 
-    s = value.find(prefix)
+    s = value.find(prefix, start)
     if s == -1:
         return None
     s += len(prefix)
@@ -225,7 +228,7 @@ def between(value, prefix, suffix):
     if e == -1:
         return None
 
-    s = value.rfind(prefix, 0, e) + len(prefix)  # WE KNOW THIS EXISTS, BUT THERE MAY BE A RIGHT-MORE ONE
+    s = value.rfind(prefix, start, e) + len(prefix)  # WE KNOW THIS EXISTS, BUT THERE MAY BE A RIGHT-MORE ONE
 
     return value[s:e]
 
@@ -331,7 +334,7 @@ def _expand(template, seq):
     """
     if isinstance(template, basestring):
         return _simple_expand(template, seq)
-    elif isinstance(template, dict):
+    elif isinstance(template, Mapping):
         template = wrap(template)
         assert template["from"], "Expecting template to have 'from' attribute"
         assert template.template, "Expecting template to have 'template' attribute"
@@ -416,7 +419,7 @@ def deformat(value):
 def toString(val):
     if val == None:
         return ""
-    elif isinstance(val, (dict, list, set)):
+    elif isinstance(val, (Mapping, list, set)):
         from pyLibrary.jsons.encoder import json_encoder
 
         return json_encoder(val, pretty=True)

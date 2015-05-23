@@ -522,61 +522,61 @@ class SpotManager(object):
             except Exception, e:
                 cache = DictList()
 
-        # most_recents = qb.run({
-        #     "from": cache,
-        #     "edges": ["instance_type", "availability_zone"],
-        #     "select": {"value": "timestamp", "aggregate": "max"}
-        # }).data
+        most_recents = qb.run({
+            "from": cache,
+            "edges": ["instance_type", "availability_zone"],
+            "select": {"value": "timestamp", "aggregate": "max"}
+        }).data
 
-        # zones = self._get_valid_availability_zones()
+        zones = self._get_valid_availability_zones()
         prices = set(cache)
-        # with Timer("Get pricing from AWS"):
-        #     for instance_type in self.settings.utility.keys():
-        #         for zone in zones:
-        #             if most_recents:
-        #                 most_recent = most_recents[{
-        #                     "instance_type": instance_type,
-        #                     "availability_zone": zone
-        #                 }].timestamp
-        #                 if most_recent == None:
-        #                     start_at = Date.today() - WEEK
-        #                 else:
-        #                     start_at = Date(most_recent)
-        #             else:
-        #                 start_at = Date.today() - WEEK
-        #
-        #             if DEBUG_PRICING:
-        #                 Log.note("get pricing for {{instance_type}} starting at {{start_at}}",
-        #                     instance_type=instance_type,
-        #                     start_at=start_at
-        #                 )
-        #
-        #             next_token = None
-        #             while True:
-        #                 resultset = self.ec2_conn.get_spot_price_history(
-        #                     product_description="Linux/UNIX (Amazon VPC)",
-        #                     instance_type=instance_type,
-        #                     availability_zone=zone,
-        #                     start_time=start_at.format(ISO8601),
-        #                     next_token=next_token
-        #                 )
-        #                 next_token = resultset.next_token
-        #
-        #                 for p in resultset:
-        #                     prices.add(wrap({
-        #                         "availability_zone": p.availability_zone,
-        #                         "instance_type": p.instance_type,
-        #                         "price": p.price,
-        #                         "product_description": p.product_description,
-        #                         "region": p.region.name,
-        #                         "timestamp": Date(p.timestamp)
-        #                     }))
-        #
-        #                 if not next_token:
-        #                     break
-        #
-        # with Timer("Save prices to file"):
-        #     File(self.settings.price_file).write(convert.value2json(prices))
+        with Timer("Get pricing from AWS"):
+            for instance_type in self.settings.utility.keys():
+                for zone in zones:
+                    if most_recents:
+                        most_recent = most_recents[{
+                            "instance_type": instance_type,
+                            "availability_zone": zone
+                        }].timestamp
+                        if most_recent == None:
+                            start_at = Date.today() - WEEK
+                        else:
+                            start_at = Date(most_recent)
+                    else:
+                        start_at = Date.today() - WEEK
+
+                    if DEBUG_PRICING:
+                        Log.note("get pricing for {{instance_type}} starting at {{start_at}}",
+                            instance_type=instance_type,
+                            start_at=start_at
+                        )
+
+                    next_token = None
+                    while True:
+                        resultset = self.ec2_conn.get_spot_price_history(
+                            product_description="Linux/UNIX (Amazon VPC)",
+                            instance_type=instance_type,
+                            availability_zone=zone,
+                            start_time=start_at.format(ISO8601),
+                            next_token=next_token
+                        )
+                        next_token = resultset.next_token
+
+                        for p in resultset:
+                            prices.add(wrap({
+                                "availability_zone": p.availability_zone,
+                                "instance_type": p.instance_type,
+                                "price": p.price,
+                                "product_description": p.product_description,
+                                "region": p.region.name,
+                                "timestamp": Date(p.timestamp)
+                            }))
+
+                        if not next_token:
+                            break
+
+        with Timer("Save prices to file"):
+            File(self.settings.price_file).write(convert.value2json(prices))
         return prices
 
 

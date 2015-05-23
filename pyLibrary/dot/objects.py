@@ -23,48 +23,45 @@ WRAPPED_CLASSES = set()
 
 class DictObject(Mapping):
 
+    __slots__ = ["_obj"]
+
     def __init__(self, obj):
-        _set(self, "_obj", obj)
+        self._obj = obj
 
     def __getattr__(self, item):
-        obj = _get(self, "_obj")
-        output = get_attr(obj, item)
+        output = get_attr(self._obj, item)
         return dictwrap(output)
 
     def __setattr__(self, key, value):
-        obj = _get(self, "_obj")
-        set_attr(obj, key, value)
+        set_attr(self._obj, key, value)
 
     def __getitem__(self, item):
-        obj = _get(self, "_obj")
-        output = get_attr(obj, item)
+        output = get_attr(self._obj, item)
         return dictwrap(output)
 
     def keys(self):
-        obj = _get(self, "_obj")
         try:
-            return obj.__dict__.keys()
+            return self._obj.__dict__.keys()
         except Exception, e:
             raise e
 
     def items(self):
-        obj = _get(self, "_obj")
         try:
-            return obj.__dict__.items()
+            return self._obj.__dict__.items()
         except Exception, e:
             raise e
 
+    def __iter__(self):
+        return (k for k in self.keys())
+
     def __str__(self):
-        obj = _get(self, "_obj")
-        return str(obj)
+        return str(self._obj)
 
     def __len__(self):
-        obj = _get(self, "_obj")
-        return len(obj)
+        return len(self._obj)
 
     def __call__(self, *args, **kwargs):
-        obj = _get(self, "_obj")
-        return obj(*args, **kwargs)
+        return self._obj(*args, **kwargs)
 
 
 def dictwrap(v):

@@ -9,6 +9,8 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from collections import Mapping
 from datetime import date, datetime
 from decimal import Decimal
 from types import NoneType, GeneratorType
@@ -19,10 +21,9 @@ _set = object.__setattr__
 WRAPPED_CLASSES = set()
 
 
-class DictObject(dict):
+class DictObject(Mapping):
 
     def __init__(self, obj):
-        dict.__init__(self)
         _set(self, "_obj", obj)
 
     def __getattr__(self, item):
@@ -71,7 +72,7 @@ def dictwrap(v):
 
     if type_ is dict:
         m = Dict()
-        _set(m, "__dict__", v)  # INJECT m.__dict__=v SO THERE IS NO COPY
+        _set(m, "_dict", v)  # INJECT m.__dict__=v SO THERE IS NO COPY
         return m
     elif type_ is NoneType:
         return None   # So we allow `is None`

@@ -10,6 +10,7 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 
 from datetime import datetime, date, timedelta
 from decimal import Decimal
@@ -148,9 +149,9 @@ class Date(object):
         if other == None:
             return None
         if isinstance(other, datetime):
-            return Duration(self.milli-Date(other).milli)
+            return Duration(self.unix - Date(other).unix)
         if isinstance(other, Date):
-            return Duration(self.milli-other.milli)
+            return Duration(self.unix - other.unix)
 
         return self.add(-other)
 

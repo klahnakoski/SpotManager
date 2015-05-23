@@ -9,6 +9,8 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from collections import Mapping
 from pyLibrary import dot
 from pyLibrary import convert
 from pyLibrary.collections.matrix import Matrix
@@ -52,7 +54,7 @@ class Cube(object):
 
                 data = {select.name: Matrix.ZERO}
                 self.edges = DictList.EMPTY
-            elif isinstance(data, dict):
+            elif isinstance(data, Mapping):
                 # EXPECTING NO MORE THAN ONE rownum EDGE IN THE DATA
                 length = MAX([len(v) for v in data.values()])
                 if length >= 1:
@@ -182,7 +184,7 @@ class Cube(object):
         # EDGE REMOVES THAT EDGE FROM THIS RESULT, OR ADDS THE PART
         # AS A select {"name":edge.name, "value":edge.domain.partitions[coord]}
         # PROBABLY NOT, THE value IS IDENTICAL OVER THE REMAINING
-        if isinstance(item, dict):
+        if isinstance(item, Mapping):
             coordinates = [None] * len(self.edges)
 
             # MAP DICT TO NUMERIC INDICES

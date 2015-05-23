@@ -10,6 +10,8 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from collections import Mapping
 
 from datetime import datetime
 import json
@@ -557,7 +559,7 @@ class MySQL(object):
                 return "str_to_date('" + value.strftime("%Y%m%d%H%M%S") + "', '%Y%m%d%H%i%s')"
             elif hasattr(value, '__iter__'):
                 return self.db.literal(json_encode(value))
-            elif isinstance(value, dict):
+            elif isinstance(value, Mapping):
                 return self.db.literal(json_encode(value))
             elif Math.is_number(value):
                 return unicode(value)
@@ -579,7 +581,7 @@ class MySQL(object):
                 return expand_template(value, param)
             elif isinstance(value, basestring):
                 return value
-            elif isinstance(value, dict):
+            elif isinstance(value, Mapping):
                 return self.db.literal(json_encode(value))
             elif hasattr(value, '__iter__'):
                 return "(" + ",".join([self.quote_sql(vv) for vv in value]) + ")"

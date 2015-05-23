@@ -10,7 +10,9 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 import __builtin__
+from collections import Mapping
 from types import GeneratorType
 
 from pyLibrary import dot, convert
@@ -142,7 +144,7 @@ def unique_index(data, keys=None, fail_on_dup=True):
 
 def map2set(data, relation):
     """
-    EXPECTING A isinstance(relation, dict) THAT MAPS VALUES TO lists
+    EXPECTING A isinstance(relation, Mapping) THAT MAPS VALUES TO lists
     THE LISTS ARE EXPECTED TO POINT TO MEMBERS OF A SET
     A set() IS RETURNED
     """
@@ -151,7 +153,7 @@ def map2set(data, relation):
     if isinstance(relation, Dict):
         Log.error("Does not accept a Dict")
 
-    if isinstance(relation, dict):
+    if isinstance(relation, Mapping):
         try:
             # relation[d] is expected to be a list
             # return set(cod for d in data for cod in relation[d])
@@ -188,7 +190,7 @@ def tuple(data, field_name):
     if isinstance(data, FlatList):
         Log.error("not supported yet")
 
-    if isinstance(field_name, dict) and "value" in field_name:
+    if isinstance(field_name, Mapping) and "value" in field_name:
         # SIMPLIFY {"value":value} AS STRING
         field_name = field_name["value"]
 
@@ -257,7 +259,7 @@ def select_one(record, selection):
     record = wrap(record)
     selection = wrap(selection)
 
-    if isinstance(selection, dict):
+    if isinstance(selection, Mapping):
         selection = wrap(selection)
         return record[selection.value]
     elif isinstance(selection, basestring):
@@ -286,10 +288,10 @@ def select(data, field_name):
     if isinstance(data, UniqueIndex):
         data = data._data.values()  # THE SELECT ROUTINE REQUIRES dicts, NOT Dict WHILE ITERATING
 
-    if isinstance(data, dict):
+    if isinstance(data, Mapping):
         return select_one(data, field_name)
 
-    if isinstance(field_name, dict):
+    if isinstance(field_name, Mapping):
         field_name = wrap(field_name)
         if field_name.value in ["*", "."]:
             return data
@@ -486,7 +488,7 @@ def sort(data, fieldnames=None):
             right = coalesce(right)
             for f in formal:
                 try:
-                    result = value_compare(left[f.field], right[f.fields], f.sort)
+                    result = value_compare(left[f.field], right[f.field], f.sort)
                     if result != 0:
                         return result
                 except Exception, e:
@@ -779,7 +781,7 @@ def drill_filter(esfilter, data):
 
     # OUTPUT
     for i, d in enumerate(data):
-        if isinstance(d, dict):
+        if isinstance(d, Mapping):
             main([], esfilter, wrap(d), 0)
         else:
             Log.error("filter is expecting a dict, not {{type}}", type=d.__class__)

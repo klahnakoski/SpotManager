@@ -10,6 +10,7 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 
 import sys
 from math import sqrt
@@ -17,10 +18,9 @@ import math
 
 from pyLibrary import convert
 from pyLibrary.collections import OR
-from __init__ import almost_equal, Math
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import coalesce, Dict, Null
-# from pyLibrary.queries import qb
+from pyLibrary.maths import almost_equal, Math
 from pyLibrary.vendor import strangman
 
 
@@ -137,7 +137,7 @@ def ZeroMoment2Stats(z_moment):
             for i in range(5):
                 assertAlmostEqualValue(v.S[i], Z[i], places=7)
         except Exception, e:
-            Log.error("Convertion failed.  Programmer error:\nfrom={{from|indent}},\nresult stats={{stats|indent}},\nexpected param={{expected|indent}}",
+            Log.error("Conversion failed.  Programmer error:\nfrom={{from|indent}},\nresult stats={{stats|indent}},\nexpected param={{expected|indent}}",
                 {"from": Z},
                 stats=stats,
                 expected=v.S,

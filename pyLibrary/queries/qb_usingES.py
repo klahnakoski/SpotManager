@@ -9,6 +9,8 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from collections import Mapping
 
 from pyLibrary import convert
 from pyLibrary.env import elasticsearch, http
@@ -214,7 +216,7 @@ class FromES(Container):
                         return [{"value": fields[0]}]
                     else:
                         return [{"name": (edge + "[" + str(i) + "]"), "value": v} for i, v in enumerate(fields)]
-                elif isinstance(fields, dict):
+                elif isinstance(fields, Mapping):
                     return [{"name": (edge + "." + k), "value": v} for k, v in fields.items()]
                 else:
                     Log.error("do not know how to handle")

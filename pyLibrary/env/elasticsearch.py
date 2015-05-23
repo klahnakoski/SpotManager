@@ -9,6 +9,8 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from collections import Mapping
 from copy import deepcopy
 from datetime import datetime
 import re
@@ -644,9 +646,9 @@ def _scrub(r):
             return r
         elif Math.is_number(r):
             return convert.value2number(r)
-        elif isinstance(r, dict):
+        elif isinstance(r, Mapping):
             if isinstance(r, Dict):
-                r = object.__getattribute__(r, "__dict__")
+                r = object.__getattribute__(r, "_dict")
             output = {}
             for k, v in r.items():
                 v = _scrub(v)

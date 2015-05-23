@@ -10,6 +10,8 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from collections import Mapping
 
 import os
 from pyLibrary.dot import set_default, wrap
@@ -73,7 +75,7 @@ def _replace_ref(node, url):
     if url.path.endswith("/"):
         url.path = url.path[:-1]
 
-    if isinstance(node, dict):
+    if isinstance(node, Mapping):
         ref, raw_ref, node["$ref"] = URL(node["$ref"]), node["$ref"], None
 
         # RECURS
@@ -108,7 +110,7 @@ def _replace_ref(node, url):
         if ref.fragment:
             new_value = new_value[ref.fragment]
 
-        if isinstance(new_value, dict):
+        if isinstance(new_value, Mapping):
             return set_default({}, node, new_value)
         elif node.keys() and new_value == None:
             return node
@@ -125,7 +127,7 @@ def _replace_ref(node, url):
 
 
 def _replace_locals(node, doc_path):
-    if isinstance(node, dict):
+    if isinstance(node, Mapping):
         ref, node["$ref"] = node["$ref"], None
 
         # RECURS

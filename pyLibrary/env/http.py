@@ -19,6 +19,7 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 from copy import copy
 
 from requests import sessions, Response

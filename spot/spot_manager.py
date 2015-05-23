@@ -472,7 +472,7 @@ class SpotManager(object):
                         {"value": "price", "aggregate": "max"},
                         {"aggregate": "count"}
                     ],
-                    "where": {"gt": {"timestamp": Date.now().floor(HOUR) - DAY}},
+                    "where": {"gt": {"expire": Date.now().floor(HOUR) - DAY}},
                     "window": {
                         "name": "current_price", "value": CODE("rows.last().price"), "edges": ["availability_zone", "instance_type"], "sort": "time",
                     }

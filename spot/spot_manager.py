@@ -206,6 +206,10 @@ class SpotManager(object):
                         cause=e
                     )
 
+                    if "Max spot instance count exceeded" in e.message:
+                        Log.note("No further spot requests will be attempted.")
+                        return net_new_utility, remaining_budget
+
         return net_new_utility, remaining_budget
 
     def remove_instances(self, net_new_utility):

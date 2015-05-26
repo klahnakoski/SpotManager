@@ -107,7 +107,10 @@ class SpotManager(object):
         if remaining_budget < 0:
             remaining_budget, net_new_utility = self.save_money(remaining_budget, net_new_utility)
 
-        if net_new_utility <= 0:
+        if net_new_utility < 0:
+            if self.settings.allowed_overage:
+                net_new_utility = Math.min(net_new_utility + self.settings.allowed_overage * utility_required, 0)
+
             net_new_utility = self.remove_instances(net_new_utility)
 
         if net_new_utility > 0:
@@ -202,6 +205,10 @@ class SpotManager(object):
                         reason=e.message,
                         cause=e
                     )
+
+                    if "Max spot instance count exceeded" in e.message:
+                        Log.note("No further spot requests will be attempted.")
+                        return net_new_utility, remaining_budget
 
         return net_new_utility, remaining_budget
 
@@ -409,11 +416,13 @@ class SpotManager(object):
             Log.error("No network interface specifications found for {{availability_zone}}!", availability_zone=settings.availability_zone_group)
 
         settings.settings = None
-        settings.block_device_map = BlockDeviceMapping()
+        block_device_map = BlockDeviceMapping()
 
         # GENERIC BLOCK DEVICE MAPPING
         for dev, dev_settings in settings.block_device_map.items():
-            settings.block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
+            block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
+
+        settings.block_device_map = block_device_map
 
         # INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping
         num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]

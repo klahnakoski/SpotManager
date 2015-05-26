@@ -41,7 +41,7 @@ class ETL(InstanceManager):
     def required_utility(self):
         queue = aws.Queue(self.settings.work_queue)
         pending = len(queue)
-        return max(self.settings.minimum_utility, Math.ceiling(pending / 40))
+        return max(self.settings.minimum_utility, Math.ceiling(pending / 20))
 
     def setup(self, instance, utility):
         with self.locker:

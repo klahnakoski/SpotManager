@@ -107,7 +107,10 @@ class SpotManager(object):
         if remaining_budget < 0:
             remaining_budget, net_new_utility = self.save_money(remaining_budget, net_new_utility)
 
-        if net_new_utility <= 0:
+        if net_new_utility < 0:
+            if self.settings.allowed_overage:
+                net_new_utility = Math.min(net_new_utility + self.settings.allowed_overage * utility_required, 0)
+
             net_new_utility = self.remove_instances(net_new_utility)
 
         if net_new_utility > 0:

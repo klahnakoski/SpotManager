@@ -416,11 +416,13 @@ class SpotManager(object):
             Log.error("No network interface specifications found for {{availability_zone}}!", availability_zone=settings.availability_zone_group)
 
         settings.settings = None
-        settings.block_device_map = BlockDeviceMapping()
+        block_device_map = BlockDeviceMapping()
 
         # GENERIC BLOCK DEVICE MAPPING
         for dev, dev_settings in settings.block_device_map.items():
-            settings.block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
+            block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
+
+        settings.block_device_map = block_device_map
 
         # INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping
         num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]

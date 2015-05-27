@@ -42,7 +42,7 @@ ERROR_ON_CALL_TO_SETUP="Problem with setup()"
 
 class SpotManager(object):
     @use_settings
-    def __init__(self, instance_manager, settings):
+    def __init__(self, instance_manager, disable_prices=False, settings=None):
         self.settings = settings
         self.instance_manager = instance_manager
         aws_args = dict(
@@ -58,9 +58,10 @@ class SpotManager(object):
         self.net_new_locker = Lock()
         self.net_new_spot_requests = UniqueIndex(("id",))  # SPOT REQUESTS FOR THIS SESSION
         self.watcher = None
-        if instance_manager.setup_required():
+        if instance_manager and instance_manager.setup_required():
             self._start_life_cycle_watcher()
-        self.pricing()
+        if not disable_prices:
+            self.pricing()
 
     def update_spot_requests(self, utility_required):
         spot_requests = self._get_managed_spot_requests()

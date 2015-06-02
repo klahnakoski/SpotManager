@@ -172,7 +172,7 @@ class SpotManager(object):
             if self.settings.max_percent_per_type < 1:
                 current_count = sum(1 for a in self.active if a.launch_specification.instance_type==p.type.instance_type)
                 all_count = len(self.active)
-                limit_total = (all_count * self.settings.max_percent_per_type - current_count) / (1 - self.settings.max_percent_per_type)
+                limit_total = int(Math.floor((all_count * self.settings.max_percent_per_type - current_count) / (1 - self.settings.max_percent_per_type)))
 
             num = Math.min(int(Math.round(net_new_utility / p.type.utility)), self.settings.max_requests_per_type, limit_total, 1000000)
             if num <= 0:
@@ -190,7 +190,21 @@ class SpotManager(object):
 
             for i in range(num):
                 bid = min_bid + (i * price_interval)
-                if bid < p.current_price or bid > remaining_budget:
+                if bid < p.current_price:
+                    Log.note(
+                        "Bid ${{bid}}/hour on {{type}} is over ${{current_price}}/hour",
+                        type=p.type.instance_type,
+                        bid=bid,
+                        current_price=p.current_price
+                    )
+                    continue
+                if bid > remaining_budget:
+                    Log.note(
+                        "Bid ${{bid}}/hour on {{type}} is over remaining budget of ${{remaining}}/hour",
+                        type=p.type.instance_type,
+                        bid=bid,
+                        remaining=remaining_budget
+                    )
                     continue
 
                 try:
@@ -324,7 +338,7 @@ class SpotManager(object):
         return output
 
     def _get_managed_instances(self):
-        requests = UniqueIndex(["instance_id"], data=self._get_managed_spot_requests())
+        requests = UniqueIndex(["instance_id"], data=self._get_managed_spot_requests().filter(lambda r: r.instance_id!=None))
         reservations = self.ec2_conn.get_all_instances()
 
         output = []

@@ -158,6 +158,7 @@ def percent(value, decimal=None, digits=None, places=None):
         left_of_decimal = int(math.ceil(math.log10(abs(value)))) + 2
         decimal = digits - left_of_decimal
 
+    decimal = coalesce(decimal, 0)
     right_of_decimal = max(decimal, 0)
     format = "{:." + unicode(right_of_decimal) + "%}"
     return format.format(__builtin__.round(value, decimal + 2))

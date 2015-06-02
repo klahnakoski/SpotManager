@@ -1,11 +1,14 @@
 {
-	"budget": 0.70,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"budget": 2.00,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.02,  //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 400,     //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
+	"max_requests_per_type": 2,
+	"max_percent_per_type": 0.50,
 	"bid_percentile": 0.95,     //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
 	"price_file": "resources/aws/prices.json",
 	"run_interval": "10minute", //HOW LONG BEFORE NEXT RUN
 	"availability_zone": "us-west-2c",
+	"product":"Linux/UNIX",
 	"aws": {
 		"$ref": "//~/private.json#aws_credentials"
 	},
@@ -29,7 +32,12 @@
 		{"instance_type": "c4.4xlarge", "utility": 15, "discount": -0.07, "drives": {"$ref":"#more_drives"}},
 		{"instance_type": "c4.8xlarge", "utility": 30, "discount": -0.07, "drives": {"$ref":"#more_drives"}},
 
-		{"instance_type": "cc2.8xlarge", "utility": 30, "discount": 0, "drives": {"$ref":"#3_ephemeral_drives"}},
+		{"instance_type": "cc2.8xlarge", "utility": 30, "discount": 0, "drives":[
+			// FOR SOME REASON, /dev/sdb IS ALREADY MAPPED TO /media/ephemeral0
+			{"path":"/data1", "device":"/dev/sdc"},
+			{"path":"/data2", "device":"/dev/sdd"},
+			{"path":"/data3", "device":"/dev/sde"}
+		]},
 
 		{"instance_type": "d2.xlarge", "utility": 15, "discount": 0, "drives":{"$ref":"#3_ephemeral_drives"}},
 		{"instance_type": "d2.2xlarge", "utility": 30, "discount": 0, "drives":{"$ref":"#3_ephemeral_drives"}},
@@ -83,7 +91,7 @@
 	},
 	"instance":{
 		"class":"examples.es.ESSpot",
-		"minimum_utility": 120,
+		"minimum_utility": 300,
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 			"user": "ec2-user",

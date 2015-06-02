@@ -89,22 +89,22 @@ class ESSpot(InstanceManager):
                 # https://github.com/elasticsearch/elasticsearch-cloud-aws
                 sudo('bin/plugin -install elasticsearch/elasticsearch-cloud-aws/2.4.1')
 
-        if not fabric_files.exists("/data1"):
-            self.conn = self.instance.connection
+        self.conn = self.instance.connection
 
-            #MOUNT AND FORMAT THE EBS VOLUME (list with `lsblk`)
-            for i, k in enumerate(volumes):
-
-                sudo('mkfs -t ext4 '+k.device)
+        #MOUNT AND FORMAT THE EBS VOLUMES (list with `lsblk`)
+        for i, k in enumerate(volumes):
+            if not fabric_files.exists(k.path):
+                sudo('yes | sudo mkfs -t ext4 '+k.device)
                 sudo('mkdir '+k.path)
+                sudo('sudo mount '+k.device+' '+k.path)
 
                 #ADD TO /etc/fstab SO AROUND AFTER REBOOT
                 sudo("sed -i '$ a\\"+k.device+"   "+k.path+"       ext4    defaults,nofail  0   2' /etc/fstab")
 
+        #TEST IT IS WORKING
+        sudo('mount -a')
 
-            #TEST IT IS WORKING
-            sudo('mount -a')
-
+        if not fabric_files.exists("/data1/logs"):
             sudo('mkdir /data1/logs')
             sudo('mkdir /data1/heapdump')
 

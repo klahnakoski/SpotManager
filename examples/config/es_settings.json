@@ -2,8 +2,8 @@
 	"budget": 2.00,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.02,  //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 400,     //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
-	"max_requests_per_type": 2,
-	"max_percent_per_type": 0.50,
+	"max_requests_per_type": 2,    //LIMIT THE NUMBER OF NET-NEW REQUESTS BY TYPE
+	"max_percent_per_type": 0.50,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES (USED TO MITIGATE
 	"bid_percentile": 0.95,     //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
 	"price_file": "resources/aws/prices.json",
 	"run_interval": "10minute", //HOW LONG BEFORE NEXT RUN

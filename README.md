@@ -55,7 +55,7 @@ ensure you do not go over the on-demand price, and prevents the SpotManager
 from bidding when everything is too expensive.
 * **`max_new_utility`** - The most utility that will be requested per run. Used to prevent spikes in instance count on light loads.
 * **`max_requests_per_type`** - Limit the number of requests per type.  Prevents all requests going to the cheapest instance type, consuming all available instances, and getting `az-constraint` on the remainder.  In the event of low availability, SpotManager will move on to the other types.
-* **`max_percent_per_type`** - Limit the total number of instances, as a percent.  Some workloads benefit from lot loosing all instances at once.  Distributing load over many instance types reduces the number of instances lost from any one price fluctuation.  *Default = 1.0 (100%, no limit)*
+* **`max_percent_per_type`** - Limit the total number of instances, as a percent, per availability zone.  Some workloads benefit from lot loosing all instances at once.  Distributing load over many instance types reduces the number of instances lost from any one price fluctuation.  *Default = 1.0 (100%, no limit)*
 * **`bid_percentile`** - The lowest price point that gives you the up-time you desire.
 * **`availability_zone`** - List of availability zones the SpotManager can work in 
 * **`product`** - For price lookup.  *Default 'Linux/UNIX (Amazon VPC)'*

@@ -116,7 +116,7 @@ and `mount` commands.
 ### Writing a InstanceManager
 
 Conceptually, an instance manager is very simple, with only three methods 
-you need to implement.  This repo has an [example in `./examples/etl.py`](https://github.com/klahnakoski/SpotManager/blob/master/examples/etl.py) 
+you need to implement.  This repo has an example [`./examples/etl.py`](https://github.com/klahnakoski/SpotManager/blob/master/examples/etl.py) 
 that you can review. 
 
 * **`required_utility()`** - function to determine how much utility is 

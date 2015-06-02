@@ -14,6 +14,8 @@ from collections import Mapping
 from pyLibrary import dot
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import unwrap, set_default, wrap, _get_attr
+from pyLibrary.times.dates import Date
+from pyLibrary.times.durations import SECOND
 
 
 def get_class(path):
@@ -177,3 +179,47 @@ def params_pack(params, *args):
 
     output = {str(k): settings[k] for k in params if k in settings}
     return output
+
+
+class cache(object):
+
+    """
+    :param func: ASSUME FIRST PARAMETER IS self
+    :param seconds: USE CACHE IF LAST CALL WAS LESS THAN seconds AGO
+    :return:
+    """
+
+    def __init__(self, seconds=None):
+        self.seconds = seconds
+
+    def __call__(self, func):
+        attr_name = "_cache_for_" + func.__name__
+        this = self
+
+        if this.seconds==None:
+            def output(self, *args, **kwargs):
+                if hasattr(self, attr_name):
+                    return getattr(self, attr_name)
+
+                value = func(self, *args, **kwargs)
+                setattr(self, attr_name, value)
+                return value
+
+            return output
+        else:
+            def output(self, *args, **kwargs):
+                now = Date.now()
+                if hasattr(self, attr_name):
+                    last_got, value = getattr(self, attr_name)
+                    if last_got.add(this.seconds * SECOND) > now:
+                        value = func(self, *args, **kwargs)
+                        setattr(self, attr_name, (now, value))
+                else:
+                    value = func(self, *args, **kwargs)
+                    setattr(self, attr_name, (now, value))
+
+                return value
+
+            return output
+
+

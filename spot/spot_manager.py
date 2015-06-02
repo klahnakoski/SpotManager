@@ -26,7 +26,7 @@ from pyLibrary.dot import unwrap, coalesce, DictList, wrap, listwrap, Dict
 from pyLibrary.dot.objects import dictwrap
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
-from pyLibrary.meta import use_settings, new_instance
+from pyLibrary.meta import use_settings, new_instance, cache
 from pyLibrary.queries import qb
 from pyLibrary.queries.expressions import CODE
 from pyLibrary.queries.unique_index import UniqueIndex
@@ -175,7 +175,7 @@ class SpotManager(object):
                 limit_total = int(Math.floor((all_count * self.settings.max_percent_per_type - current_count) / (1 - self.settings.max_percent_per_type)))
 
             num = Math.min(int(Math.round(net_new_utility / p.type.utility)), self.settings.max_requests_per_type, limit_total, 1000000)
-            if num <= 0:
+            if num < 0:
                 Log.note(
                     "{{type}} is over {{limit|percent}} of instances, no more requested",
                     limit=self.settings.max_percent_per_type,
@@ -333,6 +333,7 @@ class SpotManager(object):
         self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
         return remaining_budget, net_new_utility
 
+    @cache(seconds=5)
     def _get_managed_spot_requests(self):
         output = wrap([dictwrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
         return output

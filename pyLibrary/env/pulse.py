@@ -51,6 +51,7 @@ class Pulse(Thread):
         settings.callback = self._got_result
         settings.user = coalesce(settings.user, settings.username)
         settings.applabel = coalesce(settings.applable, settings.queue, settings.queue_name)
+        settings.topic = topic
 
         self.pulse = GenericConsumer(settings, connect=True, **settings)
         self.count = coalesce(start, 0)
@@ -79,18 +80,32 @@ class Pulse(Thread):
                 Log.error("Problem processing Pulse payload\n{{data|indent}}", data=data, cause=e)
 
     def _worker(self, please_stop):
+        def disconnect():
+            try:
+                self.target_queue.close()
+                Log.note("stop put into queue")
+            except:
+                pass
+
+            self.pulse.disconnect()
+            Log.note("pulse listener was given a disconnect()")
+
+        please_stop.on_go(disconnect)
+
         while not please_stop:
             try:
                 self.pulse.listen()
             except Exception, e:
                 if not please_stop:
                     Log.warning("pulse had problem", e)
+        Log.note("pulse listener is done")
+
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         Log.note("clean pulse exit")
         self.please_stop.go()
         try:
-            self.target_queue.add(Thread.STOP)
+            self.target_queue.close()
             Log.note("stop put into queue")
         except:
             pass

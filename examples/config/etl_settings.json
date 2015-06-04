@@ -1,9 +1,9 @@
 {
-	"budget": 2.00,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
-	"max_utility_price": 0.04,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
+	"budget": 0.25,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"max_utility_price": 0.02,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 40,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"max_requests_per_type": 5,
-	"max_percent_per_type": 1.0,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES.   DEFAULT = 1.0 (100%, NO LIMITS)
+	"max_percent_per_type": 0.70,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES.   DEFAULT = 1.0 (100%, NO LIMITS)
 	"price_file": "resources/aws/prices.json",
 	"run_interval": "10minute",
 	"bid_percentile": 0.8,      //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
@@ -13,24 +13,24 @@
 		"$ref": "//~/private.json#aws_credentials"
 	},
 	"utility":[
-//		{"instance_type": "m3.medium", "utility": 1},
-//		{"instance_type": "m3.large", "utility": 2},
+		{"instance_type": "m3.medium", "utility": 1},
+		{"instance_type": "m3.large", "utility": 2},
 		{"instance_type": "m3.xlarge", "utility": 4},
 		{"instance_type": "m3.2xlarge", "utility": 8},
 
-//		{"instance_type": "c4.large", "utility": 2},
+		{"instance_type": "c4.large", "utility": 2},
 		{"instance_type": "c4.xlarge", "utility": 4},
 		{"instance_type": "c4.2xlarge", "utility": 8},
 		{"instance_type": "c4.4xlarge", "utility": 16},
 		{"instance_type": "c4.8xlarge", "utility": 36},
 
-//		{"instance_type": "c3.large", "utility": 2},
+		{"instance_type": "c3.large", "utility": 2},
 		{"instance_type": "c3.xlarge", "utility": 4},
 		{"instance_type": "c3.2xlarge", "utility": 8},
 		{"instance_type": "c3.4xlarge", "utility": 16},
 		{"instance_type": "c3.8xlarge", "utility": 32},
 
-//		{"instance_type": "r3.large", "utility": 2},
+		{"instance_type": "r3.large", "utility": 2},
 		{"instance_type": "r3.xlarge", "utility": 4},
 		{"instance_type": "r3.2xlarge", "utility": 8},
 		{"instance_type": "r3.4xlarge", "utility": 16},

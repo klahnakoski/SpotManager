@@ -11,9 +11,10 @@ from __future__ import unicode_literals
 from __future__ import division
 from __future__ import absolute_import
 from collections import Mapping
+from types import FunctionType
 from pyLibrary import dot
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import unwrap, set_default, wrap, _get_attr
+from pyLibrary.dot import unwrap, set_default, wrap, _get_attr, Null
 from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import SECOND
 
@@ -189,6 +190,34 @@ class cache(object):
     :return:
     """
 
+    def __new__(cls, *args, **kwargs):
+        if len(args) == 1 and isinstance(args[0], FunctionType):
+            func = args[0]
+            attr_name = "_cache_for_" + func.__name__
+            if func.func_code.co_argcount == 0:
+                # NO self PARAM
+                def output():
+                    if hasattr(cls, attr_name):
+                        return getattr(cls, attr_name)
+
+                    value = func()
+                    setattr(cls, attr_name, value)
+                    return value
+
+                return output
+            else:
+                def output(self):
+                    if hasattr(self, attr_name):
+                        return getattr(self, attr_name)
+
+                    value = func(self)
+                    setattr(self, attr_name, value)
+                    return value
+
+                return output
+        else:
+            return object.__new__(cls)
+
     def __init__(self, seconds=None):
         self.seconds = seconds
 
@@ -196,30 +225,19 @@ class cache(object):
         attr_name = "_cache_for_" + func.__name__
         this = self
 
-        if this.seconds==None:
-            def output(self, *args, **kwargs):
-                if hasattr(self, attr_name):
-                    return getattr(self, attr_name)
-
-                value = func(self, *args, **kwargs)
-                setattr(self, attr_name, value)
-                return value
-
-            return output
-        else:
-            def output(self, *args, **kwargs):
-                now = Date.now()
-                if hasattr(self, attr_name):
-                    last_got, value = getattr(self, attr_name)
-                    if last_got.add(this.seconds * SECOND) > now:
-                        value = func(self, *args, **kwargs)
-                        setattr(self, attr_name, (now, value))
-                else:
+        def output(self, *args, **kwargs):
+            now = Date.now()
+            if hasattr(self, attr_name):
+                last_got, value = getattr(self, attr_name)
+                if last_got.add(this.seconds * SECOND) > now:
                     value = func(self, *args, **kwargs)
                     setattr(self, attr_name, (now, value))
+            else:
+                value = func(self, *args, **kwargs)
+                setattr(self, attr_name, (now, value))
 
-                return value
+            return value
 
-            return output
+        return output
 
 

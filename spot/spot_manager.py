@@ -168,13 +168,15 @@ class SpotManager(object):
                 )
                 continue
 
+            naive_number_needed = int(Math.round(net_new_utility / p.type.utility))
             limit_total = None
             if self.settings.max_percent_per_type < 1:
-                current_count = sum(1 for a in self.active if a.launch_specification.instance_type==p.type.instance_type and a.launch_specification.placement==p.availability_zone)
-                all_count = sum(1 for a in self.active if a.launch_specification.placement==p.availability_zone)
+                current_count = sum(1 for a in self.active if a.launch_specification.instance_type == p.type.instance_type and a.launch_specification.placement == p.availability_zone)
+                all_count = sum(1 for a in self.active if a.launch_specification.placement == p.availability_zone)
+                all_count = max(all_count, naive_number_needed)
                 limit_total = int(Math.floor((all_count * self.settings.max_percent_per_type - current_count) / (1 - self.settings.max_percent_per_type)))
 
-            num = Math.min(int(Math.round(net_new_utility / p.type.utility)), self.settings.max_requests_per_type, limit_total, 1000000)
+            num = Math.min(naive_number_needed, limit_total, self.settings.max_requests_per_type)
             if num < 0:
                 Log.note(
                     "{{type}} is over {{limit|percent}} of instances, no more requested",
@@ -315,6 +317,9 @@ class SpotManager(object):
             remove_list.append(s)
             net_new_utility += coalesce(s.markup.type.utility, 0)
             remaining_budget += coalesce(s.request.bid_price, s.markup.price_80, s.markup.current_price)
+
+        if not remove_list:
+            return remaining_budget, net_new_utility
 
         # SEND SHUTDOWN TO EACH INSTANCE
         Log.note("Shutdown {{instances}}", instances=remove_list.id)

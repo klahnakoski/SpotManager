@@ -557,6 +557,7 @@ class Log_usingThread(BaseLog):
                         self.logger.write(**log)
 
         self.thread = Thread("log thread", worker)
+        self.thread.parent.remove_child(self.thread)  # LOGGING WILL BE RESPONSIBLE FOR THREAD stop()
         self.thread.start()
 
     def write(self, template, params):
@@ -627,7 +628,7 @@ class Log_usingStream(BaseLog):
         value = expand_template(template, params)
         if isinstance(value, unicode):
             value = value.encode('utf8')
-        self.stream.write(value)
+        self.stream.write(value+b"\n")
 
     def stop(self):
         pass

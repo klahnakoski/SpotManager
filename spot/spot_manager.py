@@ -26,7 +26,7 @@ from pyLibrary.dot import unwrap, coalesce, DictList, wrap, listwrap, Dict
 from pyLibrary.dot.objects import dictwrap
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
-from pyLibrary.meta import use_settings, new_instance
+from pyLibrary.meta import use_settings, new_instance, cache
 from pyLibrary.queries import qb
 from pyLibrary.queries.expressions import CODE
 from pyLibrary.queries.unique_index import UniqueIndex
@@ -58,17 +58,20 @@ class SpotManager(object):
         self.net_new_locker = Lock()
         self.net_new_spot_requests = UniqueIndex(("id",))  # SPOT REQUESTS FOR THIS SESSION
         self.watcher = None
+        self.active = None
         if instance_manager and instance_manager.setup_required():
             self._start_life_cycle_watcher()
         if not disable_prices:
             self.pricing()
+
+        self.settings.max_percent_per_type=coalesce(self.settings.max_percent_per_type, 1)
 
     def update_spot_requests(self, utility_required):
         spot_requests = self._get_managed_spot_requests()
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
         all_instances = UniqueIndex("id", data=self._get_managed_instances())
-        active = wrap([r for r in spot_requests if r.status.code in RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE])
+        self.active = active = wrap([r for r in spot_requests if r.status.code in RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE])
 
         for a in active.copy():
             if a.status.code == "request-canceled-and-instance-running" and all_instances[a.instance_id] == None:
@@ -106,7 +109,10 @@ class SpotManager(object):
         if remaining_budget < 0:
             remaining_budget, net_new_utility = self.save_money(remaining_budget, net_new_utility)
 
-        if net_new_utility <= 0:
+        if net_new_utility < 0:
+            if self.settings.allowed_overage:
+                net_new_utility = Math.min(net_new_utility + self.settings.allowed_overage * utility_required, 0)
+
             net_new_utility = self.remove_instances(net_new_utility)
 
         if net_new_utility > 0:
@@ -149,7 +155,7 @@ class SpotManager(object):
                 continue
 
             # DO NOT BID HIGHER THAN WHAT WE ARE WILLING TO PAY
-            max_acceptable_price = p.type.utility * self.settings.max_utility_price
+            max_acceptable_price = p.type.utility * self.settings.max_utility_price + p.type.discount
             max_bid = Math.min(p.higher_price, max_acceptable_price)
             min_bid = p.price_80
 
@@ -162,8 +168,23 @@ class SpotManager(object):
                 )
                 continue
 
-            num = Math.min(int(Math.round(net_new_utility / p.type.utility)), coalesce(self.settings.max_requests_per_type, 10000000))
-            if num == 1:
+            naive_number_needed = int(Math.round(net_new_utility / p.type.utility))
+            limit_total = None
+            if self.settings.max_percent_per_type < 1:
+                current_count = sum(1 for a in self.active if a.launch_specification.instance_type == p.type.instance_type and a.launch_specification.placement == p.availability_zone)
+                all_count = sum(1 for a in self.active if a.launch_specification.placement == p.availability_zone)
+                all_count = max(all_count, naive_number_needed)
+                limit_total = int(Math.floor((all_count * self.settings.max_percent_per_type - current_count) / (1 - self.settings.max_percent_per_type)))
+
+            num = Math.min(naive_number_needed, limit_total, self.settings.max_requests_per_type)
+            if num < 0:
+                Log.note(
+                    "{{type}} is over {{limit|percent}} of instances, no more requested",
+                    limit=self.settings.max_percent_per_type,
+                    type=p.type.instance_type
+                )
+                continue
+            elif num == 1:
                 min_bid = Math.min(Math.max(p.current_price * 1.1, min_bid), max_acceptable_price)
                 price_interval = 0
             else:
@@ -171,7 +192,21 @@ class SpotManager(object):
 
             for i in range(num):
                 bid = min_bid + (i * price_interval)
-                if bid < p.current_price or bid > remaining_budget:
+                if bid < p.current_price:
+                    Log.note(
+                        "Bid ${{bid}}/hour on {{type}} is over current price of ${{current_price}}/hour",
+                        type=p.type.instance_type,
+                        bid=bid,
+                        current_price=p.current_price
+                    )
+                    continue
+                if bid > remaining_budget:
+                    Log.note(
+                        "Bid ${{bid}}/hour on {{type}} is over remaining budget of ${{remaining}}/hour",
+                        type=p.type.instance_type,
+                        bid=bid,
+                        remaining=remaining_budget
+                    )
                     continue
 
                 try:
@@ -190,7 +225,7 @@ class SpotManager(object):
                         price=bid
                     )
                     net_new_utility -= p.type.utility * len(new_requests)
-                    remaining_budget -= bid * len(new_requests)
+                    remaining_budget -= (bid - p.type.discount) * len(new_requests)
                     with self.net_new_locker:
                         for ii in new_requests:
                             self.net_new_spot_requests.add(ii)
@@ -201,6 +236,10 @@ class SpotManager(object):
                         reason=e.message,
                         cause=e
                     )
+
+                    if "Max spot instance count exceeded" in e.message:
+                        Log.note("No further spot requests will be attempted.")
+                        return net_new_utility, remaining_budget
 
         return net_new_utility, remaining_budget
 
@@ -277,7 +316,10 @@ class SpotManager(object):
                 break
             remove_list.append(s)
             net_new_utility += coalesce(s.markup.type.utility, 0)
-            remaining_budget += coalesce(s.markup.price_80, s.markup.current_price)
+            remaining_budget += coalesce(s.request.bid_price, s.markup.price_80, s.markup.current_price)
+
+        if not remove_list:
+            return remaining_budget, net_new_utility
 
         # SEND SHUTDOWN TO EACH INSTANCE
         Log.note("Shutdown {{instances}}", instances=remove_list.id)
@@ -296,16 +338,20 @@ class SpotManager(object):
         self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
         return remaining_budget, net_new_utility
 
+    @cache(seconds=5)
     def _get_managed_spot_requests(self):
         output = wrap([dictwrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
         return output
 
     def _get_managed_instances(self):
-        output = []
+        requests = UniqueIndex(["instance_id"], data=self._get_managed_spot_requests().filter(lambda r: r.instance_id!=None))
         reservations = self.ec2_conn.get_all_instances()
+
+        output = []
         for res in reservations:
             for instance in res.instances:
                 if instance.tags.get('Name', '').startswith(self.settings.ec2.instance.name) and instance._state.name == "running":
+                    instance.request = requests[instance.id]
                     output.append(dictwrap(instance))
         return wrap(output)
 
@@ -369,7 +415,7 @@ class SpotManager(object):
 
                 if give_up:
                     self.ec2_conn.cancel_spot_instance_requests(request_ids=give_up.id)
-                    Log.note("Cancelled spot requests {{spots}}", spots=give_up.id)
+                    Log.note("Cancelled spot requests {{spots}}, {{reasons}}", spots=give_up.id, reasons=give_up.status.code)
 
                 if not pending and not time_to_stop_trying and self.done_spot_requests:
                     Log.note("No more pending spot requests")
@@ -408,11 +454,13 @@ class SpotManager(object):
             Log.error("No network interface specifications found for {{availability_zone}}!", availability_zone=settings.availability_zone_group)
 
         settings.settings = None
-        settings.block_device_map = BlockDeviceMapping()
+        block_device_map = BlockDeviceMapping()
 
         # GENERIC BLOCK DEVICE MAPPING
         for dev, dev_settings in settings.block_device_map.items():
-            settings.block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
+            block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
+
+        settings.block_device_map = block_device_map
 
         # INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping
         num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]
@@ -555,7 +603,7 @@ class SpotManager(object):
                     next_token = None
                     while True:
                         resultset = self.ec2_conn.get_spot_price_history(
-                            product_description="Linux/UNIX (Amazon VPC)",
+                            product_description=coalesce(self.settings.product, "Linux/UNIX (Amazon VPC)"),
                             instance_type=instance_type,
                             availability_zone=zone,
                             start_time=start_at.format(ISO8601),

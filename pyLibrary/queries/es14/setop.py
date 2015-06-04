@@ -11,7 +11,7 @@ from __future__ import unicode_literals
 from __future__ import division
 from __future__ import absolute_import
 from collections import Mapping
-from pyLibrary import queries
+from pyLibrary import queries, convert
 
 from pyLibrary.collections.matrix import Matrix
 from pyLibrary.collections import AND, SUM, OR, UNION
@@ -88,7 +88,7 @@ def es_fieldop(es, query):
 
 
 def extract_rows(es, es_query, source, select, query):
-    with Timer("call to ES") as es_duration:
+    with Timer("call to ES") as call_timer:
         data = es09.util.post(es, es_query, query.limit)
 
     T = data.hits.hits
@@ -96,7 +96,7 @@ def extract_rows(es, es_query, source, select, query):
         # IF THERE IS A *, THEN INSERT THE EXTRA COLUMNS
         if s.value == "*":
             try:
-                column_names = set(c.name for c in query.frum.get_columns() if c.type not in ["object", "nested"] or c.useSource)
+                column_names = set(c.name for c in query.frum.get_columns() if (c.type not in ["object"] or c.useSource) and not c.depth)
             except Exception, e:
                 Log.warning("can not get columns", e)
                 column_names = UNION(*[[k for k, v in row.items()] for row in T.select(source)])
@@ -108,7 +108,7 @@ def extract_rows(es, es_query, source, select, query):
         formatter, groupby_formatter, mime_type = format_dispatch[query.format]
 
         output = formatter(T, select, source)
-        output.meta.es_response_time = es_duration.seconds
+        output.meta.es_response_time = call_timer.duration
         output.meta.content_type = mime_type
         output.meta.es_query = es_query
         return output
@@ -222,9 +222,9 @@ def format_cube(T, select, source):
                     matricies[s.name] = Matrix.wrap([unwraplist(t[source][s.value]) for t in T])
 
                 elif isinstance(s.value, basestring):  # fields
-                    matricies[s.name] = Matrix.wrap([unwraplist(t[source].get(s.value)) for t in unwrap(T)])
+                    matricies[s.name] = Matrix.wrap([unwraplist(t[source].get(s.value)) for t in T])
                 else:
-                    matricies[s.name] = Matrix.wrap([unwraplist(t[source].get(s.name)) for t in unwrap(T)])
+                    matricies[s.name] = Matrix.wrap([unwraplist(t[source].get(s.name)) for t in T])
         except Exception, e:
             Log.error("", e)
     cube = Cube(select, edges=[{"name": "rownum", "domain": {"type": "rownum", "min": 0, "max": len(T), "interval": 1}}], data=matricies)

@@ -194,7 +194,7 @@ class SpotManager(object):
                 bid = min_bid + (i * price_interval)
                 if bid < p.current_price:
                     Log.note(
-                        "Bid ${{bid}}/hour on {{type}} is over current price of ${{current_price}}/hour",
+                        "failed bid of ${{bid}}/hour on {{type}} is over current price of ${{current_price}}/hour",
                         type=p.type.instance_type,
                         bid=bid,
                         current_price=p.current_price
@@ -202,7 +202,7 @@ class SpotManager(object):
                     continue
                 if bid > remaining_budget:
                     Log.note(
-                        "Bid ${{bid}}/hour on {{type}} is over remaining budget of ${{remaining}}/hour",
+                        "Failed bid of ${{bid}}/hour on {{type}} is over remaining budget of ${{remaining}}/hour",
                         type=p.type.instance_type,
                         bid=bid,
                         remaining=remaining_budget

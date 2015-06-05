@@ -389,7 +389,7 @@ class SpotManager(object):
                             Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id, cause=e)
                         elif ERROR_ON_CALL_TO_SETUP in e:
                             if len(failed_attempts[r.id]) > 2:
-                                Log.warning("Problem with setup() of {{instance_id}}", instance_id=i.id, cause=failed_attempts[i.id])
+                                Log.warning("Problem with setup() of {{instance_id}}", instance_id=i.id, cause=failed_attempts[r.id])
                         else:
                             Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
 

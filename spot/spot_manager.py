@@ -369,9 +369,11 @@ class SpotManager(object):
                 for i, r in please_setup:
                     try:
                         p = self.settings.utility[i.instance_type]
+                        if p == None:
+                            Log.error("Can not setup unknown instance type {{type}}", type=i.instance_type)
                         i.markup = p
                         try:
-                            self.instance_manager.setup(i, p.utility)
+                            self.instance_manager.setup(i, coalesce(p.utility, 0))
                         except Exception, e:
                             failed_attempts[r.id] += [Except.wrap(e)]
                             Log.error(ERROR_ON_CALL_TO_SETUP, e)

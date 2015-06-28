@@ -9,7 +9,10 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from collections import Mapping
 
+from pyLibrary import convert
 from pyLibrary.collections import MAX
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import listwrap, Dict, wrap, literal_field, set_default, coalesce, Null, split_field, join_field
@@ -95,7 +98,7 @@ def es_aggsop(es, frum, query):
         else:
             output = aggop_formatter(decoders, result.aggregations, start, query, select)
 
-        output.meta.es_response_time = es_duration.seconds
+        output.meta.es_response_time = es_duration.duration
         output.meta.content_type = mime_type
         output.meta.es_query = es_query
         return output
@@ -125,7 +128,7 @@ class AggsDecoder(object):
             # THIS domain IS FROM A dimension THAT IS A SIMPLE LIST OF fields
             # JUST PULL THE FIELDS
             fields = e.domain.dimension.fields
-            if isinstance(fields, dict):
+            if isinstance(fields, Mapping):
                 return object.__new__(DimFieldDictDecoder, e)
             else:
                 return object.__new__(DimFieldListDecoder, e)
@@ -199,16 +202,26 @@ def _range_composer(edge, domain, es_query, to_float):
     else:
         calc = {"script": qb_expression_to_ruby(edge.value)}
 
-    if is_keyword(edge.value):
-        missing_range = {"or": [
-            {"range": {edge.value: {"lt": to_float(_min)}}},
-            {"range": {edge.value: {"gte": to_float(_max)}}}
-        ]}
+    if edge.allowNulls:
+        if is_keyword(edge.value):
+            missing_range = {"or": [
+                {"range": {edge.value: {"lt": to_float(_min)}}},
+                {"range": {edge.value: {"gte": to_float(_max)}}}
+            ]}
+        else:
+            missing_range = {"script": {"script": qb_expression_to_ruby({"or": [
+                {"lt": [edge.value, to_float(_min)]},
+                {"gt": [edge.value, to_float(_max)]},
+            ]})}}
+        missing_filter = set_default(
+            {"filter": {"or": [
+                missing_range,
+                {"missing": {"field": get_all_vars(edge.value)}}
+            ]}},
+            es_query
+        )
     else:
-        missing_range = {"script": {"script": qb_expression_to_ruby({"or": [
-            {"lt": [edge.value, to_float(_min)]},
-            {"gt": [edge.value, to_float(_max)]},
-        ]})}}
+        missing_filter = None
 
     return wrap({"aggs": {
         "_match": set_default(
@@ -216,13 +229,7 @@ def _range_composer(edge, domain, es_query, to_float):
             {"range": {"ranges": [{"from": to_float(p.min), "to": to_float(p.max)} for p in domain.partitions]}},
             es_query
         ),
-        "_missing": set_default(
-            {"filter": {"or": [
-                missing_range,
-                {"missing": {"field": get_all_vars(edge.value)}}
-            ]}},
-            es_query
-        ),
+        "_missing": missing_filter
     }})
 
 

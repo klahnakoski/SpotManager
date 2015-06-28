@@ -9,7 +9,9 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 from UserDict import UserDict
+from collections import Mapping
 from pyLibrary import dot
 from pyLibrary.collections import AND, reverse
 from pyLibrary.debugs.logs import Log
@@ -118,10 +120,11 @@ class Query(object):
             columns = self.frum.get_columns()
         else:
             columns = []
-        vars = get_all_vars(self)
+
+        vars = get_all_vars(self, exclude_where=True)  # WE WILL EXCLUDE where VARIABLES
         for c in columns:
             if c.name in vars and c.depth:
-                Log.error("This query, with variable {{var_name}} looks too deep", )
+                Log.error("This query, with variable {{var_name}} is too deep", var_name=c.name)
 
     @property
     def columns(self):
@@ -222,7 +225,7 @@ def _normalize_edge(edge, schema=None):
         if not edge.name and not isinstance(edge.value, basestring):
             Log.error("You must name compound edges: {{edge}}",  edge= edge)
 
-        if isinstance(edge.value, (dict, list)) and not edge.domain:
+        if isinstance(edge.value, (Mapping, list)) and not edge.domain:
             # COMPLEX EDGE IS SHORT HAND
             domain = _normalize_domain(schema=schema)
             domain.dimension = Dict(fields=edge.value)
@@ -288,7 +291,7 @@ def _normalize_domain(domain=None, schema=None):
     if not isinstance(domain.partitions, list):
         domain.partitions = list(domain.partitions)
 
-    return Domain(**unwrap(domain))
+    return Domain(**domain)
 
 
 def _normalize_window(window, schema=None):
@@ -332,7 +335,7 @@ def _map_term_using_schema(master, path, term, schema_edges):
         if isinstance(dimension, Dimension):
             domain = dimension.getDomain()
             if dimension.fields:
-                if isinstance(dimension.fields, dict):
+                if isinstance(dimension.fields, Mapping):
                     # EXPECTING A TUPLE
                     for local_field, es_field in dimension.fields.items():
                         local_value = v[local_field]
@@ -375,7 +378,7 @@ def _map_term_using_schema(master, path, term, schema_edges):
                 continue
             else:
                 Log.error("not expected")
-        elif isinstance(v, dict):
+        elif isinstance(v, Mapping):
             sub = _map_term_using_schema(master, path + [k], v, schema_edges[k])
             output.append(sub)
             continue
@@ -425,7 +428,7 @@ def _where_terms(master, where, schema):
     USE THE SCHEMA TO CONVERT DIMENSION NAMES TO ES FILTERS
     master - TOP LEVEL WHERE (FOR PLACING NESTED FILTERS)
     """
-    if isinstance(where, dict):
+    if isinstance(where, Mapping):
         if where.term:
             # MAP TERM
             try:
@@ -451,7 +454,7 @@ def _where_terms(master, where, schema):
                     except Exception, e:
                         Log.error("programmer error", e)
                     fields = domain.dimension.fields
-                    if isinstance(fields, dict):
+                    if isinstance(fields, Mapping):
                         or_agg = []
                         for vv in v:
                             and_agg = []
@@ -504,7 +507,12 @@ sort_direction = {
 }
 
 
-def get_all_vars(query):
+def get_all_vars(query, exclude_where=False):
+    """
+    :param query:
+    :param exclude_where: Sometimes we do not what to look at the where clause
+    :return: all variables in use by query
+    """
     output = []
     for s in listwrap(query.select):
         output.extend(select_get_all_vars(s))
@@ -512,7 +520,8 @@ def get_all_vars(query):
         output.extend(edges_get_all_vars(s))
     for s in listwrap(query.groupby):
         output.extend(edges_get_all_vars(s))
-    output.extend(expressions.get_all_vars(query.where))
+    if not exclude_where:
+        output.extend(expressions.get_all_vars(query.where))
     return output
 
 
@@ -566,7 +575,7 @@ def where_get_all_vars(w):
             return [val.field]
 
     if key in ["gte", "gt", "eq", "ne", "term", "terms", "lt", "lte", "range", "prefix"]:
-        if not isinstance(val, dict):
+        if not isinstance(val, Mapping):
             Log.error("Expecting `{{key}}` to have a dict value, not a {{type}}",
                 key= key,
                 type= val.__class__.__name__)

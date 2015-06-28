@@ -8,6 +8,7 @@
 #
 
 # MIMICS THE requests API (http://docs.python-requests.org/en/latest/)
+# DEMANDS data IS A JSON-SERIALIZABLE STRUCTURE
 # WITH ADDED default_headers THAT CAN BE SET USING pyLibrary.debugs.settings
 # EG
 # {"debug.constants":{
@@ -19,6 +20,7 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 from copy import copy
 
 from requests import sessions, Response
@@ -40,6 +42,10 @@ _warning_sent = False
 def request(method, url, **kwargs):
     """
      JUST LIKE requests.request() BUT WITH DEFAULT HEADERS AND FIXES
+     DEMANDS data IS ONE OF:
+      * A JSON-SERIALIZABLE STRUCTURE, OR
+      * LIST OF JSON-SERIALIZABLE STRUCTURES, OR
+      * None
 
      THE BYTE_STRINGS (b"") ARE NECESSARY TO PREVENT httplib.py FROM **FREAKING OUT**
      IT APPEARS requests AND httplib.py SIMPLY CONCATENATE STRINGS BLINDLY, WHICH
@@ -59,8 +65,19 @@ def request(method, url, **kwargs):
 
     if isinstance(url, unicode):
         # httplib.py WILL **FREAK OUT** IF IT SEES ANY UNICODE
-        # IT APPEARS TO
         url = url.encode("ascii")
+
+    # if "data" not in kwargs:
+    #     pass
+    # elif kwargs["data"] == None:
+    #     pass
+    # elif isinstance(kwargs["data"], basestring):
+    #     Log.error("Expecting `data` to be a structure")
+    # elif isinstance(kwargs["data"], list):
+    #     #CR-DELIMITED JSON IS ALSO ACCEPTABLE
+    #     kwargs["data"] = b"\n".join(convert.unicode2utf8(convert.value2json(d)) for d in kwargs["data"])
+    # else:
+    #     kwargs["data"] = convert.unicode2utf8(convert.value2json(kwargs["data"]))
 
     _to_ascii_dict(kwargs)
     timeout = kwargs[b'timeout'] = coalesce(kwargs.get(b'timeout'), default_timeout)
@@ -68,6 +85,8 @@ def request(method, url, **kwargs):
     try:
         if len(coalesce(kwargs.get(b"data"))) > 1000:
             compressed = convert.bytes2zip(kwargs[b"data"])
+            if b"headers" not in kwargs:
+                kwargs[b"headers"] = {}
             kwargs[b"headers"][b'content-encoding'] = b'gzip'
             kwargs[b"data"] = compressed
 
@@ -78,9 +97,10 @@ def request(method, url, **kwargs):
             return session.request(method=method, url=url, **kwargs)
     except Exception, e:
         if " Read timed out." in e:
-            Log.error("Timeout failure (timeout was {{timeout}}",  timeout= timeout, cause=e)
+            Log.error("Timeout failure (timeout was {{timeout}}", timeout=timeout, cause=e)
         else:
             Log.error("Request failure", e)
+
 
 def _to_ascii_dict(headers):
     if headers is None:

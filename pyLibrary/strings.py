@@ -10,13 +10,16 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+
+from collections import Mapping
 from datetime import timedelta, date
 from datetime import datetime as builtin_datetime
 import re
 import math
 import __builtin__
 
-from pyLibrary.dot import coalesce, wrap, Dict
+from pyLibrary.dot import coalesce, wrap
 
 
 def datetime(value):
@@ -155,6 +158,7 @@ def percent(value, decimal=None, digits=None, places=None):
         left_of_decimal = int(math.ceil(math.log10(abs(value)))) + 2
         decimal = digits - left_of_decimal
 
+    decimal = coalesce(decimal, 0)
     right_of_decimal = max(decimal, 0)
     format = "{:." + unicode(right_of_decimal) + "%}"
     return format.format(__builtin__.round(value, decimal + 2))
@@ -207,16 +211,16 @@ def trim(value):
     return strip(value)
 
 
-def between(value, prefix, suffix):
+def between(value, prefix, suffix, start=0):
     value = toString(value)
     if prefix == None:
-        e = value.find(suffix)
+        e = value.find(suffix, start)
         if e == -1:
             return None
         else:
             return value[:e]
 
-    s = value.find(prefix)
+    s = value.find(prefix, start)
     if s == -1:
         return None
     s += len(prefix)
@@ -225,7 +229,7 @@ def between(value, prefix, suffix):
     if e == -1:
         return None
 
-    s = value.rfind(prefix, 0, e) + len(prefix)  # WE KNOW THIS EXISTS, BUT THERE MAY BE A RIGHT-MORE ONE
+    s = value.rfind(prefix, start, e) + len(prefix)  # WE KNOW THIS EXISTS, BUT THERE MAY BE A RIGHT-MORE ONE
 
     return value[s:e]
 
@@ -331,7 +335,7 @@ def _expand(template, seq):
     """
     if isinstance(template, basestring):
         return _simple_expand(template, seq)
-    elif isinstance(template, dict):
+    elif isinstance(template, Mapping):
         template = wrap(template)
         assert template["from"], "Expecting template to have 'from' attribute"
         assert template.template, "Expecting template to have 'template' attribute"
@@ -385,7 +389,8 @@ def _simple_expand(template, seq):
                 if not Log:
                     _late_import()
 
-                Log.warning("Can not expand " + "|".join(ops) + " in template: {{template|json}}",
+                Log.warning(
+                    "Can not expand " + "|".join(ops) + " in template: {{template|json}}",
                     template=template,
                     cause=e
                 )
@@ -414,14 +419,19 @@ def deformat(value):
 
 
 def toString(val):
+    if not convert:
+        _late_import()
+
     if val == None:
         return ""
-    elif isinstance(val, (dict, list, set)):
+    elif isinstance(val, (Mapping, list, set)):
         from pyLibrary.jsons.encoder import json_encoder
 
         return json_encoder(val, pretty=True)
     elif hasattr(val, "__json__"):
         return val.__json__()
+    elif isinstance(val, Duration):
+        return unicode(round(val.seconds, places=4)) + " seconds"
     elif isinstance(val, timedelta):
         duration = val.total_seconds()
         return unicode(round(duration, 3)) + " seconds"
@@ -563,17 +573,20 @@ def utf82unicode(value):
 convert = None
 Log = None
 Except = None
-
+Duration = None
 
 def _late_import():
     global convert
     global Log
     global Except
+    global Duration
 
     from pyLibrary import convert
     from pyLibrary.debugs.logs import Log, Except
+    from pyLibrary.times.durations import Duration
 
     _ = convert
     _ = Log
     _ = Except
+    _ = Duration
 

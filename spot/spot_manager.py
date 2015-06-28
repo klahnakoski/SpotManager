@@ -20,13 +20,13 @@ from boto.utils import ISO8601
 from pyLibrary import convert
 from pyLibrary.collections import SUM
 from pyLibrary.debugs import startup
-from pyLibrary.debugs.logs import Log
+from pyLibrary.debugs.logs import Log, Except
 from pyLibrary.debugs.startup import SingleInstance
 from pyLibrary.dot import unwrap, coalesce, DictList, wrap, listwrap, Dict
 from pyLibrary.dot.objects import dictwrap
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
-from pyLibrary.meta import use_settings, new_instance
+from pyLibrary.meta import use_settings, new_instance, cache
 from pyLibrary.queries import qb
 from pyLibrary.queries.expressions import CODE
 from pyLibrary.queries.unique_index import UniqueIndex
@@ -42,7 +42,7 @@ ERROR_ON_CALL_TO_SETUP="Problem with setup()"
 
 class SpotManager(object):
     @use_settings
-    def __init__(self, instance_manager, settings):
+    def __init__(self, instance_manager, disable_prices=False, settings=None):
         self.settings = settings
         self.instance_manager = instance_manager
         aws_args = dict(
@@ -58,16 +58,20 @@ class SpotManager(object):
         self.net_new_locker = Lock()
         self.net_new_spot_requests = UniqueIndex(("id",))  # SPOT REQUESTS FOR THIS SESSION
         self.watcher = None
-        if instance_manager.setup_required():
+        self.active = None
+        if instance_manager and instance_manager.setup_required():
             self._start_life_cycle_watcher()
-        self.pricing()
+        if not disable_prices:
+            self.pricing()
+
+        self.settings.max_percent_per_type=coalesce(self.settings.max_percent_per_type, 1)
 
     def update_spot_requests(self, utility_required):
         spot_requests = self._get_managed_spot_requests()
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
         all_instances = UniqueIndex("id", data=self._get_managed_instances())
-        active = wrap([r for r in spot_requests if r.status.code in RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE])
+        self.active = active = wrap([r for r in spot_requests if r.status.code in RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE])
 
         for a in active.copy():
             if a.status.code == "request-canceled-and-instance-running" and all_instances[a.instance_id] == None:
@@ -77,19 +81,17 @@ class SpotManager(object):
         current_spending = 0
         for a in active:
             about = self.price_lookup[a.launch_specification.instance_type, a.launch_specification.placement]
-            if about == None:
-                # HAPPENS WHEN THE OTHER SpotManger INSTANCE FAILS TO NAME THE REQUEST, OR THOSE PESKY HUMANS CAUSE TROUBLE
-                Log.error("It would seem there is an unnamed spot request, and it is not a valid instance type.  Who does it belong to ")
+            discount = coalesce(about.type.discount, 0)
             Log.note(
                 "Active Spot Request {{id}}: {{type}} {{instance_id}} in {{zone}} @ {{price|round(decimal=4)}}",
                 id=a.id,
                 type=a.launch_specification.instance_type,
                 zone=a.launch_specification.placement,
                 instance_id=a.instance_id,
-                price=a.price - about.type.discount
+                price=a.price - discount
             )
-            used_budget += a.price - about.type.discount
-            current_spending += about.current_price - about.type.discount
+            used_budget += a.price - discount
+            current_spending += coalesce(about.current_price, a.price) - discount
 
         Log.note(
             "Total Exposure: ${{budget|round(decimal=4)}}/hour (current price: ${{current|round(decimal=4)}}/hour)",
@@ -153,7 +155,7 @@ class SpotManager(object):
                 continue
 
             # DO NOT BID HIGHER THAN WHAT WE ARE WILLING TO PAY
-            max_acceptable_price = p.type.utility * self.settings.max_utility_price
+            max_acceptable_price = p.type.utility * self.settings.max_utility_price + p.type.discount
             max_bid = Math.min(p.higher_price, max_acceptable_price)
             min_bid = p.price_80
 
@@ -166,8 +168,23 @@ class SpotManager(object):
                 )
                 continue
 
-            num = Math.min(int(Math.round(net_new_utility / p.type.utility)), coalesce(self.settings.max_requests_per_type, 10000000))
-            if num == 1:
+            naive_number_needed = int(Math.round(net_new_utility / p.type.utility))
+            limit_total = None
+            if self.settings.max_percent_per_type < 1:
+                current_count = sum(1 for a in self.active if a.launch_specification.instance_type == p.type.instance_type and a.launch_specification.placement == p.availability_zone)
+                all_count = sum(1 for a in self.active if a.launch_specification.placement == p.availability_zone)
+                all_count = max(all_count, naive_number_needed)
+                limit_total = int(Math.floor((all_count * self.settings.max_percent_per_type - current_count) / (1 - self.settings.max_percent_per_type)))
+
+            num = Math.min(naive_number_needed, limit_total, self.settings.max_requests_per_type)
+            if num < 0:
+                Log.note(
+                    "{{type}} is over {{limit|percent}} of instances, no more requested",
+                    limit=self.settings.max_percent_per_type,
+                    type=p.type.instance_type
+                )
+                continue
+            elif num == 1:
                 min_bid = Math.min(Math.max(p.current_price * 1.1, min_bid), max_acceptable_price)
                 price_interval = 0
             else:
@@ -175,7 +192,21 @@ class SpotManager(object):
 
             for i in range(num):
                 bid = min_bid + (i * price_interval)
-                if bid < p.current_price or bid > remaining_budget:
+                if bid < p.current_price:
+                    Log.note(
+                        "failed bid of ${{bid}}/hour on {{type}} is over current price of ${{current_price}}/hour",
+                        type=p.type.instance_type,
+                        bid=bid,
+                        current_price=p.current_price
+                    )
+                    continue
+                if bid > remaining_budget:
+                    Log.note(
+                        "Failed bid of ${{bid}}/hour on {{type}} is over remaining budget of ${{remaining}}/hour",
+                        type=p.type.instance_type,
+                        bid=bid,
+                        remaining=remaining_budget
+                    )
                     continue
 
                 try:
@@ -194,7 +225,7 @@ class SpotManager(object):
                         price=bid
                     )
                     net_new_utility -= p.type.utility * len(new_requests)
-                    remaining_budget -= bid * len(new_requests)
+                    remaining_budget -= (bid - p.type.discount) * len(new_requests)
                     with self.net_new_locker:
                         for ii in new_requests:
                             self.net_new_spot_requests.add(ii)
@@ -285,7 +316,10 @@ class SpotManager(object):
                 break
             remove_list.append(s)
             net_new_utility += coalesce(s.markup.type.utility, 0)
-            remaining_budget += coalesce(s.markup.price_80, s.markup.current_price)
+            remaining_budget += coalesce(s.request.bid_price, s.markup.price_80, s.markup.current_price)
+
+        if not remove_list:
+            return remaining_budget, net_new_utility
 
         # SEND SHUTDOWN TO EACH INSTANCE
         Log.note("Shutdown {{instances}}", instances=remove_list.id)
@@ -304,16 +338,20 @@ class SpotManager(object):
         self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
         return remaining_budget, net_new_utility
 
+    @cache(seconds=5)
     def _get_managed_spot_requests(self):
         output = wrap([dictwrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
         return output
 
     def _get_managed_instances(self):
-        output = []
+        requests = UniqueIndex(["instance_id"], data=self._get_managed_spot_requests().filter(lambda r: r.instance_id!=None))
         reservations = self.ec2_conn.get_all_instances()
+
+        output = []
         for res in reservations:
             for instance in res.instances:
                 if instance.tags.get('Name', '').startswith(self.settings.ec2.instance.name) and instance._state.name == "running":
+                    instance.request = requests[instance.id]
                     output.append(dictwrap(instance))
         return wrap(output)
 
@@ -331,11 +369,13 @@ class SpotManager(object):
                 for i, r in please_setup:
                     try:
                         p = self.settings.utility[i.instance_type]
+                        if p == None:
+                            Log.error("Can not setup unknown instance type {{type}}", type=i.instance_type)
                         i.markup = p
                         try:
-                            self.instance_manager.setup(i, p.utility)
+                            self.instance_manager.setup(i, coalesce(p.utility, 0))
                         except Exception, e:
-                            failed_attempts[r.id] += [e]
+                            failed_attempts[r.id] += [Except.wrap(e)]
                             Log.error(ERROR_ON_CALL_TO_SETUP, e)
                         i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
                         with self.net_new_locker:
@@ -350,8 +390,8 @@ class SpotManager(object):
                                 self.net_new_spot_requests.remove(r.id)
                             Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id, cause=e)
                         elif ERROR_ON_CALL_TO_SETUP in e:
-                            if failed_attempts[r.id] > 2:
-                                Log.warning("Problem with setup() of {{instance_id}}", instance_id=i.id, cause=failed_attempts[i.id])
+                            if len(failed_attempts[r.id]) > 2:
+                                Log.warning("Problem with setup() of {{instance_id}}", instance_id=i.id, cause=failed_attempts[r.id])
                         else:
                             Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
 
@@ -377,7 +417,7 @@ class SpotManager(object):
 
                 if give_up:
                     self.ec2_conn.cancel_spot_instance_requests(request_ids=give_up.id)
-                    Log.note("Cancelled spot requests {{spots}}", spots=give_up.id)
+                    Log.note("Cancelled spot requests {{spots}}, {{reasons}}", spots=give_up.id, reasons=give_up.status.code)
 
                 if not pending and not time_to_stop_trying and self.done_spot_requests:
                     Log.note("No more pending spot requests")
@@ -483,7 +523,7 @@ class SpotManager(object):
                         {"value": "price", "aggregate": "max"},
                         {"aggregate": "count"}
                     ],
-                    "where": {"gt": {"timestamp": Date.now().floor(HOUR) - DAY}},
+                    "where": {"gt": {"expire": Date.now().floor(HOUR) - DAY}},
                     "window": {
                         "name": "current_price", "value": CODE("rows.last().price"), "edges": ["availability_zone", "instance_type"], "sort": "time",
                     }
@@ -565,7 +605,7 @@ class SpotManager(object):
                     next_token = None
                     while True:
                         resultset = self.ec2_conn.get_spot_price_history(
-                            product_description="Linux/UNIX (Amazon VPC)",
+                            product_description=coalesce(self.settings.product, "Linux/UNIX (Amazon VPC)"),
                             instance_type=instance_type,
                             availability_zone=zone,
                             start_time=start_at.format(ISO8601),

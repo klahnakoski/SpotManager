@@ -10,12 +10,14 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 import math
 import platform
 import re
+from pyLibrary.maths import Math
 
 try:
     import pytz
@@ -47,7 +49,7 @@ class Date(object):
     def floor(self, duration=None):
         if duration is None:  # ASSUME DAY
             return Date(math.floor(self.milli / 86400000) * 86400000)
-        elif duration.milli % (7*86400000) ==0:
+        elif duration.milli % (7 * 86400000) == 0:
             offset = 4*86400000
             return Date(math.floor((self.milli+offset) / duration.milli) * duration.milli - offset)
         elif not duration.month:
@@ -61,7 +63,8 @@ class Date(object):
             return self.value.strftime(format)
         except Exception, e:
             from pyLibrary.debugs.logs import Log
-            Log.error("Can not format {{value}} with {{format}}",  value= self.value, format=format, cause=e)
+
+            Log.error("Can not format {{value}} with {{format}}", value=self.value, format=format, cause=e)
 
     @property
     def milli(self):
@@ -144,13 +147,16 @@ class Date(object):
     def __str__(self):
         return str(self.value)
 
+    def __repr__(self):
+        return Date(self.value.__repr__())
+
     def __sub__(self, other):
         if other == None:
             return None
         if isinstance(other, datetime):
-            return Duration(self.milli-Date(other).milli)
+            return Duration(self.unix - Date(other).unix)
         if isinstance(other, Date):
-            return Duration(self.milli-other.milli)
+            return Duration(self.unix - other.unix)
 
         return self.add(-other)
 
@@ -189,6 +195,15 @@ def _cpython_value2date(*args):
                     output = datetime.utcfromtimestamp(a0 / 1000)
                 else:
                     output = datetime.utcfromtimestamp(a0)
+            elif isinstance(a0, basestring) and len(a0) in [9, 10, 12, 13] and Math.is_integer(a0):
+                a0 = long(a0)
+                if a0 == 9999999999000:  # PYPY BUG https://bugs.pypy.org/issue1697
+                    output = Date.MAX
+                elif a0 > 9999999999:    # WAY TOO BIG IF IT WAS A UNIX TIMESTAMP
+                    output = datetime.utcfromtimestamp(a0 / 1000)
+                else:
+                    output = datetime.utcfromtimestamp(a0)
+
             elif isinstance(a0, basestring):
                 output = unicode2datetime(a0)
             else:
@@ -386,6 +401,7 @@ def unicode2datetime(value, format=None):
         "%d%B%Y",
         "%d%B%y",
         "%Y%m%d%H%M%S",
+        "%Y%m%dT%H%M%S",
         "%d%m%Y%H%M%S",
         "%d%m%y%H%M%S",
         "%d%b%Y%H%M%S",

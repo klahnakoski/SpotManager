@@ -11,6 +11,7 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 
 from datetime import timedelta
 import logging
@@ -33,6 +34,7 @@ class Log_usingLogger(BaseLog):
         # TURNS OUT LOGGERS ARE REALLY SLOW TOO
         self.queue = threads.Queue("log to classic logger", max=10000, silent=True)
         self.thread = Thread("log to logger", time_delta_pusher, appender=self.logger.info, queue=self.queue, interval=timedelta(seconds=0.3))
+        self.thread.parent.remove_child(self.thread)  # LOGGING WILL BE RESPONSIBLE FOR THREAD stop()
         self.thread.start()
 
     def write(self, template, params):

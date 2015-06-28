@@ -9,9 +9,14 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+from collections import Mapping
+from types import FunctionType
 from pyLibrary import dot
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import unwrap, set_default, wrap, _get_attr
+from pyLibrary.dot import unwrap, set_default, wrap, _get_attr, Null
+from pyLibrary.times.dates import Date
+from pyLibrary.times.durations import SECOND
 
 
 def get_class(path):
@@ -54,7 +59,7 @@ def new_instance(settings):
         pass
 
     try:
-        return constructor(**unwrap(settings))
+        return constructor(**settings)
     except Exception, e:
         Log.error("Can not create instance of {{name}}",  name= ".".join(path), cause=e)
 
@@ -119,7 +124,7 @@ def use_settings(func):
             if func.func_name == "__init__" and "settings" in kwargs:
                 packed = params_pack(params, kwargs, dot.zip(params[1:], args[1:]), kwargs["settings"], defaults)
                 return func(args[0], **packed)
-            elif func.func_name == "__init__" and len(args) == 2 and len(kwargs) == 0 and isinstance(args[1], dict):
+            elif func.func_name == "__init__" and len(args) == 2 and len(kwargs) == 0 and isinstance(args[1], Mapping):
                 # ASSUME SECOND UNNAMED PARAM IS settings
                 packed = params_pack(params, args[1], defaults)
                 return func(args[0], **packed)
@@ -130,18 +135,18 @@ def use_settings(func):
             elif params[0] == "self" and "settings" in kwargs:
                 packed = params_pack(params, kwargs, dot.zip(params[1:], args[1:]), kwargs["settings"], defaults)
                 return func(args[0], **packed)
-            elif params[0] == "self" and len(args) == 2 and len(kwargs) == 0 and isinstance(args[1], dict):
+            elif params[0] == "self" and len(args) == 2 and len(kwargs) == 0 and isinstance(args[1], Mapping):
                 # ASSUME SECOND UNNAMED PARAM IS settings
                 packed = params_pack(params, args[1], defaults)
                 return func(args[0], **packed)
             elif params[0] == "self":
                 packed = params_pack(params, kwargs, dot.zip(params[1:], args[1:]), defaults)
                 return func(args[0], **packed)
-            elif len(args) == 1 and len(kwargs) == 0 and isinstance(args[0], dict):
+            elif len(args) == 1 and len(kwargs) == 0 and isinstance(args[0], Mapping):
                 # ASSUME SINGLE PARAMETER IS A SETTING
                 packed = params_pack(params, args[0], defaults)
                 return func(**packed)
-            elif "settings" in kwargs and isinstance(kwargs["settings"], dict):
+            elif "settings" in kwargs and isinstance(kwargs["settings"], Mapping):
                 # PUT args INTO SETTINGS
                 packed = params_pack(params, kwargs, dot.zip(params, args), kwargs["settings"], defaults)
                 return func(**packed)
@@ -175,3 +180,64 @@ def params_pack(params, *args):
 
     output = {str(k): settings[k] for k in params if k in settings}
     return output
+
+
+class cache(object):
+
+    """
+    :param func: ASSUME FIRST PARAMETER IS self
+    :param seconds: USE CACHE IF LAST CALL WAS LESS THAN seconds AGO
+    :return:
+    """
+
+    def __new__(cls, *args, **kwargs):
+        if len(args) == 1 and isinstance(args[0], FunctionType):
+            func = args[0]
+            attr_name = "_cache_for_" + func.__name__
+            if func.func_code.co_argcount == 0:
+                # NO self PARAM
+                def output():
+                    if hasattr(cls, attr_name):
+                        return getattr(cls, attr_name)
+
+                    value = func()
+                    setattr(cls, attr_name, value)
+                    return value
+
+                return output
+            else:
+                def output(self):
+                    if hasattr(self, attr_name):
+                        return getattr(self, attr_name)
+
+                    value = func(self)
+                    setattr(self, attr_name, value)
+                    return value
+
+                return output
+        else:
+            return object.__new__(cls)
+
+    def __init__(self, seconds=None):
+        self.seconds = seconds
+
+    def __call__(self, func):
+        attr_name = "_cache_for_" + func.__name__
+        this = self
+
+        def output(self, *args, **kwargs):
+            now = Date.now()
+            if hasattr(self, attr_name):
+                last_got, value = getattr(self, attr_name)
+                if last_got.add(this.seconds * SECOND) > now:
+                    value = func(self, *args, **kwargs)
+                    setattr(self, attr_name, (now, value))
+            else:
+                value = func(self, *args, **kwargs)
+                setattr(self, attr_name, (now, value))
+
+            return value
+
+        return output
+
+

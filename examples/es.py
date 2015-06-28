@@ -9,7 +9,7 @@
 from __future__ import unicode_literals
 from __future__ import division
 
-from fabric.context_managers import cd, hide
+from fabric.context_managers import cd, hide, shell_env
 from fabric.contrib import files as fabric_files
 from fabric.operations import sudo, run, put
 from fabric.state import env
@@ -46,15 +46,19 @@ class ESSpot(InstanceManager):
         with self.locker:
             self.instance = instance
             gigabytes = Math.floor(utility, 15)
-            Log.note("setup {{instance}}",  instance= instance.id)
+            Log.note("setup {{instance}}", instance=instance.id)
             with hide('output'):
                 self._config_fabric(instance)
                 self._install_es(gigabytes)
             self._start_es()
 
+            with hide('output'):
+                self._install_indexer()
+                self._start_indexer()
+
     def _config_fabric(self, instance):
         if not instance.ip_address:
-            Log.error("Expecting an ip address for {{instance_id}}",  instance_id= instance.id)
+            Log.error("Expecting an ip address for {{instance_id}}", instance_id=instance.id)
 
         for k, v in self.settings.connect.items():
             env[k] = v
@@ -85,22 +89,22 @@ class ESSpot(InstanceManager):
                 # https://github.com/elasticsearch/elasticsearch-cloud-aws
                 sudo('bin/plugin -install elasticsearch/elasticsearch-cloud-aws/2.4.1')
 
-        if not fabric_files.exists("/data1"):
-            self.conn = self.instance.connection
+        self.conn = self.instance.connection
 
-            #MOUNT AND FORMAT THE EBS VOLUME (list with `lsblk`)
-            for i, k in enumerate(volumes):
-
-                sudo('mkfs -t ext4 '+k.device)
+        #MOUNT AND FORMAT THE EBS VOLUMES (list with `lsblk`)
+        for i, k in enumerate(volumes):
+            if not fabric_files.exists(k.path):
+                sudo('yes | sudo mkfs -t ext4 '+k.device)
                 sudo('mkdir '+k.path)
+                sudo('sudo mount '+k.device+' '+k.path)
 
                 #ADD TO /etc/fstab SO AROUND AFTER REBOOT
                 sudo("sed -i '$ a\\"+k.device+"   "+k.path+"       ext4    defaults,nofail  0   2' /etc/fstab")
 
+        #TEST IT IS WORKING
+        sudo('mount -a')
 
-            #TEST IT IS WORKING
-            sudo('mount -a')
-
+        if not fabric_files.exists("/data1/logs"):
             sudo('mkdir /data1/logs')
             sudo('mkdir /data1/heapdump')
 
@@ -131,4 +135,42 @@ class ESSpot(InstanceManager):
 
         with cd("/usr/local/elasticsearch/"):
             sudo("/home/ec2-user/start_es.sh")
+
+    def _install_indexer(self):
+        Log.note("Install indexer at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
+        if not fabric_files.exists("/usr/bin/pip"):
+            sudo("yum -y install python27")
+
+            run("rm -fr /home/ec2-user/temp")
+            run("mkdir  /home/ec2-user/temp")
+            with cd("/home/ec2-user/temp"):
+                run("wget https://bootstrap.pypa.io/get-pip.py")
+                sudo("python27 get-pip.py")
+
+                sudo("ln -s /usr/local/bin/pip /usr/bin/pip")
+
+        if not fabric_files.exists("/home/ec2-user/TestLog-ETL/"):
+            with cd("/home/ec2-user"):
+                sudo("yum -y install git")
+                run("git clone https://github.com/klahnakoski/TestLog-ETL.git")
+
+        with cd("/home/ec2-user/TestLog-ETL/"):
+            run("git checkout push-to-es")
+            sudo("pip install -r requirements.txt")
+
+        put("~/private_active_data_etl.json", "/home/ec2-user/private.json")
+
+    def _start_indexer(self):
+        with cd("/home/ec2-user/TestLog-ETL/"):
+            run("git pull origin push-to-es")
+
+            with shell_env(PYTHONPATH="."):
+                self._run_remote("python27 testlog_etl/push_to_es.py --settings=resources/settings/push_to_es_staging_settings.json", "push_to_es")
+
+    def _run_remote(self, command, name):
+        File("./results/temp/"+name+".sh").write("nohup "+command +" >& /dev/null < /dev/null &\nsleep 20")
+        put("./results/temp/"+name+".sh", ""+name+".sh")
+        run("chmod u+x "+name+".sh")
+        run("./"+name+".sh")
+
 

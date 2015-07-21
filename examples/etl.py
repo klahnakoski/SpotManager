@@ -97,9 +97,9 @@ class ETL(InstanceManager):
         content = conf_file.read_bytes()
         find = between(content, "numprocs=", "\n")
         content = content.replace("numprocs=" + find + "\n", "numprocs=" + str(cpu_count) + "\n")
-        File("./examples/config/etl_supervisor.conf.alt").write_bytes(content)
+        File("./temp/etl_supervisor.conf.alt").write_bytes(content)
         sudo("rm -f /etc/supervisor/conf.d/etl_supervisor.conf")
-        put("./examples/config/etl_supervisor.conf.alt", '/etc/supervisor/conf.d/etl_supervisor.conf', use_sudo=True)
+        put("./temp/etl_supervisor.conf.alt", '/etc/supervisor/conf.d/etl_supervisor.conf', use_sudo=True)
         run("mkdir -p /home/ubuntu/TestLog-ETL/results/logs")
 
         # POKE supervisor TO NOTICE THE CHANGE

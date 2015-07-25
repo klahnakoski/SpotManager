@@ -9,9 +9,10 @@
 from __future__ import unicode_literals
 from __future__ import division
 
+from fabric.api import settings as fabric_settings
 from fabric.context_managers import cd, hide, shell_env
 from fabric.contrib import files as fabric_files
-from fabric.operations import sudo, run, put
+from fabric.operations import sudo, run, put, get
 from fabric.state import env
 
 from pyLibrary.debugs.logs import Log
@@ -21,6 +22,8 @@ from pyLibrary.maths.randoms import Random
 from pyLibrary.meta import use_settings
 from pyLibrary.strings import expand_template
 from pyLibrary.thread.threads import Lock
+from pyLibrary.times.dates import Date
+from pyLibrary.times.durations import MONTH, WEEK, MINUTE, HOUR, DAY
 from spot.instance_manager import InstanceManager
 
 
@@ -50,11 +53,27 @@ class ESSpot(InstanceManager):
             with hide('output'):
                 self._config_fabric(instance)
                 self._install_es(gigabytes)
-            self._start_es()
-
-            with hide('output'):
                 self._install_indexer()
-                self._start_indexer()
+                self._install_supervisor()
+                self._start_supervisor()
+
+    def teardown(
+        self,
+        instance   # THE boto INSTANCE OBJECT FOR THE MACHINE TO TEARDOWN
+    ):
+        with self.locker:
+            self.instance = instance
+            Log.note("teardown {{instance}}", instance=instance.id)
+            self._config_fabric(instance)
+            # ASK NICELY TO STOP "supervisord" PROCESS
+            with fabric_settings(warn_only=True):
+                sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}' | xargs kill -SIGINT")
+
+            #WAIT FOR SUPERVISOR SHUTDOWN
+            pid = True
+            while pid:
+                with hide('output'):
+                    pid = sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}'")
 
     def _config_fabric(self, instance):
         if not instance.ip_address:
@@ -104,12 +123,36 @@ class ESSpot(InstanceManager):
         #TEST IT IS WORKING
         sudo('mount -a')
 
+        #INCREASE THE FILE HANDLE LIMITS
+        with cd("/home/ec2-user/"):
+            File("./results/temp/sysctl.conf").delete()
+            get("/etc/sysctl.conf", "./results/temp/sysctl.conf", use_sudo=True)
+            lines = File("./results/temp/sysctl.conf").read()
+            if lines.find("fs.file-max = 100000") == -1:
+                lines += "\nfs.file-max = 100000"
+            lines = lines.replace("net.bridge.bridge-nf-call-ip6tables = 0", "")
+            lines = lines.replace("net.bridge.bridge-nf-call-iptables = 0", "")
+            lines = lines.replace("net.bridge.bridge-nf-call-arptables = 0", "")
+            File("./results/temp/sysctl.conf").write(lines)
+            put("./results/temp/sysctl.conf", "/etc/sysctl.conf", use_sudo=True)
+
+        sudo("sysctl -p")
+
+        # INCREASE FILE HANDLE PERMISSIONS
+        sudo("sed -i '$ a\\ec2-user soft nofile 50000' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\ec2-user hard nofile 100000' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\ec2-user memlock unlimited' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\root memlock unlimited' /etc/security/limits.conf")
+
+        # EFFECTIVE LOGIN TO LOAD CHANGES TO FILE HANDLES
+        # sudo("sudo -i -u ec2-user")
+
         if not fabric_files.exists("/data1/logs"):
             sudo('mkdir /data1/logs')
             sudo('mkdir /data1/heapdump')
 
             #INCREASE NUMBER OF FILE HANDLES
-            sudo("sysctl -w fs.file-max=64000")
+            # sudo("sysctl -w fs.file-max=64000")
 
         # COPY CONFIG FILE TO ES DIR
         yml = File("./examples/config/es_config.yml").read().replace("\r", "")
@@ -125,29 +168,13 @@ class ESSpot(InstanceManager):
         sh = File("./examples/config/es_run.sh").read().replace("\r", "")
         sh = expand_template(sh, {"memory": unicode(int(gigabytes))})
         File("./results/temp/elasticsearch.in.sh").write(sh)
-        put("./results/temp/elasticsearch.in.sh", '/usr/local/elasticsearch/bin/elasticsearch.in.sh', use_sudo=True)
-
-    def _start_es(self):
-        File("./results/temp/start_es.sh").write("nohup ./bin/elasticsearch >& /dev/null < /dev/null &\nsleep 20")
-        with cd("/home/ec2-user/"):
-            put("./results/temp/start_es.sh", "start_es.sh")
-            run("chmod u+x start_es.sh")
-
-        with cd("/usr/local/elasticsearch/"):
-            sudo("/home/ec2-user/start_es.sh")
+        with cd("/home/ec2-user"):
+            put("./results/temp/elasticsearch.in.sh", './temp/elasticsearch.in.sh', use_sudo=True)
+            sudo("cp -f ./temp/elasticsearch.in.sh /usr/local/elasticsearch/bin/elasticsearch.in.sh")
 
     def _install_indexer(self):
         Log.note("Install indexer at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
-        if not fabric_files.exists("/usr/bin/pip"):
-            sudo("yum -y install python27")
-
-            run("rm -fr /home/ec2-user/temp")
-            run("mkdir  /home/ec2-user/temp")
-            with cd("/home/ec2-user/temp"):
-                run("wget https://bootstrap.pypa.io/get-pip.py")
-                sudo("python27 get-pip.py")
-
-                sudo("ln -s /usr/local/bin/pip /usr/bin/pip")
+        self._install_python()
 
         if not fabric_files.exists("/home/ec2-user/TestLog-ETL/"):
             with cd("/home/ec2-user"):
@@ -160,17 +187,51 @@ class ESSpot(InstanceManager):
 
         put("~/private_active_data_etl.json", "/home/ec2-user/private.json")
 
-    def _start_indexer(self):
-        with cd("/home/ec2-user/TestLog-ETL/"):
-            run("git pull origin push-to-es")
+    def _install_python(self):
+        Log.note("Install Python at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
+        if not fabric_files.exists("/usr/bin/pip"):
+            sudo("yum -y install python27")
 
-            with shell_env(PYTHONPATH="."):
-                self._run_remote("python27 testlog_etl/push_to_es.py --settings=resources/settings/push_to_es_staging_settings.json", "push_to_es")
+            run("rm -fr /home/ec2-user/temp")
+            run("mkdir  /home/ec2-user/temp")
+            with cd("/home/ec2-user/temp"):
+                run("wget https://bootstrap.pypa.io/get-pip.py")
+                sudo("python27 get-pip.py")
 
-    def _run_remote(self, command, name):
-        File("./results/temp/"+name+".sh").write("nohup "+command +" >& /dev/null < /dev/null &\nsleep 20")
-        put("./results/temp/"+name+".sh", ""+name+".sh")
-        run("chmod u+x "+name+".sh")
-        run("./"+name+".sh")
+                sudo("ln -s /usr/local/bin/pip /usr/bin/pip")
 
+    def _install_supervisor(self):
+        Log.note("Install Supervisor-plus-Cron at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
+        # REQUIRED FOR Python SSH
+        self._install_lib("libffi-devel")
+        self._install_lib("openssl-devel")
+        self._install_lib('"Development tools"', install="groupinstall")
 
+        self._install_python()
+        sudo("pip install pyopenssl")
+        sudo("pip install ndg-httpsclient")
+        sudo("pip install pyasn1")
+        sudo("pip install requests")
+
+        sudo("pip install supervisor-plus-cron")
+
+    def _install_lib(self, lib_name, install="install"):
+        """
+        :param lib_name:
+        :param install: use 'groupinstall' if you wish
+        :return:
+        """
+        with fabric_settings(warn_only=True):
+            result = sudo("yum "+install+" -y "+lib_name)
+            if result.return_code != 0 and result.find("already installed and latest version")==-1:
+                Log.error("problem with install of {{lib}}", lib=lib_name)
+
+    def _start_supervisor(self):
+        put("./examples/config/es_supervisor.conf", "/etc/supervisord.conf", use_sudo=True)
+
+        #START DAEMON (OR THROW ERROR IF RUNNING ALREADY)
+        with fabric_settings(warn_only=True):
+            sudo("supervisord -c /etc/supervisord.conf")
+
+        sudo("supervisorctl reread")
+        sudo("supervisorctl update")

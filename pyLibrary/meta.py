@@ -229,7 +229,7 @@ class cache(object):
             now = Date.now()
             if hasattr(self, attr_name):
                 last_got, value = getattr(self, attr_name)
-                if last_got.add(this.seconds * SECOND) > now:
+                if last_got.add(this.seconds * SECOND) < now:
                     value = func(self, *args, **kwargs)
                     setattr(self, attr_name, (now, value))
             else:

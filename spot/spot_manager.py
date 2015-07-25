@@ -375,7 +375,8 @@ class SpotManager(object):
                         try:
                             self.instance_manager.setup(i, coalesce(p.utility, 0))
                         except Exception, e:
-                            failed_attempts[r.id] += [Except.wrap(e)]
+                            e = Except.wrap(e)
+                            failed_attempts[r.id] += [e]
                             Log.error(ERROR_ON_CALL_TO_SETUP, e)
                         i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
                         with self.net_new_locker:

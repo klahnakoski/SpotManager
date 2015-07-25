@@ -57,6 +57,24 @@ class ESSpot(InstanceManager):
                 self._install_supervisor()
                 self._start_supervisor()
 
+    def teardown(
+        self,
+        instance   # THE boto INSTANCE OBJECT FOR THE MACHINE TO TEARDOWN
+    ):
+        with self.locker:
+            self.instance = instance
+            Log.note("teardown {{instance}}", instance=instance.id)
+            self._config_fabric(instance)
+            # ASK NICELY TO STOP "supervisord" PROCESS
+            with fabric_settings(warn_only=True):
+                sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}' | xargs kill -SIGINT")
+
+            #WAIT FOR SUPERVISOR SHUTDOWN
+            pid = True
+            while pid:
+                with hide('output'):
+                    pid = sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}'")
+
     def _config_fabric(self, instance):
         if not instance.ip_address:
             Log.error("Expecting an ip address for {{instance_id}}", instance_id=instance.id)
@@ -106,22 +124,35 @@ class ESSpot(InstanceManager):
         sudo('mount -a')
 
         #INCREASE THE FILE HANDLE LIMITS
-        sudo("sed -i '$ a\\fs.file-max = 100000' /etc/sysctl.conf")
+        with cd("/home/ec2-user/"):
+            File("./results/temp/sysctl.conf").delete()
+            get("/etc/sysctl.conf", "./results/temp/sysctl.conf", use_sudo=True)
+            lines = File("./results/temp/sysctl.conf").read()
+            if lines.find("fs.file-max = 100000") == -1:
+                lines += "\nfs.file-max = 100000"
+            lines = lines.replace("net.bridge.bridge-nf-call-ip6tables = 0", "")
+            lines = lines.replace("net.bridge.bridge-nf-call-iptables = 0", "")
+            lines = lines.replace("net.bridge.bridge-nf-call-arptables = 0", "")
+            File("./results/temp/sysctl.conf").write(lines)
+            put("./results/temp/sysctl.conf", "/etc/sysctl.conf", use_sudo=True)
+
         sudo("sysctl -p")
 
         # INCREASE FILE HANDLE PERMISSIONS
         sudo("sed -i '$ a\\ec2-user soft nofile 50000' /etc/security/limits.conf")
         sudo("sed -i '$ a\\ec2-user hard nofile 100000' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\ec2-user memlock unlimited' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\root memlock unlimited' /etc/security/limits.conf")
 
         # EFFECTIVE LOGIN TO LOAD CHANGES TO FILE HANDLES
-        sudo("sudo -i -u ec2-user")
+        # sudo("sudo -i -u ec2-user")
 
         if not fabric_files.exists("/data1/logs"):
             sudo('mkdir /data1/logs')
             sudo('mkdir /data1/heapdump')
 
             #INCREASE NUMBER OF FILE HANDLES
-            sudo("sysctl -w fs.file-max=64000")
+            # sudo("sysctl -w fs.file-max=64000")
 
         # COPY CONFIG FILE TO ES DIR
         yml = File("./examples/config/es_config.yml").read().replace("\r", "")
@@ -137,7 +168,9 @@ class ESSpot(InstanceManager):
         sh = File("./examples/config/es_run.sh").read().replace("\r", "")
         sh = expand_template(sh, {"memory": unicode(int(gigabytes))})
         File("./results/temp/elasticsearch.in.sh").write(sh)
-        put("./results/temp/elasticsearch.in.sh", '/usr/local/elasticsearch/bin/elasticsearch.in.sh', use_sudo=True)
+        with cd("/home/ec2-user"):
+            put("./results/temp/elasticsearch.in.sh", './temp/elasticsearch.in.sh', use_sudo=True)
+            sudo("cp -f ./temp/elasticsearch.in.sh /usr/local/elasticsearch/bin/elasticsearch.in.sh")
 
     def _install_indexer(self):
         Log.note("Install indexer at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
@@ -170,20 +203,31 @@ class ESSpot(InstanceManager):
     def _install_supervisor(self):
         Log.note("Install Supervisor-plus-Cron at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
         # REQUIRED FOR Python SSH
-        sudo("yum install -y libffi-devel")
-        sudo("yum install -y openssl-devel")
-        sudo('yum groupinstall -y "Development tools"')
+        self._install_lib("libffi-devel")
+        self._install_lib("openssl-devel")
+        self._install_lib('"Development tools"', install="groupinstall")
 
         self._install_python()
-        sudo("pip install requests[security]")
         sudo("pip install pyopenssl")
         sudo("pip install ndg-httpsclient")
         sudo("pip install pyasn1")
+        sudo("pip install requests")
 
         sudo("pip install supervisor-plus-cron")
 
+    def _install_lib(self, lib_name, install="install"):
+        """
+        :param lib_name:
+        :param install: use 'groupinstall' if you wish
+        :return:
+        """
+        with fabric_settings(warn_only=True):
+            result = sudo("yum "+install+" -y "+lib_name)
+            if result.return_code != 0 and result.find("already installed and latest version")==-1:
+                Log.error("problem with install of {{lib}}", lib=lib_name)
+
     def _start_supervisor(self):
-        put("~/SpotManager/examples/config/es_supervisor.conf", "/etc/supervisord.conf")
+        put("./examples/config/es_supervisor.conf", "/etc/supervisord.conf", use_sudo=True)
 
         #START DAEMON (OR THROW ERROR IF RUNNING ALREADY)
         with fabric_settings(warn_only=True):

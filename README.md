@@ -40,6 +40,15 @@ For now, you must clone the repo
 
 	git clone https://github.com/klahnakoski/SpotManager.git
 
+### Branches
+
+There are three main branches
+
+* **dev** - development done here (unstable)
+* **beta** - currently run on staging servers
+* **master** - proven stable on **beta** for at least a few days
+
+
 ## Configuration
 
 Each SpotManager instance requires a `settings.json` file that controls the 

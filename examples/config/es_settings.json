@@ -76,7 +76,7 @@
 			"ramdisk_id": null,
 			"monitoring_enabled": false,
 			"subnet_id": null,
-			"placement_group": null,
+			"placement_group": "es",
 			"block_device_map": null,
 			"instance_profile_arn": null,
 			"instance_profile_name": "active-data",

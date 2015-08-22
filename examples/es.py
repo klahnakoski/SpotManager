@@ -166,7 +166,7 @@ class ESSpot(InstanceManager):
         # FOR SOME REASON THE export COMMAND DOES NOT SEEM TO WORK
         # THIS SCRIPT SETS THE ES_MIN_MEM/ES_MAX_MEM EXPLICITLY
         sh = File("./examples/config/es_run.sh").read().replace("\r", "")
-        sh = expand_template(sh, {"memory": unicode(int(gigabytes))})
+        sh = expand_template(sh, {"memory": unicode(int(gigabytes/2))})
         File("./results/temp/elasticsearch.in.sh").write(sh)
         with cd("/home/ec2-user"):
             put("./results/temp/elasticsearch.in.sh", './temp/elasticsearch.in.sh', use_sudo=True)

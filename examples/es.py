@@ -106,6 +106,10 @@ class ESSpot(InstanceManager):
                 # https://github.com/elasticsearch/elasticsearch-cloud-aws
                 sudo('bin/plugin -install elasticsearch/elasticsearch-cloud-aws/2.4.1')
 
+            #REMOVE THESE FILES, WE WILL REPLACE THEM WITH THE CORRECT VERSIONS AT THE END
+            sudo("rm -f /usr/local/elasticsearch/config/elasticsearch.yml")
+            sudo("rm -f /usr/local/elasticsearch/bin/elasticsearch.in.sh")
+
         self.conn = self.instance.connection
 
         #MOUNT AND FORMAT THE EBS VOLUMES (list with `lsblk`)

@@ -70,6 +70,7 @@ class ETL(InstanceManager):
             with cd("/home/ubuntu/temp"):
                 # INSTALL FROM CLEAN DIRECTORY
                 run("wget https://bootstrap.pypa.io/get-pip.py")
+                sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
                 sudo("python get-pip.py")
 
         if not fabric_files.exists("/home/ubuntu/TestLog-ETL/README.md"):
@@ -77,6 +78,8 @@ class ETL(InstanceManager):
                 sudo("apt-get -yf install git-core")
                 run('rm -fr /home/ubuntu/TestLog-ETL')
                 run("git clone https://github.com/klahnakoski/TestLog-ETL.git")
+                run("mkdir -p /home/ubuntu/TestLog-ETL/results/logs")
+
 
         with cd("/home/ubuntu/TestLog-ETL"):
             run("git checkout etl")

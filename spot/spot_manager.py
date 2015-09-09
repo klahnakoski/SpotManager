@@ -468,7 +468,7 @@ class SpotManager(object):
         # INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping
         num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]
         for i in range(num_ephemeral_volumes):
-            letter = convert.ascii2char(98 + i)
+            letter = convert.ascii2char(98 + i)  # START AT "b"
             settings.block_device_map["/dev/sd" + letter] = BlockDeviceType(
                 ephemeral_name='ephemeral' + unicode(i),
                 delete_on_termination=True
@@ -480,11 +480,13 @@ class SpotManager(object):
 
         #ATTACH NEW EBS VOLUMES
         for i, drive in enumerate(self.settings.utility[instance_type].drives):
+            letter = convert.ascii2char(98 + i + num_ephemeral_volumes)
+            device = drive.device = coalesce(drive.device, "/dev/sd" + letter)
             d = drive.copy()
             d.path = None  # path AND device PROPERTY IS NOT ALLOWED IN THE BlockDeviceType
             d.device = None
             if d.size:
-                settings.block_device_map[drive.device] = BlockDeviceType(
+                settings.block_device_map[device] = BlockDeviceType(
                     delete_on_termination=True,
                     **unwrap(d)
                 )

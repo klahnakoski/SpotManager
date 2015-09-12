@@ -8,6 +8,7 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
+from copy import deepcopy
 
 import boto
 import boto.vpc
@@ -447,6 +448,10 @@ class SpotManager(object):
 
     @use_settings
     def _request_spot_instances(self, price, availability_zone_group, instance_type, settings):
+        #m3 INSTANCES ARE NOT ALLOWED PLACEMENT GROUP
+        if instance_type.startswith("m3."):
+            settings.placement_group = None
+
         settings.network_interfaces = NetworkInterfaceCollection(*(
             NetworkInterfaceSpecification(**unwrap(i))
             for i in listwrap(settings.network_interfaces)
@@ -456,7 +461,6 @@ class SpotManager(object):
         if len(settings.network_interfaces) == 0:
             Log.error("No network interface specifications found for {{availability_zone}}!", availability_zone=settings.availability_zone_group)
 
-        settings.settings = None
         block_device_map = BlockDeviceMapping()
 
         # GENERIC BLOCK DEVICE MAPPING
@@ -490,6 +494,7 @@ class SpotManager(object):
                     delete_on_termination=True,
                     **unwrap(d)
                 )
+
         output = list(self.ec2_conn.request_spot_instances(**unwrap(settings)))
         return output
 

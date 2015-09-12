@@ -449,6 +449,8 @@ class SpotManager(object):
     @use_settings
     def _request_spot_instances(self, price, availability_zone_group, instance_type, settings):
         #m3 INSTANCES ARE NOT ALLOWED PLACEMENT GROUP
+        settings.settings = None
+        
         if instance_type.startswith("m3."):
             settings.placement_group = None
 

@@ -96,10 +96,10 @@ class ESSpot(InstanceManager):
                 run("export JAVA_HOME=/usr/java/default")
 
             with cd("/home/ec2-user/"):
-                run('wget https://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-1.4.2.tar.gz')
-                run('tar zxfv elasticsearch-1.4.2.tar.gz')
+                run('wget https://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-1.7.1.tar.gz')
+                run('tar zxfv elasticsearch-1.7.1.tar.gz')
                 sudo('mkdir /usr/local/elasticsearch')
-                sudo('cp -R elasticsearch-1.4.2/* /usr/local/elasticsearch/')
+                sudo('cp -R elasticsearch-1.7.1/* /usr/local/elasticsearch/')
 
             with cd('/usr/local/elasticsearch/'):
                 # BE SURE TO MATCH THE PLUGLIN WITH ES VERSION
@@ -214,6 +214,7 @@ class ESSpot(InstanceManager):
         sudo("pip install pyopenssl")
         sudo("pip install ndg-httpsclient")
         sudo("pip install pyasn1")
+        sudo("pip install fabric==1.10.2")
         sudo("pip install requests")
 
         sudo("pip install supervisor-plus-cron")

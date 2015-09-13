@@ -3,6 +3,10 @@ node.name: spot_{{id}}
 node.master: false
 node.data: true
 
+script.inline: on
+script.indexed: on
+script.disable_dynamic: false
+
 cluster.name: active-data
 cluster.routing.allocation.awareness.force.zone.values: primary,spot
 cluster.routing.allocation.awareness.attributes: zone

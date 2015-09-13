@@ -1,5 +1,5 @@
 {
-	"budget": 0.70,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"budget": 4.00,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.01,  //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 400,     //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"max_requests_per_type": 2,    //LIMIT THE NUMBER OF NET-NEW REQUESTS BY TYPE
@@ -104,7 +104,7 @@
 	},
 	"instance":{
 		"class":"examples.es.ESSpot",
-		"minimum_utility": 300,
+		"minimum_utility": 800,
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 			"user": "ec2-user",

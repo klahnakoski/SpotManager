@@ -105,7 +105,7 @@ class ESSpot(InstanceManager):
             with cd('/usr/local/elasticsearch/'):
                 # BE SURE TO MATCH THE PLUGLIN WITH ES VERSION
                 # https://github.com/elasticsearch/elasticsearch-cloud-aws
-                sudo('bin/plugin -install elasticsearch/elasticsearch-cloud-aws/2.4.1')
+                sudo('bin/plugin -install elasticsearch/elasticsearch-cloud-aws/2.7.1')
 
             #REMOVE THESE FILES, WE WILL REPLACE THEM WITH THE CORRECT VERSIONS AT THE END
             sudo("rm -f /usr/local/elasticsearch/config/elasticsearch.yml")

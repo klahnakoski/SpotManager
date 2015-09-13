@@ -104,7 +104,11 @@
 	},
 	"instance":{
 		"class":"examples.es.ESSpot",
+<<<<<<< HEAD
 		"minimum_utility": 800,
+=======
+		"minimum_utility": 1000,
+>>>>>>> b3f4d07fd02c3fd326cb455162453eb45ca14e35
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 			"user": "ec2-user",

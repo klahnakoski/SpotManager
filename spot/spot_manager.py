@@ -339,7 +339,7 @@ class SpotManager(object):
         self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
         return remaining_budget, net_new_utility
 
-    @cache(seconds=5)
+    @cache(duration=5 * SECOND)
     def _get_managed_spot_requests(self):
         output = wrap([dictwrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
         return output
@@ -432,7 +432,7 @@ class SpotManager(object):
 
             Log.note("life cycle watcher has stopped")
 
-        self.watcher = Thread.run("lifecycle watcher", life_cycle_watcher)
+        # self.watcher = Thread.run("lifecycle watcher", life_cycle_watcher)
 
     def _get_valid_availability_zones(self):
         subnets = list(self.vpc_conn.get_all_subnets(subnet_ids=self.settings.ec2.request.network_interfaces.subnet_id))
@@ -455,7 +455,7 @@ class SpotManager(object):
             settings.placement_group = None
 
         settings.network_interfaces = NetworkInterfaceCollection(*(
-            NetworkInterfaceSpecification(**unwrap(i))
+            NetworkInterfaceSpecification(**i)
             for i in listwrap(settings.network_interfaces)
             if self.vpc_conn.get_all_subnets(subnet_ids=i.subnet_id, filters={"availabilityZone": availability_zone_group})
         ))
@@ -467,7 +467,7 @@ class SpotManager(object):
 
         # GENERIC BLOCK DEVICE MAPPING
         for dev, dev_settings in settings.block_device_map.items():
-            block_device_map[dev] = BlockDeviceType(**unwrap(dev_settings))
+            block_device_map[dev] = BlockDeviceType(**dev_settings)
 
         settings.block_device_map = block_device_map
 
@@ -494,10 +494,10 @@ class SpotManager(object):
             if d.size:
                 settings.block_device_map[device] = BlockDeviceType(
                     delete_on_termination=True,
-                    **unwrap(d)
+                    **d
                 )
 
-        output = list(self.ec2_conn.request_spot_instances(**unwrap(settings)))
+        output = list(self.ec2_conn.request_spot_instances(**settings))
         return output
 
     def pricing(self):
@@ -579,7 +579,7 @@ class SpotManager(object):
         with Timer("Read pricing file"):
             try:
                 content = File(self.settings.price_file).read()
-                cache = convert.json2value(content, flexible=False, paths=False)
+                cache = convert.json2value(content, flexible=False, leaves=False)
             except Exception, e:
                 cache = DictList()
 
@@ -587,7 +587,7 @@ class SpotManager(object):
             "from": cache,
             "edges": ["instance_type", "availability_zone"],
             "select": {"value": "timestamp", "aggregate": "max"}
-        }).data
+        })
 
         zones = self._get_valid_availability_zones()
         prices = set(cache)
@@ -637,7 +637,9 @@ class SpotManager(object):
                             break
 
         with Timer("Save prices to file"):
-            File(self.settings.price_file).write(convert.value2json(prices))
+            new_prices = qb.filter(prices, {"gte": {"timestamp": Date.today() - (2*WEEK)}})
+            File(self.settings.price_file).write(convert.value2json(new_prices))
+
         return prices
 
 

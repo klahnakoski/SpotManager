@@ -10,62 +10,61 @@
 from __future__ import unicode_literals
 from __future__ import division
 from __future__ import absolute_import
-from UserDict import UserDict
 from collections import Mapping
-from pyLibrary import dot
+
 from pyLibrary.collections import AND, reverse
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot.dicts import Dict
-from pyLibrary.dot import coalesce, split_field, join_field, Null
+from pyLibrary.dot import coalesce, split_field, join_field, Null, unwraplist
 from pyLibrary.dot.lists import DictList
 from pyLibrary.dot import wrap, unwrap, listwrap
 from pyLibrary.maths import Math
-from pyLibrary.queries import wrap_from, expressions
-from pyLibrary.queries.container import Container
+from pyLibrary.queries import wrap_from
+from pyLibrary.queries.containers import Container
 from pyLibrary.queries.dimensions import Dimension
 from pyLibrary.queries.domains import Domain, is_keyword
-from pyLibrary.queries.expressions import TRUE_FILTER, simplify_esfilter
+from pyLibrary.queries.expressions import TRUE_FILTER, simplify_esfilter, query_get_all_vars
 
 
 DEFAULT_LIMIT = 10
 
 qb = None
-INDEX_CACHE = None
+_Column = None
 
 
 def _late_import():
     global qb
-    global INDEX_CACHE
+    global _Column
 
+    from pyLibrary.queries.meta import Column as _Column
     from pyLibrary.queries import qb
-    from pyLibrary.queries.es09.util import INDEX_CACHE
 
     _ = qb
-    _ = INDEX_CACHE
+    _ = _Column
 
 
 class Query(object):
-    __slots__ = ["frum", "select", "edges", "groupby", "where", "window", "sort", "limit", "format", "isLean"]
+    __slots__ = ["frum", "select", "edges", "groupby", "where", "window", "sort", "limit", "having", "format", "isLean"]
 
     def __new__(cls, query, schema=None):
         if isinstance(query, Query):
             return query
-        return object.__new__(cls)
+        output = object.__new__(cls)
+        for s in Query.__slots__:
+            setattr(output, s, None)
+        return output
 
     def __init__(self, query, schema=None):
         """
         NORMALIZE QUERY SO IT CAN STILL BE JSON
         """
-        if isinstance(query, Query):
+        if isinstance(query, Query) or query == None:
             return
 
         object.__init__(self)
         query = wrap(query)
 
-        max_depth = 1
-
         self.format = query.format
-
         self.frum = wrap_from(query["from"], schema=schema)
 
         select = query.select
@@ -83,9 +82,9 @@ class Query(object):
             self.select = _normalize_select(select, schema=schema)
         else:
             if query.edges or query.groupby:
-                self.select = {"name": "count", "value": ".", "aggregate": "count"}
+                self.select = Dict(name="count", value=".", aggregate="count")
             else:
-                self.select = {"name": "__all__", "value": "*", "aggregate": "none"}
+                self.select = Dict(name=".", value=".", aggregate="none")
 
         if query.groupby and query.edges:
             Log.error("You can not use both the `groupby` and `edges` clauses in the same query!")
@@ -101,6 +100,7 @@ class Query(object):
 
         self.where = _normalize_where(query.where, schema=schema)
         self.window = [_normalize_window(w) for w in listwrap(query.window)]
+        self.having = None
         self.sort = _normalize_sort(query.sort)
         self.limit = coalesce(query.limit, DEFAULT_LIMIT)
         if not Math.is_integer(self.limit) or self.limit < 0:
@@ -117,18 +117,23 @@ class Query(object):
                 _late_import()
             columns = qb.get_columns(self.frum)
         elif isinstance(self.frum, Container):
-            columns = self.frum.get_columns()
+            columns = self.frum.get_columns(table=self.frum.name)
         else:
             columns = []
 
-        vars = get_all_vars(self, exclude_where=True)  # WE WILL EXCLUDE where VARIABLES
+        query_path = coalesce(self.frum.query_path, ".")
+        vars = query_get_all_vars(self, exclude_where=True)  # WE WILL EXCLUDE where VARIABLES
         for c in columns:
-            if c.name in vars and c.depth:
+            if c.name in vars and not query_path.startswith(coalesce(listwrap(c.nested_path)[0], "")):
                 Log.error("This query, with variable {{var_name}} is too deep", var_name=c.name)
 
     @property
     def columns(self):
         return listwrap(self.select) + coalesce(self.edges, self.groupby)
+
+    @property
+    def query_path(self):
+        return "."
 
     def __getitem__(self, item):
         if item == "from":
@@ -170,13 +175,37 @@ def _normalize_selects(selects, schema=None):
 
 
 def _normalize_select(select, schema=None):
+    if not _Column:
+        _late_import()
+
     if isinstance(select, basestring):
+        select = select.rstrip(".")
+        if not select:
+            return Dict(
+                name=".",
+                value="*",
+                aggregate="none"
+            )
         if schema:
             s = schema[select]
             if s:
-                return s.getSelect()
+                if isinstance(s, _Column):
+                    return Dict(
+                        name=select,
+                        value=select,
+                        aggregate="none"
+                    )
+                else:
+                    #EXPECTING DIMENSION
+                    return s.getSelect()
+
+        if select.endswith(".*"):
+            name = select[:-2]
+        else:
+            name = select
+
         return Dict(
-            name=select.rstrip("."),  # TRAILING DOT INDICATES THE VALUE, BUT IS INVALID FOR THE NAME
+            name=name,
             value=select,
             aggregate="none"
         )
@@ -184,12 +213,17 @@ def _normalize_select(select, schema=None):
         select = wrap(select)
         output = select.copy()
         if not select.value or isinstance(select.value, basestring):
-            output.name = coalesce(select.name, select.value, select.aggregate)
+            if select.value == ".":
+                output.name = coalesce(select.name, select.aggregate)
+            else:
+                output.name = coalesce(select.name, select.value, select.aggregate)
         elif not output.name:
             Log.error("Must give name to each column in select clause")
 
         if not output.name:
             Log.error("expecting select to have a name: {{select}}",  select= select)
+        if output.name.endswith(".*"):
+            output.name = output.name[:-2]
 
         output.aggregate = coalesce(canonical_aggregates.get(select.aggregate), select.aggregate, "none")
         return output
@@ -200,24 +234,37 @@ def _normalize_edges(edges, schema=None):
 
 
 def _normalize_edge(edge, schema=None):
+    if not _Column:
+        _late_import()
+
     if isinstance(edge, basestring):
         if schema:
             e = schema[edge]
             if e:
-                if isinstance(e.fields, list) and len(e.fields) == 1:
+                if isinstance(e, _Column):
+                    return Dict(
+                        name=edge,
+                        value=edge,
+                        allowNulls=True,
+                        domain=_normalize_domain(schema=schema)
+                    )
+                elif isinstance(e.fields, list) and len(e.fields) == 1:
                     return Dict(
                         name=e.name,
                         value=e.fields[0],
+                        allowNulls=True,
                         domain=e.getDomain()
                     )
                 else:
                     return Dict(
                         name=e.name,
+                        allowNulls=True,
                         domain=e.getDomain()
                     )
         return Dict(
             name=edge,
             value=edge,
+            allowNulls=True,
             domain=_normalize_domain(schema=schema)
         )
     else:
@@ -232,7 +279,7 @@ def _normalize_edge(edge, schema=None):
 
             return Dict(
                 name=edge.name,
-                allowNulls=False if edge.allowNulls is False else True,
+                allowNulls=bool(coalesce(edge.allowNulls, True)),
                 domain=domain
             )
 
@@ -241,7 +288,7 @@ def _normalize_edge(edge, schema=None):
             name=coalesce(edge.name, edge.value),
             value=edge.value,
             range=edge.range,
-            allowNulls=False if edge.allowNulls is False else True,
+            allowNulls=bool(coalesce(edge.allowNulls, True)),
             domain=domain
         )
 
@@ -257,6 +304,7 @@ def _normalize_group(edge, schema=None):
         return wrap({
             "name": edge,
             "value": edge,
+            "allowNulls": True,
             "domain": {"type": "default"}
         })
     else:
@@ -270,6 +318,7 @@ def _normalize_group(edge, schema=None):
         return wrap({
             "name": coalesce(edge.name, edge.value),
             "value": edge.value,
+            "allowNulls": True,
             "domain": {"type": "default"}
         })
 
@@ -387,41 +436,38 @@ def _map_term_using_schema(master, path, term, schema_edges):
     return {"and": output}
 
 
-def _move_nested_term(master, where, schema):
-    """
-    THE WHERE CLAUSE CAN CONTAIN NESTED PROPERTY REFERENCES, THESE MUST BE MOVED
-    TO A NESTED FILTER
-    """
-    items = where.term.items()
-    if len(items) != 1:
-        Log.error("Expecting only one term")
-    k, v = items[0]
-    nested_path = _get_nested_path(k, schema)
-    if nested_path:
-        return {"nested": {
-            "path": nested_path,
-            "query": {"filtered": {
-                "query": {"match_all": {}},
-                "filter": {"and": [
-                    {"term": {k: v}}
-                ]}
-            }}
-        }}
-    return where
+# def _move_nested_term(master, where, schema):
+#     """
+#     THE WHERE CLAUSE CAN CONTAIN NESTED PROPERTY REFERENCES, THESE MUST BE MOVED
+#     TO A NESTED FILTER
+#     """
+#     items = where.term.items()
+#     if len(items) != 1:
+#         Log.error("Expecting only one term")
+#     k, v = items[0]
+#     nested_path = _get_nested_path(k, schema)
+#     if nested_path:
+#         return {"nested": {
+#             "path": nested_path,
+#             "query": {"filtered": {
+#                 "query": {"match_all": {}},
+#                 "filter": {"and": [
+#                     {"term": {k: v}}
+#                 ]}
+#             }}
+#         }}
+#     return where
 
 
-def _get_nested_path(field, schema):
-    if not INDEX_CACHE:
-        _late_import()
-
-    if is_keyword(field):
-        field = join_field([schema.es.alias] + split_field(field))
-        for i, f in reverse(enumerate(split_field(field))):
-            path = join_field(split_field(field)[0:i + 1:])
-            if path in INDEX_CACHE:
-                return join_field(split_field(path)[1::])
-    return None
-
+# def _get_nested_path(field, schema):
+#     if is_keyword(field):
+#         field = join_field([schema.es.alias] + split_field(field))
+#         for i, f in reverse(enumerate(split_field(field))):
+#             path = join_field(split_field(field)[0:i + 1:])
+#             if path in INDEX_CACHE:
+#                 return unwraplist(join_field(split_field(path)[1::]))
+#     return None
+#
 
 def _where_terms(master, where, schema):
     """
@@ -489,9 +535,12 @@ def _normalize_sort(sort=None):
     output = DictList()
     for s in listwrap(sort):
         if isinstance(s, basestring) or Math.is_integer(s):
-            output.append({"field": s, "sort": 1})
+            output.append({"value": s, "sort": 1})
+        elif list(set(s.values()))[0] == "desc" and not s.sort and not s.value:
+            for v, d in s.items():
+                output.append({"value": v, "sort": -1})
         else:
-            output.append({"field": coalesce(s.field, s.value), "sort": coalesce(sort_direction[s.sort], 1)})
+            output.append({"value": coalesce(s.value, s.field), "sort": coalesce(sort_direction[s.sort], 1)})
     return wrap(output)
 
 
@@ -506,82 +555,3 @@ sort_direction = {
     Null: 1
 }
 
-
-def get_all_vars(query, exclude_where=False):
-    """
-    :param query:
-    :param exclude_where: Sometimes we do not what to look at the where clause
-    :return: all variables in use by query
-    """
-    output = []
-    for s in listwrap(query.select):
-        output.extend(select_get_all_vars(s))
-    for s in listwrap(query.edges):
-        output.extend(edges_get_all_vars(s))
-    for s in listwrap(query.groupby):
-        output.extend(edges_get_all_vars(s))
-    if not exclude_where:
-        output.extend(expressions.get_all_vars(query.where))
-    return output
-
-
-def select_get_all_vars(s):
-    if isinstance(s.value, list):
-        return set(s.value)
-    elif isinstance(s.value, basestring):
-        return set([s.value])
-    elif s.value == None or s.value == ".":
-        return set()
-    else:
-        if s.value == "*":
-            return set(["*"])
-        return expressions.get_all_vars(s.value)
-
-
-def edges_get_all_vars(e):
-    output = []
-    if isinstance(e.value, basestring):
-        output.append(e.value)
-    if e.domain.key:
-        output.append(e.domain.key)
-    if e.domain.where:
-        output.extend(expressions.get_all_vars(e.domain.where))
-    if e.domain.partitions:
-        for p in e.domain.partitions:
-            if p.where:
-                output.extend(expressions.get_all_vars(p.where))
-    return output
-
-
-def where_get_all_vars(w):
-    if w in [True, False, None]:
-        return []
-
-    output = []
-    key = list(w.keys())[0]
-    val = w[key]
-    if key in ["and", "or"]:
-        for ww in val:
-            output.extend(expressions.get_all_vars(ww))
-        return output
-
-    if key == "not":
-        return expressions.get_all_vars(val)
-
-    if key in ["exists", "missing"]:
-        if isinstance(val, unicode):
-            return [val]
-        else:
-            return [val.field]
-
-    if key in ["gte", "gt", "eq", "ne", "term", "terms", "lt", "lte", "range", "prefix"]:
-        if not isinstance(val, Mapping):
-            Log.error("Expecting `{{key}}` to have a dict value, not a {{type}}",
-                key= key,
-                type= val.__class__.__name__)
-        return list(val.keys())
-
-    if key == "match_all":
-        return []
-
-    Log.error("do not know how to handle where {{where|json}}", {"where", w})

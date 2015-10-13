@@ -12,21 +12,22 @@ from __future__ import division
 from __future__ import absolute_import
 from collections import Mapping
 
-from pyLibrary import convert
 from pyLibrary.collections import MAX
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import listwrap, Dict, wrap, literal_field, set_default, coalesce, Null, split_field, join_field
+from pyLibrary.maths import Math
 from pyLibrary.queries import qb, es09
 from pyLibrary.queries.dimensions import Dimension
-from pyLibrary.queries.domains import PARTITION, SimpleSetDomain, is_keyword
-from pyLibrary.queries.es14.util import aggregates1_4
-from pyLibrary.queries.expressions import simplify_esfilter, qb_expression_to_ruby, get_all_vars
+from pyLibrary.queries.domains import PARTITION, SimpleSetDomain, is_keyword, DefaultDomain
+from pyLibrary.queries.es14.util import aggregates1_4, NON_STATISTICAL_AGGS
+from pyLibrary.queries.expressions import simplify_esfilter, qb_expression_to_ruby, get_all_vars, split_expression_by_depth, expression_map
+from pyLibrary.queries.query import DEFAULT_LIMIT
 from pyLibrary.times.timer import Timer
 
 
 def is_aggsop(es, query):
     es.cluster.get_metadata()
-    if (es.cluster.version.startswith("1.4.") or es.cluster.version.startswith("1.5.")) and (query.edges or query.groupby or any(a != None and a != "none" for a in listwrap(query.select).aggregate)):
+    if any(map(es.cluster.version.startswith, ["1.4.", "1.5.", "1.6.", "1.7."])) and (query.edges or query.groupby or any(a != None and a != "none" for a in listwrap(query.select).aggregate)):
         return True
     return False
 
@@ -40,29 +41,72 @@ def es_aggsop(es, frum, query):
     for s in select:
         if s.aggregate == "count" and (s.value == None or s.value == "."):
             s.pull = "doc_count"
+        elif s.value == ".":
+            if frum.typed:
+                # STATISITCAL AGGS IMPLY $value, WHILE OTHERS CAN BE ANYTHING
+                if s.aggregate in NON_STATISTICAL_AGGS:
+                    #TODO: HANDLE BOTH $value AND $objects TO COUNT
+                    Log.error("do not know how to handle")
+                else:
+                    s.value = "$value"
+                    new_select["$value"] += [s]
+            else:
+                if s.aggregate in NON_STATISTICAL_AGGS:
+                    #TODO:  WE SHOULD BE ABLE TO COUNT, BUT WE MUST *OR* ALL LEAF VALUES TO DO IT
+                    Log.error("do not know how to handle")
+                else:
+                    Log.error('Not expecting ES to have a value at "." which {{agg}} can be applied', agg=s.aggregate)
         elif is_keyword(s.value):
             new_select[literal_field(s.value)] += [s]
         else:
             formula.append(s)
 
-    for litral_field, many in new_select.items():
-        if len(many)>1:
-            canonical_name=literal_field(many[0].name)
-            es_query.aggs[canonical_name].stats.field = many[0].value
+    for canonical_name, many in new_select.items():
+        representative = many[0]
+        if representative.value == ".":
+            Log.error("do not know how to handle")
+        else:
+            field_name = representative.value
+
+        if len(many) > 1 or many[0].aggregate in ("median", "percentile", "cardinality"):
+            # canonical_name=literal_field(many[0].name)
             for s in many:
                 if s.aggregate == "count":
-                    s.pull = canonical_name + ".count"
-                else:
-                    s.pull = canonical_name + "." + aggregates1_4[s.aggregate]
-        else:
-            s = many[0]
-            s.pull = literal_field(s.value) + ".value"
-            es_query.aggs[literal_field(s.value)][aggregates1_4[s.aggregate]].field = s.value
+                    es_query.aggs[literal_field(canonical_name)].stats.field = field_name
+                    s.pull = literal_field(canonical_name) + ".count"
+                elif s.aggregate == "median":
+                    #ES USES DIFFERENT METHOD FOR PERCENTILES THAN FOR STATS AND COUNT
+                    key = literal_field(canonical_name + " percentile")
 
+                    es_query.aggs[key].percentiles.field = field_name
+                    es_query.aggs[key].percentiles.percents += [50]
+                    s.pull = key + ".values.50\.0"
+                elif s.aggregate == "percentile":
+                    #ES USES DIFFERENT METHOD FOR PERCENTILES THAN FOR STATS AND COUNT
+                    key = literal_field(canonical_name + " percentile")
+                    percent = Math.round(s.percentile * 100, decimal=6)
+
+                    es_query.aggs[key].percentiles.field = field_name
+                    es_query.aggs[key].percentiles.percents += [percent]
+                    s.pull = key + ".values." + literal_field(unicode(percent))
+                elif s.aggregate == "cardinality":
+                    #ES USES DIFFERENT METHOD FOR CARDINALITY
+                    key = literal_field(canonical_name + " cardinality")
+
+                    es_query.aggs[key].cardinality.field = field_name
+                    s.pull = key + ".value"
+                else:
+                    # PULL VALUE OUT OF THE stats AGGREGATE
+                    es_query.aggs[literal_field(canonical_name)].stats.field = field_name
+                    s.pull = literal_field(canonical_name) + "." + aggregates1_4[s.aggregate]
+        else:
+            es_query.aggs[literal_field(canonical_name)][aggregates1_4[representative.aggregate]].field = field_name
+            representative.pull = literal_field(canonical_name) + ".value"
     for i, s in enumerate(formula):
         new_select[unicode(i)] = s
         s.pull = literal_field(s.name) + ".value"
-        es_query.aggs[literal_field(s.name)][aggregates1_4[s.aggregate]].script = qb_expression_to_ruby(s.value)
+        abs_value = expression_map({c.name: c.abs_name for c in frum._columns}, s.value)
+        es_query.aggs[literal_field(s.name)][aggregates1_4[s.aggregate]].script = qb_expression_to_ruby(abs_value)
 
     decoders = [AggsDecoder(e, query) for e in coalesce(query.edges, query.groupby, [])]
     start = 0
@@ -70,26 +114,54 @@ def es_aggsop(es, frum, query):
         es_query = d.append_query(es_query, start)
         start += d.num_columns
 
-    if query.where:
-        filter = simplify_esfilter(query.where)
+
+    #<TERRIBLE SECTION> THIS IS WHERE WE WEAVE THE where CLAUSE WITH nested
+    split_where = split_expression_by_depth(query.where, schema=frum)
+
+    if len(split_field(frum.name)) > 1:
+        if any(split_where[2:]):
+            Log.error("Where clause is too deep")
+
+        if split_where[1]:
+            #TODO: INCLUDE FILTERS ON EDGES
+            filter = simplify_esfilter({"and":split_where[1]})
+            es_query = Dict(
+                aggs={"_filter": set_default({"filter": filter}, es_query)}
+            )
+
+        es_query = wrap({
+            "aggs": {"_nested": set_default(
+                {
+                    "nested": {
+                        "path": frum.query_path
+                    }
+                },
+                es_query
+            )}
+        })
+    else:
+        if any(split_where[1:]):
+            Log.error("Where clause is too deep")
+
+    if split_where[0]:
+        #TODO: INCLUDE FILTERS ON EDGES
+        filter = simplify_esfilter({"and": split_where[0]})
         es_query = Dict(
             aggs={"_filter": set_default({"filter": filter}, es_query)}
         )
+    # </TERRIBLE SECTION>
 
-    if len(split_field(frum.name)) > 1:
-        es_query = wrap({
-            "size": 0,
-            "aggs": {"_nested": set_default({
-                "nested": {
-                    "path": join_field(split_field(frum.name)[1::])
-                }
-            }, es_query)}
-        })
+    if not es_query:
+        es_query = wrap({"query": {"match_all": {}}})
+
+    es_query.size = 0
 
     with Timer("ES query time") as es_duration:
         result = es09.util.post(es, es_query, query.limit)
 
     try:
+        result.aggregations.doc_count = coalesce(result.aggregations.doc_count, result.hits.total)  # IT APPEARS THE OLD doc_count IS GONE
+
         formatter, groupby_formatter, aggop_formatter, mime_type = format_dispatch[query.format]
         if query.edges:
             output = formatter(decoders, result.aggregations, start, query, select)
@@ -109,10 +181,35 @@ def es_aggsop(es, frum, query):
 
 
 class AggsDecoder(object):
-    def __new__(cls, *args, **kwargs):
-        e = args[0]
+    def __new__(cls, e=None, query=None, *args, **kwargs):
+        if query.groupby:
+            # GROUPBY ASSUMES WE IGNORE THE DOMAIN RANGE
+            e.allowNulls = False
+        else:
+            e.allowNulls = coalesce(e.allowNulls, True)
+
         if e.value and e.domain.type == "default":
-            return object.__new__(DefaultDecoder, e.copy())
+            if query.groupby:
+                return object.__new__(DefaultDecoder, e.copy())
+
+            if is_keyword(e.value):
+                cols = query.frum.get_columns()
+                col = cols.filter(lambda c: c.name == e.value)[0]
+                if not col:
+                    return object.__new__(DefaultDecoder, e.copy())
+                limit = coalesce(e.domain.limit, query.limit, DEFAULT_LIMIT)
+
+                if col.partitions != None:
+                    e.domain = SimpleSetDomain(partitions=col.partitions[:limit:])
+                else:
+                    e.domain = set_default(DefaultDomain(limit=limit), e.domain.as_dict())
+                    return object.__new__(DefaultDecoder, e.copy())
+
+            elif isinstance(e.value, (list, Mapping)):
+                Log.error("Not supported yet")
+            else:
+                return object.__new__(DefaultDecoder, e.copy())
+
         if e.value and e.domain.type in PARTITION:
             return object.__new__(SetDecoder, e)
         if isinstance(e.domain.dimension, Dimension):
@@ -167,10 +264,33 @@ class AggsDecoder(object):
 class SetDecoder(AggsDecoder):
     def append_query(self, es_query, start):
         self.start = start
-        return wrap({"aggs": {
-            "_match": set_default({"terms": {"field": self.edge.value}}, es_query),
-            "_missing": set_default({"missing": {"field": self.edge.value}}, es_query),
-        }})
+        domain = self.edge.domain
+
+        include = [p[domain.key] for p in domain.partitions]
+        if self.edge.allowNulls:
+
+            return wrap({"aggs": {
+                "_match": set_default({"terms": {
+                    "field": self.edge.value,
+                    "size": 0,
+                    "include": include
+                }}, es_query),
+                "_missing": set_default(
+                    {"filter": {"or": [
+                        {"missing": {"field": self.edge.value}},
+                        {"not": {"terms": {self.edge.value: include}}}
+                    ]}},
+                    es_query
+                ),
+            }})
+        else:
+            return wrap({"aggs": {
+                "_match": set_default({"terms": {
+                    "field": self.edge.value,
+                    "size": 0,
+                    "include": include
+                }}, es_query)
+            }})
 
     def get_value(self, index):
         return self.edge.domain.getKeyByIndex(index)
@@ -216,7 +336,7 @@ def _range_composer(edge, domain, es_query, to_float):
         missing_filter = set_default(
             {"filter": {"or": [
                 missing_range,
-                {"missing": {"field": get_all_vars(edge.value)}}
+                {"or": [{"missing": {"field": v}} for v in get_all_vars(edge.value)]}
             ]}},
             es_query
         )
@@ -332,13 +452,13 @@ class DefaultDecoder(SetDecoder):
     def __init__(self, edge, query):
         AggsDecoder.__init__(self, edge, query)
         self.edge = self.edge.copy()
-        self.edge.allowNulls = False  # SINCE WE DO NOT KNOW THE DOMAIN, WE HAVE NO SENSE OF WHAT IS OUTSIDE THAT DOMAIN, allowNulls==True MAKES NO SENSE
+        # self.edge.allowNulls = False  # SINCE WE DO NOT KNOW THE DOMAIN, WE HAVE NO SENSE OF WHAT IS OUTSIDE THAT DOMAIN, allowNulls==True MAKES NO SENSE
         self.edge.domain.partitions = set()
         self.edge.domain.limit = coalesce(self.edge.domain.limit, query.limit, 10)
 
     def append_query(self, es_query, start):
         self.start = start
-        return wrap({"aggs": {
+        output = wrap({"aggs": {
             "_match": set_default(
                 {"terms": {
                     "field": self.edge.value,
@@ -346,8 +466,9 @@ class DefaultDecoder(SetDecoder):
                 }},
                 es_query
             ),
-            "_missing": set_default({"missing": {"field": self.edge.value}}, es_query),
+            "_missing": set_default({"missing": {"field": self.edge.value}}, es_query)
         }})
+        return output
 
     def count(self, row):
         part = row[self.start]
@@ -374,10 +495,15 @@ class DimFieldListDecoder(DefaultDecoder):
     def append_query(self, es_query, start):
         self.start = start
         for i, v in enumerate(self.fields):
-            es_query = wrap({"aggs": {
-                "_match": set_default({"terms": {"field": v}}, es_query),
-                "_missing": set_default({"missing": {"field": v}}, es_query),
+            nest = wrap({"aggs": {
+                "_match": set_default({"terms": {
+                    "field": v,
+                    "size": self.edge.domain.limit
+                }}, es_query)
             }})
+            if self.edge.allowNulls:
+                nest.aggs._missing = set_default({"missing": {"field": v}}, es_query)
+            es_query = nest
 
         if self.edge.domain.where:
             filter = simplify_esfilter(self.edge.domain.where)
@@ -427,7 +553,10 @@ class DimFieldDictDecoder(DefaultDecoder):
         self.start = start
         for i, (k, v) in enumerate(self.fields):
             es_query = wrap({"aggs": {
-                "_match": set_default({"terms": {"field": v}}, es_query),
+                "_match": set_default({"terms": {
+                    "field": v,
+                    "size": self.edge.domain.limit
+                }}, es_query),
                 "_missing": set_default({"missing": {"field": v}}, es_query),
             }})
 

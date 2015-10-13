@@ -16,10 +16,11 @@ from collections import Mapping
 
 from datetime import datetime
 import os
+import platform
 import sys
 
 from pyLibrary.debugs import constants
-from pyLibrary.dot import coalesce, Dict, listwrap, wrap, unwrap, unwraplist
+from pyLibrary.dot import coalesce, Dict, listwrap, wrap, unwrap, unwraplist, Null
 from pyLibrary.jsons.encoder import json_encoder
 from pyLibrary.thread.threads import Thread, Lock, Queue
 from pyLibrary.strings import indent, expand_template
@@ -89,16 +90,17 @@ class Log(object):
         if settings.constants:
             constants.set(settings.constants)
 
-        if not settings.log:
-            return
+        if settings.log:
+            cls.logging_multi = Log_usingMulti()
+            if cls.main_log:
+                cls.main_log.stop()
+            cls.main_log = Log_usingThread(cls.logging_multi)
 
-        cls.logging_multi = Log_usingMulti()
-        if cls.main_log:
-            cls.main_log.stop()
-        cls.main_log = Log_usingThread(cls.logging_multi)
+            for log in listwrap(settings.log):
+                Log.add_log(Log.new_instance(log))
 
-        for log in listwrap(settings.log):
-            Log.add_log(Log.new_instance(log))
+        if settings.cprofile.enabled==True:
+            Log.alert("cprofiling is enabled, writing to {{filename}}", filename=os.path.abspath(settings.cprofile.filename))
 
     @classmethod
     def stop(cls):
@@ -163,13 +165,14 @@ class Log(object):
             template=template,
             params=params,
             timestamp=datetime.utcnow(),
+            machine=machine_metadata.name
         )
 
         if not template.startswith("\n") and template.find("\n") > -1:
             template = "\n" + template
 
         if cls.trace:
-            log_template = "{{timestamp|datetime}} - {{thread.name}} - {{location.file}}:{{location.line}} ({{location.method}}) - " + template.replace("{{", "{{params.")
+            log_template = "{{machine}} - {{timestamp|datetime}} - {{thread.name}} - {{location.file}}:{{location.line}} ({{location.method}}) - " + template.replace("{{", "{{params.")
             f = sys._getframe(stack_depth + 1)
             log_params.location = {
                 "line": f.f_lineno,
@@ -447,7 +450,7 @@ class Except(Exception):
         elif isinstance(e, (list, Except)):
             return e
         else:
-            if hasattr(e, "message") and e.message:
+            if hasattr(e, "message"):
                 cause = Except(ERROR, unicode(e.message), trace=extract_tb(0))
             else:
                 cause = Except(ERROR, unicode(e), trace=extract_tb(0))
@@ -473,7 +476,7 @@ class Except(Exception):
                     return True
         return False
 
-    def __str__(self):
+    def __unicode__(self):
         output = self.type + ": " + self.template + "\n"
         if self.params:
             output = expand_template(output, self.params)
@@ -486,15 +489,15 @@ class Except(Exception):
             for c in listwrap(self.cause):
                 try:
                     cause_strings.append(unicode(c))
-                except Exception, e:
+                except Exception:
                     pass
 
             output += "caused by\n\t" + "and caused by\n\t".join(cause_strings)
 
         return output
 
-    def __unicode__(self):
-        return unicode(str(self))
+    def __str__(self):
+        return self.__unicode__().encode('latin1', 'replace')
 
     def as_dict(self):
         return Dict(
@@ -565,6 +568,7 @@ class Log_usingThread(BaseLog):
             self.queue.add({"template": template, "params": params})
             return self
         except Exception, e:
+            e = Except.wrap(e)
             sys.stdout.write("IF YOU SEE THIS, IT IS LIKELY YOU FORGOT TO RUN Log.start() FIRST\n")
             raise e  # OH NO!
 
@@ -593,11 +597,20 @@ class Log_usingMulti(BaseLog):
         self.many = []
 
     def write(self, template, params):
+        bad = []
         for m in self.many:
             try:
                 m.write(template, params)
             except Exception, e:
-                pass
+                bad.append(m)
+                sys.stdout.write("a logger failed")
+                Log.warning("Logger failed!  It will be removed: {{type}}", type=m.__class__.__name__, cause=e)
+        try:
+            for b in bad:
+                self.many.remove(b)
+        except Exception:
+            pass
+
         return self
 
     def add_log(self, logger):
@@ -656,6 +669,23 @@ def write_profile(profile_settings, stats):
     ]
     stats_file = File(profile_settings.filename, suffix=convert.datetime2string(datetime.now(), "_%Y%m%d_%H%M%S"))
     stats_file.write(convert.list2tab(stats))
+
+
+# GET THE MACHINE METADATA
+ec2 = Null
+try:
+    from pyLibrary import aws
+
+    ec2 = aws.get_instance_metadata()
+except Exception:
+    pass
+
+machine_metadata = wrap({
+    "python": platform.python_implementation(),
+    "os": (platform.system() + platform.release()).strip(),
+    "instance_type": ec2.instance_type,
+    "name": coalesce(ec2.instance_id, platform.node())
+})
 
 
 if not Log.main_log:

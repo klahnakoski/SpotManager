@@ -125,6 +125,15 @@ class Math(object):
         except Exception:
             return False
 
+    @staticmethod
+    def is_hex(value):
+        try:
+            int('00480065006C006C006F00200077006F0072006C00640021', 16)
+            return True
+        except Exception:
+            return False
+
+
 
     @staticmethod
     def is_nan(s):
@@ -170,12 +179,28 @@ class Math(object):
     @staticmethod
     def floor(value, mod=1):
         """
-        x == floor(x, a) + mod(x, a)  FOR ALL a
+        x == Math.floor(x, a) + Math.mod(x, a)  FOR ALL a
         """
         if value == None:
             return None
         v = int(math.floor(value))
-        return v - (v % mod)
+        if v < 0:
+            _Log.error("")
+        else:
+            return v - (v % mod)
+
+    @staticmethod
+    def mod(value, mod=1):
+        """
+        RETURN NON-NEGATIVE VALUE
+        """
+        if value == None:
+            return None
+        elif value < 0:
+            return value % mod + mod
+        else:
+            return value % mod
+
 
 
     # RETURN A VALUE CLOSE TO value, BUT WITH SHORTER len(unicode(value))<len(unicode(value)):
@@ -234,7 +259,7 @@ class Math(object):
 
     @staticmethod
     def MAX(values):
-        output = None
+        output = Null
         for v in values:
             if v == None:
                 continue
@@ -259,6 +284,14 @@ class Math(object):
             else:
                 pass
         return output
+
+    @staticmethod
+    def range(start, stop, interval):
+        i = start
+        while i<stop:
+            yield i
+            i+=interval
+
 
 
 def almost_equal(first, second, digits=None, places=None, delta=None):

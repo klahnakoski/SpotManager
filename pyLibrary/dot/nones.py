@@ -55,6 +55,8 @@ class NullType(object):
         try:
             d = _get(self, "__dict__")
             o = d["_obj"]
+            if o is None:
+                return self
             key = d["__key__"]
 
             _assign(o, [key], other)
@@ -108,7 +110,9 @@ class NullType(object):
         return other is not None and not isinstance(other, NullType)
 
     def __getitem__(self, key):
-        if isinstance(key, str):
+        if isinstance(key, slice):
+            return Null
+        elif isinstance(key, str):
             key = key.decode("utf8")
         elif isinstance(key, int):
             return NullType(self, key)

@@ -13,14 +13,14 @@ from __future__ import division
 from __future__ import absolute_import
 import sys
 import math
-from pyLibrary.queries.cube import Cube
+
+from pyLibrary.queries.containers.cube import Cube
 from pyLibrary.queries.index import value2key
 from pyLibrary.dot.dicts import Dict
 from pyLibrary.dot.lists import DictList
 from pyLibrary.dot import listwrap, wrap
 from pyLibrary.debugs.logs import Log
 from pyLibrary.collections.multiset import Multiset
-from pyLibrary.thread.threads import Thread
 
 
 def groupby(data, keys=None, size=None, min_size=None, max_size=None, contiguous=False):
@@ -39,7 +39,8 @@ def groupby(data, keys=None, size=None, min_size=None, max_size=None, contiguous
     if isinstance(data, Cube):
         return data.groupby(keys)
 
-    keys = listwrap(keys)
+    if not isinstance(keys, (tuple, list)):
+        keys = (keys,)
     def get_keys(d):
         output = Dict()
         for k in keys:
@@ -71,7 +72,10 @@ def groupby(data, keys=None, size=None, min_size=None, max_size=None, contiguous
         agg = {}
         for d in data:
             key = value2key(keys, d)
-            pair = agg.get(key)
+            try:
+                pair = agg.get(key)
+            except Exception, e:
+                Log.error("")
             if pair is None:
                 pair = (get_keys(d), DictList())
                 agg[key] = pair

@@ -12,62 +12,92 @@ from __future__ import unicode_literals
 from __future__ import division
 from __future__ import absolute_import
 
+import __builtin__
+
+import re
+import math
+import string
+
 from collections import Mapping
 from datetime import timedelta, date
 from datetime import datetime as builtin_datetime
-import re
-import math
-import __builtin__
 
 from pyLibrary.dot import coalesce, wrap
 
 
+_json_encoder = None
+_convert = None
+_Log = None
+_Except = None
+_Duration = None
+
+
+def _late_import():
+    global _json_encoder
+    global _convert
+    global _Log
+    global _Except
+    global _Duration
+
+    from pyLibrary.jsons.encoder import json_encoder as _json_encoder
+    from pyLibrary import convert as _convert
+    from pyLibrary.debugs.logs import Log as _Log
+    from pyLibrary.debugs.logs import Except as _Except
+    from pyLibrary.times.durations import Duration as _Duration
+
+    _ = _json_encoder
+    _ = _convert
+    _ = _Log
+    _ = _Except
+    _ = _Duration
+
+
 def datetime(value):
-    if not convert:
+    if not _convert:
         _late_import()
 
     if isinstance(value, (date, builtin_datetime)):
         pass
     elif value < 10000000000:
-        value = convert.unix2datetime(value)
+        value = _convert.unix2datetime(value)
     else:
-        value = convert.milli2datetime(value)
+        value = _convert.milli2datetime(value)
 
-    return convert.datetime2string(value, "%Y-%m-%d %H:%M:%S")
+    return _convert.datetime2string(value, "%Y-%m-%d %H:%M:%S")
 
 
 def unix(value):
-    if not convert:
+    if not _convert:
         _late_import()
 
     if isinstance(value, (date, builtin_datetime)):
         pass
     elif value < 10000000000:
-        value = convert.unix2datetime(value)
+        value = _convert.unix2datetime(value)
     else:
-        value = convert.milli2datetime(value)
+        value = _convert.milli2datetime(value)
 
-    return str(convert.datetime2unix(value))
+    return str(_convert.datetime2unix(value))
 
 
 def url(value):
     """
-    CONVERT FROM dict OR string TO URL PARAMETERS
+    _CONVERT FROM dict OR string TO URL PARAMETERS
     """
-    if not convert:
+    if not _convert:
         _late_import()
 
-    return convert.value2url(value)
+    return _convert.value2url(value)
 
 
 def html(value):
     """
-    CONVERT FROM unicode TO HTML OF THE SAME
+    _CONVERT FROM unicode TO HTML OF THE SAME
     """
-    if not convert:
+    if not _convert:
         _late_import()
 
-    return convert.unicode2HTML(value)
+    return _convert.unicode2HTML(value)
 
 
 def upper(value):
@@ -90,10 +120,10 @@ def replace(value, find, replace):
 
 
 def json(value):
-    if not convert:
+    if not _convert:
         _late_import()
 
-    return convert.value2json(value, pretty=True)
+    return _convert.value2json(value, pretty=True)
 
 
 def indent(value, prefix=u"\t", indent=None):
@@ -120,10 +150,10 @@ def outdent(value):
                 num = min(num, len(l) - len(l.lstrip()))
         return u"\n".join([l[num:] for l in lines])
     except Exception, e:
-        if not Log:
+        if not _Log:
             _late_import()
 
-        Log.error("can not outdent value", e)
+        _Log.error("can not outdent value", e)
 
 
 def round(value, decimal=None, digits=None, places=None):
@@ -274,10 +304,10 @@ def comma(value):
 
 
 def quote(value):
-    if not convert:
+    if not _convert:
         _late_import()
 
-    return convert.string2quote(value)
+    return _convert.string2quote(value)
 
 
 def split(value, sep="\n"):
@@ -312,6 +342,10 @@ def find_first(value, find_arr, start=0):
         i = min(i, temp)
     if i == len(value): return -1
     return i
+
+
+def is_hex(value):
+    return all(c in string.hexdigits for c in value)
 
 
 pattern = re.compile(r"\{\{([\w_\.]+(\|[^\}^\|]+)*)\}\}")
@@ -349,10 +383,10 @@ def _expand(template, seq):
     elif isinstance(template, list):
         return "".join(_expand(t, seq) for t in template)
     else:
-        if not Log:
+        if not _Log:
             _late_import()
 
-        Log.error("can not handle")
+        _Log.error("can not handle")
 
 
 def _simple_expand(template, seq):
@@ -371,12 +405,12 @@ def _simple_expand(template, seq):
             val = seq[-depth]
             if var:
                 val = val[var]
-            for filter in ops[1:]:
-                parts = filter.split('(')
+            for func_name in ops[1:]:
+                parts = func_name.split('(')
                 if len(parts) > 1:
                     val = eval(parts[0] + "(val, " + ("(".join(parts[1::])))
                 else:
-                    val = globals()[filter](val)
+                    val = globals()[func_name](val)
             val = toString(val)
             return val
         except Exception, e:
@@ -386,12 +420,12 @@ def _simple_expand(template, seq):
                     val = toString(val)
                     return val
             except Exception, f:
-                if not Log:
+                if not _Log:
                     _late_import()
 
-                Log.warning(
-                    "Can not expand " + "|".join(ops) + " in template: {{template|json}}",
-                    template=template,
+                _Log.warning(
+                    "Can not expand " + "|".join(ops) + " in template: {{template_|json}}",
+                    template_=template,
                     cause=e
                 )
             return "[template expansion error: (" + str(e.message) + ")]"
@@ -419,18 +453,16 @@ def deformat(value):
 
 
 def toString(val):
-    if not convert:
+    if not _convert:
         _late_import()
 
     if val == None:
         return ""
     elif isinstance(val, (Mapping, list, set)):
-        from pyLibrary.jsons.encoder import json_encoder
-
-        return json_encoder(val, pretty=True)
+        return _json_encoder(val, pretty=True)
     elif hasattr(val, "__json__"):
         return val.__json__()
-    elif isinstance(val, Duration):
+    elif isinstance(val, _Duration):
         return unicode(round(val.seconds, places=4)) + " seconds"
     elif isinstance(val, timedelta):
         duration = val.total_seconds()
@@ -439,10 +471,10 @@ def toString(val):
     try:
         return unicode(val)
     except Exception, e:
-        if not Log:
+        if not _Log:
             _late_import()
 
-        Log.error(str(type(val)) + " type can not be converted to unicode", e)
+        _Log.error(str(type(val)) + " type can not be converted to unicode", e)
 
 
 def edit_distance(s1, s2):
@@ -501,10 +533,10 @@ def apply_diff(text, diff, reverse=False):
 
     matches = DIFF_PREFIX.match(diff[0].strip())
     if not matches:
-        if not Log:
+        if not _Log:
             _late_import()
 
-        Log.error("Can not handle {{diff}}\n",  diff= diff[0])
+        _Log.error("Can not handle {{diff}}\n",  diff= diff[0])
 
     remove = [int(i.strip()) for i in matches.group(1).split(",")]
     if len(remove) == 1:
@@ -542,51 +574,35 @@ def utf82unicode(value):
     try:
         return value.decode("utf8")
     except Exception, e:
-        if not Log:
+        if not _Log:
             _late_import()
 
         if not isinstance(value, basestring):
-            Log.error("Can not convert {{type}} to unicode because it's not a string",  type= type(value).__name__)
+            _Log.error("Can not _convert {{type}} to unicode because it's not a string",  type= type(value).__name__)
 
-        e = Except.wrap(e)
+        e = _Except.wrap(e)
         for i, c in enumerate(value):
             try:
                 c.decode("utf8")
             except Exception, f:
-                Log.error("Can not convert charcode {{c}} in string  index {{i}}", i=i, c=ord(c), cause=[e, Except.wrap(f)])
+                _Log.error("Can not _convert charcode {{c}} in string  index {{i}}", i=i, c=ord(c), cause=[e, _Except.wrap(f)])
 
         try:
             latin1 = unicode(value.decode("latin1"))
-            Log.error("Can not explain conversion failure, but seems to be latin1", e)
+            _Log.error("Can not explain conversion failure, but seems to be latin1", e)
         except Exception, f:
             pass
 
         try:
             a = unicode(value.decode("iso-8859-1"))
-            Log.error("Can not explain conversion failure, but seems to be iso-8859-1", e)
+            _Log.error("Can not explain conversion failure, but seems to be iso-8859-1", e)
         except Exception, f:
             pass
 
-        Log.error("Can not explain conversion failure of " + type(value).__name__ + "!", e)
+        _Log.error("Can not explain conversion failure of " + type(value).__name__ + "!", e)
+
+def wordify(value):
+    return [w for w in re.split(r"[\W_]", value) if strip(w)]
 
 
-convert = None
-Log = None
-Except = None
-Duration = None
-
-def _late_import():
-    global convert
-    global Log
-    global Except
-    global Duration
-
-    from pyLibrary import convert
-    from pyLibrary.debugs.logs import Log, Except
-    from pyLibrary.times.durations import Duration
-
-    _ = convert
-    _ = Log
-    _ = Except
-    _ = Duration
 

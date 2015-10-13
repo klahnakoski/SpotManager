@@ -15,14 +15,15 @@ from pyLibrary import dot
 from pyLibrary import convert
 from pyLibrary.collections.matrix import Matrix
 from pyLibrary.collections import MAX, OR
-from pyLibrary.queries.query import _normalize_edge
+from pyLibrary.queries.containers import Container
 from pyLibrary.dot import Null, Dict
 from pyLibrary.dot.lists import DictList
-from pyLibrary.dot import wrap, wrap_dot, listwrap
+from pyLibrary.dot import wrap, wrap_leaves, listwrap
 from pyLibrary.debugs.logs import Log
+from pyLibrary.queries.query import _normalize_edge
 
 
-class Cube(object):
+class Cube(Container):
     """
     A CUBE IS LIKE A NUMPY ARRAY, ONLY WITH THE DIMENSIONS TYPED AND NAMED.
     CUBES ARE BETTER THAN PANDAS BECAUSE THEY DEAL WITH NULLS GRACEFULLY
@@ -271,7 +272,7 @@ class Cube(object):
         if len(self.edges)==1 and self.edges[0].domain.type=="index":
             # USE THE STANDARD LIST FILTER
             from pyLibrary.queries import qb
-            return qb.filter(where, self.data.values()[0].cube)
+            return qb.filter(self.data.values()[0].cube, where)
         else:
             # FILTER DOES NOT ALTER DIMESIONS, JUST WHETHER THERE ARE VALUES IN THE CELLS
             Log.unexpected("Incomplete")
@@ -348,7 +349,7 @@ class Cube(object):
         lookup = [[getKey[i](p) for p in e.domain.partitions+([None] if e.allowNulls else [])] for i, e in enumerate(self.edges)]
 
         def coord2term(coord):
-            output = wrap_dot({keys[i]: lookup[i][c] for i, c in enumerate(coord)})
+            output = wrap_leaves({keys[i]: lookup[i][c] for i, c in enumerate(coord)})
             return output
 
         if isinstance(self.select, list):
@@ -382,6 +383,12 @@ class Cube(object):
             )
 
         return output
+
+    def format(self, format):
+        if format == "cube":
+            return self
+        else:
+            Log.error("Do not know how to handle")
 
     def __str__(self):
         if self.is_value:

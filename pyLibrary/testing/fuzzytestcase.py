@@ -8,13 +8,14 @@
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from collections import Mapping
-
+import types
 import unittest
+
 from pyLibrary import dot
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import coalesce, Dict, literal_field
+from pyLibrary.dot import coalesce, literal_field
 from pyLibrary.maths import Math
-from pyLibrary.dot import wrap
+from pyLibrary.queries.unique_index import UniqueIndex
 from pyLibrary.strings import expand_template
 
 
@@ -77,17 +78,22 @@ def assertAlmostEqual(test, expected, digits=None, places=None, msg=None, delta=
     try:
         if test==None and expected==None:
             return
+        elif isinstance(test, UniqueIndex):
+            if test ^ expected:
+                Log.error("Sets do not match")
         elif isinstance(expected, Mapping):
             for k, v2 in expected.items():
                 if isinstance(k, basestring):
                     v1 = dot.get_attr(test, literal_field(k))
                 else:
-                    show_deta=False
+                    show_deta =False
                     v1 = test[k]
                 assertAlmostEqual(v1, v2, msg=msg, digits=digits, places=places, delta=delta)
         elif isinstance(test, set) and isinstance(expected, set):
-            if test != expected:
+            if test ^ expected:
                 Log.error("Sets do not match")
+        elif isinstance(expected, types.FunctionType):
+            return expected(test)
         elif hasattr(test, "__iter__") and hasattr(expected, "__iter__"):
             for a, b in zipall(test, expected):
                 assertAlmostEqual(a, b, msg=msg, digits=digits, places=places, delta=delta)

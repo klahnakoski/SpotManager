@@ -67,6 +67,10 @@ class Queue(object):
         m.set_body(convert.value2json(message))
         self.queue.write(m)
 
+    @property
+    def name(self):
+        return self.settings.name
+
     def extend(self, messages):
         for m in messages:
             self.add(m)
@@ -78,6 +82,17 @@ class Queue(object):
 
         self.pending.append(m)
         return convert.json2value(m.get_body())
+
+    def pop_message(self, wait=SECOND, till=None):
+        """
+        RETURN THE MESSAGE, CALLER IS RESPONSIBLE FOR CALLING delete_message() WHEN DONE
+        """
+        m = self.queue.read(wait_time_seconds=Math.floor(wait.seconds))
+        if not m:
+            return None
+
+        output = convert.json2value(m.get_body())
+        return output
 
     def commit(self):
         pending = self.pending

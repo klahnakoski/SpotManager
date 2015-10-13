@@ -61,6 +61,7 @@ class ETL(InstanceManager):
             sudo("supervisorctl stop all")
 
     def _setup_etl_code(self):
+        sudo("dpkg --configure -a")
         sudo("apt-get update")
         sudo("apt-get clean")
 

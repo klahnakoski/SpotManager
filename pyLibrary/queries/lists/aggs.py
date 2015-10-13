@@ -14,13 +14,11 @@ import itertools
 
 from pyLibrary.collections.matrix import Matrix
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import listwrap, unwrap, set_default
+from pyLibrary.dot import listwrap, wrap
 from pyLibrary.queries import windows
-from pyLibrary.queries.cube import Cube
+from pyLibrary.queries.containers.cube import Cube
 from pyLibrary.queries.domains import SimpleSetDomain, DefaultDomain
-# from pyLibrary.queries.py.util import util_filter
 from pyLibrary.queries.expressions import qb_expression_to_function
-from pyLibrary.queries.query import qb
 
 
 def is_aggs(query):
@@ -30,12 +28,13 @@ def is_aggs(query):
 
 
 def list_aggs(frum, query):
+    frum = wrap(frum)
     select = listwrap(query.select)
 
     is_join = False  # True IF MANY TO MANY JOIN WITH AN EDGE
     for e in query.edges:
         if isinstance(e.domain, DefaultDomain):
-            e.domain = SimpleSetDomain(partitions=list(sorted(set(frum.select(e.value)))))
+            e.domain = SimpleSetDomain(partitions=list(sorted(set(frum.select(e)))))
 
     for s in listwrap(query.select):
         s["exec"] = qb_expression_to_function(s.value)

@@ -4,7 +4,7 @@ Consistent dicts, lists and Nones
 
 This library is solves Python's lack of consistency (lack of closure) under the dot (`.`)
 and slice `[::]` operators.  The most significant differences involve dealing
-with None, missing keys, and missing items in lists.
+with None, missing property names, and missing items.
 
 Dict replaces dict
 --------------------
@@ -16,7 +16,7 @@ readable.  In many ways, `dict()` can act as an anonymous type, but it does
 not have the features listed here.
 
  1. `a.b == a["b"]`
- 2. missing keys are handled gracefully, which is beneficial when being used in
+ 2. missing property names are handled gracefully, which is beneficial when being used in
     set operations (database operations) without raising exceptions <pre>
 a = wrap({})
 &gt;&gt;&gt; a == {}
@@ -26,7 +26,7 @@ a.b.c == None
 &gt;&gt;&gt; True
 a[None] == None
 &gt;&gt;&gt; True</pre>
-    missing keys are common when dealing with JSON, which is often almost anything.
+    missing property names are common when dealing with JSON, which is often almost anything.
     Unfortunately, you do loose the ability to perform <code>a is None</code>
     checks:  **You must always use <code>a == None</code> instead**.
  3. remove an attribute by assigning `None` (eg `a.b = None`)
@@ -54,7 +54,7 @@ a.b.c += [1]
 a.b.c += [42]
 &gt;&gt;&gt; a == {"b": {"c": [1, 42]}}
 </pre>
- 8. property names (keys) are coerced to unicode - it appears Python's
+ 8. property names are coerced to unicode - it appears Python's
  object.getattribute() is called with str() even when using `from __future__
  import unicode_literals`
  9. by allowing dot notation, the IDE does tab completion, plus my spelling
@@ -68,7 +68,7 @@ different names and slightly different variations, some examples are:
  * `jinja2.environment.Environment.getattr()`  to allow convenient dot notation
  * `argparse.Environment()` - code performs `setattr(e, name, value)` on
   instances of Environment to provide dot(`.`) accessors
- * `collections.namedtuple()` - gives attribute names to tuple indicies
+ * `collections.namedtuple()` - gives attribute names to tuple indices
   effectively providing <code>a.b</code> rather than <code>a["b"]</code>
      offered by dicts
  * [configman's DotDict](https://github.com/mozilla/configman/blob/master/configman/dotdict.py)
@@ -93,7 +93,7 @@ Null is the new None
 In many applications the meaning of None (or null) is always in the context of
 a known type:  Each type has a list of expected properties, and if an instance
 is missing one of those properties we set it to None.  Let us call it this the
-"*Missing Value*" definition.
+"*Missing Value*" definition.  Also known as ["my billion dollar mistake"](https://en.wikipedia.org/wiki/Tony_Hoare).
 
 Another interpretation for None (or null), is that the instance simply does not
 have that property: Asking for the physical height of poem is nonsense, and
@@ -131,7 +131,9 @@ replaced with `None` in all cases.
 
 ###Identity and Absorbing (Zero) Elements###
 
-With closure we can realize we have defined an algebraic semigroup:  The identity element is the dot string (`"."`) and the zero element is `Null` (or `None`).
+With closure we can realize we have defined an [algebraic semigroup](https://en.wikipedia.org/wiki/Semigroup):  The 
+identity element is the dot string (`"."`) and the zero element is `Null` 
+(or `None`).
 
  1. `a[Null] == Null`
  2. `a["."] == a`
@@ -165,8 +167,8 @@ in `Null`:
  * `a ∘ Null == Null`
  * `Null ∘ a == Null`
 
-where `∘` is most binary operators.  `and` and `or` are exceptions, and behave
-as expected:
+where `∘` is standing in for most binary operators.  Operators `and` and `or` 
+are exceptions, and behave as expected with [three-valued logic](https://en.wikipedia.org/wiki/Three-valued_logic):
 
  * `True or Null == True`
  * `False or Null == Null`
@@ -208,7 +210,7 @@ all `a<=b`
   * Trinary slicing `[::]` uses the flat list definition
 
 When assuming a *flat-list*, we loose the *take-from-the-right* tricks gained
-from modulo arithmetic on the indicies. Therefore, we require extra methods
+from modulo arithmetic on the indices. Therefore, we require extra methods
 to perform right-based slicing:
 
   * **right()** - `flat_list.right(b)` same as `loop_list[-b:]` except when `b<=0`
@@ -231,20 +233,121 @@ The dot operator on a `DictList` performs a simple projection; it will return a 
 DictObject for data
 -------------------
 
-There are two major families of objects in Object Oriented programming.  The first, are ***Actors***: characterized by a number of useful instance methods and some state bundled into a package.  The second are ***Data***: Primarily a set of properties, with only (de)serialization functions, or algebraic operators defined.  Boto has many examples of these *Data* classes, [here is one](https://github.com/boto/boto/blob/4b8269562e663f090403e57ba1a3a471b6e0aa0e/boto/ec2/networkinterface.py).
+There are two major families of objects in Object Oriented programming.  The 
+first, are ***Actors***: characterized by a number of useful instance methods 
+and some state bundled into a package.  The second are ***Data***: Primarily 
+a set of properties, with only (de)serialization functions, or algebraic 
+operators defined.  Boto has many examples of these *Data* classes, 
+[here is one](https://github.com/boto/boto/blob/4b8269562e663f090403e57ba1a3a471b6e0aa0e/boto/ec2/networkinterface.py).
 
-The problem with *Data* objects is they have an useless distinction between attributes and properties.  This prevents us from using the `[]` operator for dereferencing, forcing use to use the verbose `__getattr__()` instead.  It also prevents the use of query operators over these objects.
+The problem with *Data* objects is they have an useless distinction between 
+attributes and properties.  This prevents us from using the `[]` operator for 
+dereferencing, forcing use to use the verbose `getattr()` instead.  It 
+also prevents the use of query operators over these objects.
 
-You can register a class as a *data* class, by wrapping it with `DictClass`.
+You can wrap any object to make it appear like a Dict.
 
 ```python
-	SomeDataClass = DictClass(SomeDataClass)
+	d = DictObject(my_data_object)
 ```
 
-This does two things:
-* It will wrap all objects referenced by `Dict` and all items found in `DictList` so they can be used in queries.   
-* It decorates the constructor to add a `settings` parameter, which can be used to pass default parameters, like [`@use_settings`](https://github.com/klahnakoski/pyLibrary/blob/6e3233abe6e68d00020907d9d630c9a57c14e8a2/pyLibrary/meta.py#L80) 
+This allows you to use the query operators of this `dot` library on this object.  Care is required though:  Your object may not be a pure data object, and there can be conflicts between the object methods and the properties it is expected to have.
 
+
+Mapping Leaves
+--------------
+
+The implications of allowing `a["b.c"] == a.b.c` opens up two different Dict forms: *standard form* and *leaf form*
+
+###Standard Form
+
+The `[]` operator in `Dict` has been overridden to assume dots (`.`) represent paths rather than literal string values; but, the internal representation of `Dict` is the same as `dict`; the property names are treated as black box strings.  `[]` just provides convenience.
+
+When wrapping `dict`, the property names are **NOT** interpreted as paths; property names can include dots (`.`).
+
+```python
+	>>> from pyLibrary.dot import wrap
+	>>> a = wrap({"b.c": 42})
+	>>> a.keys()
+	set(['b.c'])
+
+	>>> a["b.c"]
+	Null    # BECAUSE b.c PATH LEADS TO NOTHING
+
+	>>> a["b\.c"]
+	42
+```
+
+###Leaf form
+
+Leaf form is used in some JSON, or YAML, configuration files.  Here is an example from my ElasticSearch configuration:
+
+**YAML**
+
+```yaml
+	discovery.zen.ping.multicast.enabled: true
+```
+
+**JSON**
+
+```javascript
+	{"discovery.zen.ping.multicast.enabled": true}
+```
+
+Both are intended to represent the deeply nested JSON
+
+```javascript
+	{"discovery": {"zen": {"ping": {"multicast": {"enabled": true}}}}}
+```
+
+Upon importing such files, it is good practice to convert it to standard form immediately:
+
+```python
+	config = wrap_leaves(config)
+```
+
+`wrap_leaves()` assumes any dots found in JSON names are referring to paths into objects, not a literal dots.
+
+When accepting input from other automations and users, your property names can potentially contain dots; which must be properly escaped to produce the JSON you are expecting.  Specifically, this happens with URLs:
+
+**BAD** - dots in url are interpreted as paths
+
+```python
+	>>> from pyLibrary.dot.dicts import Dict
+	>>> from pyLibrary.dot import wrap, literal_field
+	>>>
+	>>> def update(summary, url, count):
+	...     summary[url] += count
+	...
+	>>> update(s, "example.html", 3)
+	>>> print s
+
+	Dict({u'example': {'html': 3}})
+```
+
+**GOOD** - Notice the added `literal_field()` wrapping
+
+```python
+	>>> def update(summary, url, count):
+	...     summary[literal_field(url)] += count
+	...
+	>>> s = Dict()
+	>>> update(s, "example.html", 3)
+	>>> print s
+
+	Dict({u'example.html': 3})
+```
+
+You can produce leaf form by iterating over all leaves.  This is good for simplifying iteration over deep object structures.
+
+```python
+	>>> from pyLibrary.dot import wrap
+	>>> a = wrap({"b": {"c": 42}})
+	>>> for k, v in a.leaves():
+	...     print k + ": " + unicode(v)
+
+	b.c: 42
+```
 
 Appendix
 ========
@@ -298,11 +401,10 @@ reveal itself.
 ```
 
 So, clearly, `[-num:]` can not be understood as a suffix slice, rather
-something more complicated; especially considering that `num` could be
-negative.
+something more complicated; given `num` <= 0.
 
 I advocate never using negative indices in the slice operator.  Rather, use the
-`right()` method instead which is consistent for a range `num`:
+`right()` method instead which is consistent for `num` ∈ ℤ:
 
 ```python
     def right(_list, num):

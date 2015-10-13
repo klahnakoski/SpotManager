@@ -137,7 +137,7 @@ class Bucket(object):
         if must_exist:
             meta = self.get_meta(key)
             if not meta:
-                Log.error("Key {{key}} does not exist", key=key)
+                Log.error("Key {{key}} does not exist in bucket {{bucket}}", key=key, bucket=self.bucket.name)
             key = strip_extension(meta.key)
         return File(self, key)
 
@@ -183,10 +183,12 @@ class Bucket(object):
                     error = e
 
             if too_many:
-                Log.error("multiple keys in {{bucket}} with prefix={{prefix|quote}}: {{list}}",
-                    bucket= self.name,
-                    prefix= key,
-                    list= [k.name for k in metas])
+                Log.error(
+                    "multiple keys in {{bucket}} with prefix={{prefix|quote}}: {{list}}",
+                    bucket=self.name,
+                    prefix=key,
+                    list=[k.name for k in metas]
+                )
             if not perfect and error:
                 Log.error("Problem with key request", error)
             return coalesce(perfect, favorite)

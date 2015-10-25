@@ -34,7 +34,7 @@ def list_aggs(frum, query):
     is_join = False  # True IF MANY TO MANY JOIN WITH AN EDGE
     for e in query.edges:
         if isinstance(e.domain, DefaultDomain):
-            e.domain = SimpleSetDomain(partitions=list(sorted(set(frum.select(e)))))
+            e.domain = SimpleSetDomain(partitions=list(sorted(set(frum.select(e.value)))))
 
     for s in listwrap(query.select):
         s["exec"] = qb_expression_to_function(s.value)

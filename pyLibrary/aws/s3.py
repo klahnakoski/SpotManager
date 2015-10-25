@@ -176,9 +176,10 @@ class Bucket(object):
                     if simple == key:
                         perfect = m
                         too_many = False
-                    if favorite and not perfect:
-                        too_many = True
-                    favorite = m
+                    if simple.startswith(key + ".") or simple.startswith(key + ":"):
+                        if favorite and not perfect:
+                            too_many = True
+                        favorite = m
                 except Exception, e:
                     error = e
 
@@ -199,9 +200,11 @@ class Bucket(object):
         if delimiter:
             # WE REALLY DO NOT GET KEYS, BUT RATHER Prefix OBJECTS
             # AT LEAST THEY ARE UNIQUE
-            return set(k.name.rstrip(delimiter) for k in self.bucket.list(prefix=prefix, delimiter=delimiter))
+            candidates = [k.name.rstrip(delimiter) for k in self.bucket.list(prefix=prefix, delimiter=delimiter)]
         else:
-            return set(strip_extension(k.key) for k in self.bucket.list(prefix=prefix))
+            candidates = [strip_extension(k.key) for k in self.bucket.list(prefix=prefix)]
+
+        return set(k for k in candidates if k == prefix or k.startswith(prefix + ".") or k.startswith(prefix + ":"))
 
     def metas(self, prefix=None, limit=None, delimiter=None):
         """
@@ -329,13 +332,13 @@ class Bucket(object):
                 cause=e
             )
 
-    def write_lines(self, key, *lines):
+    def write_lines(self, key, lines):
         self._verify_key_format(key)
         storage = self.bucket.new_key(key + ".json.gz")
 
         buff = BytesIO()
         archive = gzip.GzipFile(fileobj=buff, mode='w')
-        count=0
+        count = 0
         for l in lines:
             if hasattr(l, "__iter__"):
                 for ll in l:

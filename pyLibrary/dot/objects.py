@@ -97,6 +97,8 @@ def dictwrap(v):
         return m
     elif type_ is Dict:
         return v
+    elif type_ is DictObject:
+        return v
     elif type_ is NoneType:
         return None   # So we allow `is None`
     elif type_ is list:

@@ -165,14 +165,15 @@ def _value2json(value, _buffer):
         elif value is False:
             append(_buffer, u"false")
             return
-
-        type = value.__class__
-        if type in (dict, Dict):
+        elif isinstance(value, Mapping):
             if value:
                 _dict2json(value, _buffer)
             else:
                 append(_buffer, u"{}")
-        elif type is str:
+            return
+
+        type = value.__class__
+        if type is str:
             append(_buffer, u"\"")
             try:
                 v = utf82unicode(value)
@@ -194,11 +195,11 @@ def _value2json(value, _buffer):
         elif type in (set, list, tuple, DictList):
             _list2json(value, _buffer)
         elif type is date:
-            append(_buffer, unicode(long(time.mktime(value.timetuple()))))
+            append(_buffer, unicode(Decimal(time.mktime(value.timetuple()))))
         elif type is datetime:
-            append(_buffer, unicode(long(time.mktime(value.timetuple()))))
+            append(_buffer, unicode(Decimal(time.mktime(value.timetuple()))))
         elif type is Date:
-            append(_buffer, unicode(long(time.mktime(value.value.timetuple()))))
+            append(_buffer, unicode(value.unix))
         elif type is timedelta:
             append(_buffer, unicode(value.total_seconds()))
         elif type is Duration:

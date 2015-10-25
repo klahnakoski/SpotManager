@@ -91,6 +91,8 @@ def qb_expression_to_ruby(expr):
         return "null"
     elif Math.is_number(expr):
         return unicode(expr)
+    elif expr == ".":
+        return "_source"
     elif is_keyword(expr):
         return "doc[" + convert.string2quote(expr) + "].value"
     elif isinstance(expr, basestring):
@@ -147,19 +149,54 @@ def qb_expression_to_ruby(expr):
 
     cop = complex_operators.get(op)
     if cop:
-        output = cop(term).to_ruby()
+        output = cop(op, term).to_ruby()
         return output
 
     Log.error("`{{op}}` is not a recognized operation",  op= op)
+
+def qb_expression_to_missing(expr):
+    if expr == None:
+        return True
+    elif isinstance(expr, unicode):
+        if expr == ".":
+            return False
+        elif is_keyword(expr):
+            return {"missing": expr}
+        else:
+            Log.error("Expecting a json path")
+    elif Math.is_integer(expr):
+        return False
+    elif isinstance(expr, Date):
+        return False
+    elif expr is True:
+        return False
+    elif expr is False:
+        return False
+
+    op, term = expr.items()[0]
+
+    mop = python_multi_operators.get(op)
+    if mop:
+        raise NotImplementedError
+
+    bop = python_binary_operators.get(op)
+    if bop:
+        raise NotImplementedError
+
+    uop = python_unary_operators.get(op)
+    if uop:
+        raise NotImplementedError
+
+    cop = complex_operators.get(op)
+    if cop:
+        return cop(op, term).missing()
+
+    Log.error("`{{op}}` is not a recognized operation", op=op)
 
 
 def qb_expression_to_python(expr):
     if expr == None:
         return "None"
-    elif Math.is_integer(expr):
-        return "row[" + unicode(expr) + "]"
-    elif isinstance(expr, Date):
-        return unicode(expr.unix)
     elif isinstance(expr, unicode):
         if expr == ".":
             return "row"
@@ -167,6 +204,10 @@ def qb_expression_to_python(expr):
             return "row[" + convert.value2quote(expr) + "]"
         else:
             Log.error("Expecting a json path")
+    elif Math.is_integer(expr):
+        return unicode(expr)
+    elif isinstance(expr, Date):
+        return unicode(expr.unix)
     elif isinstance(expr, CODE):
         return expr.code
     elif expr is True:
@@ -229,8 +270,8 @@ def get_all_vars(expr):
     elif isinstance(expr, _Query):
         return query_get_all_vars(expr)
     elif isinstance(expr, unicode):
-        if expr == "." or is_keyword(expr):
-            return set([expr])
+        if is_keyword(expr):
+            return {expr}
         else:
             Log.error("Expecting a json path")
     elif expr is True:
@@ -301,7 +342,7 @@ def expression_map(_map, expr):
         if expr == ".":
             return expr
         elif is_keyword(expr):
-            return _map.get(expr, expr)
+            return coalesce(_map.get(expr), expr)
         else:
             Log.error("Expecting a json path")
     elif isinstance(expr, CODE):
@@ -558,14 +599,21 @@ class MultiOp(object):
 class RegExpOp(object):
     def __init__(self, op, term):
         self.var, self.pattern = term.items()[0]
+
     def to_ruby(self):
         Log.error("do not know how to hanlde")
+
     def to_python(self):
-        return "re.match("+convert.string2quote(self.pattern)+", "+qb_expression_to_python(self.var)+")"
+        return "re.match(" + convert.string2quote(self.pattern) + ", " + qb_expression_to_python(self.var) + ")"
+
     def to_esfilter(self):
         return {"regexp": {self.var: self.pattern}}
+
     def vars(self):
         return {self.var}
+
+    def map(self, map):
+        return {"regex": {map.get(self.var, self.var): self.pattern}}
 
 
 class TermsOp(object):
@@ -593,7 +641,11 @@ class CoalesceOp(object):
         self.vals = unwrap(term)
 
     def to_ruby(self):
-        raise NotImplementedError
+        acc = qb_expression_to_ruby(self.vals[-1])
+        for v in reversed(self.vals[:-1]):
+            r = qb_expression_to_ruby(v)
+            acc = "if ((" + r + ") != null) { " + r + "} else {" + acc + "}"
+        return acc
 
     def to_python(self):
         return "coalesce(" + (",".join(map(qb_expression_to_python, self.vals))) + ")"
@@ -601,10 +653,14 @@ class CoalesceOp(object):
     def to_esfilter(self):
         return {"or": [{"exists": {"field": v}} for v in self.vals]}
 
+    def missing(self):
+        # RETURN true FOR RECORDS THE WOULD RETURN NULL
+        return {"and": [qb_expression_to_missing(v) for v in self.vals]}
+
     def vars(self):
         output = set()
         for v in self.vals:
-            output |= v
+            output |= get_all_vars(v)
         return output
 
     def map(self, map):
@@ -652,6 +708,34 @@ class PrefixOp(object):
 
     def map(self, map):
         return {"prefix": {map.get(self.field, self.field): self.prefix}}
+
+
+class LeftOp(object):
+    def __init__(self, op, term):
+        if isinstance(term, Mapping):
+            self.value, self.length = term.items()[0]
+        else:
+            self.value, self.length = term
+
+    def to_ruby(self):
+        v = qb_expression_to_ruby(self.value)
+        l = qb_expression_to_python(self.length)
+        expr = "((" + v + ") == null || (" + l + ") == null) ? null : (" + v + ".substring(0, max(0, min(" + v + ".length(), " + l + "))))"
+        return expr
+
+    def to_python(self):
+        v = qb_expression_to_python(self.value)
+        l = qb_expression_to_python(self.length)
+        return "None if " + v + " == None or " + l + " == None else " + v + "[0:min(0, " + l + ")]"
+
+    def to_esfilter(self):
+        raise NotImplementedError
+
+    def vars(self):
+        return get_all_vars(self.value) | get_all_vars(self.length)
+
+    def map(self, map):
+        return {"left": {map.get(self.value, self.value): self.length}}
 
 
 class MissingOp(object):
@@ -789,7 +873,8 @@ complex_operators = {
     "regexp": RegExpOp,
     "regex": RegExpOp,
     "literal": LiteralOp,
-    "coalesce": CoalesceOp
+    "coalesce": CoalesceOp,
+    "left": LeftOp
 }
 
 

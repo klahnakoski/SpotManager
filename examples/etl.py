@@ -84,6 +84,7 @@ class ETL(InstanceManager):
         with cd("/home/ubuntu/TestLog-ETL"):
             run("git checkout etl")
             # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
+            sudo("pip install BeautifulSoup")
             sudo("pip install MozillaPulse")
             sudo("pip install boto")
             sudo("pip install requests")

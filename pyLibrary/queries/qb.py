@@ -449,7 +449,9 @@ def get_columns(data):
 
 def sort(data, fieldnames=None):
     """
-    PASS A FIELD NAME, OR LIST OF FIELD NAMES, OR LIST OF STRUCTS WITH {"field":field_name, "sort":direction}
+    PASS A FIELD NAME, OR
+    LIST OF FIELD NAMES, OR
+    LIST OF STRUCTS WITH {"field":field_name, "sort":direction}
     """
     try:
         if data == None:

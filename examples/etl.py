@@ -88,6 +88,7 @@ class ETL(InstanceManager):
             sudo("pip install MozillaPulse")
             sudo("pip install boto")
             sudo("pip install requests")
+            sudo("pip install taskcluster")
             sudo("apt-get -y install python-psycopg2")
 
     def _setup_etl_supervisor(self, cpu_count):

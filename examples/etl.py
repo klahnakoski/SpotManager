@@ -85,9 +85,11 @@ class ETL(InstanceManager):
         with cd("/home/ubuntu/TestLog-ETL"):
             run("git checkout etl")
             # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
+            sudo("pip install BeautifulSoup")
             sudo("pip install MozillaPulse")
             sudo("pip install boto")
             sudo("pip install requests")
+            sudo("pip install taskcluster")
             sudo("apt-get -y install python-psycopg2")
 
     def _setup_etl_supervisor(self, cpu_count):

@@ -40,35 +40,36 @@ class URL(object):
     """
 
     def __init__(self, value):
-        self.scheme = None
-        self.host = None
-        self.port = None
-        self.path = ""
-        self.query = ""
-        self.fragment = ""
-
-        if value == None:
-            return
-
         if not _convert:
             _late_import()
-        if value.startswith("file://") or value.startswith("//"):
-            # urlparse DOES NOT WORK IN THESE CASES
-            scheme, suffix = value.split("//")
-            self.scheme = scheme.rstrip(":")
-            parse(self, suffix, 0, 1)
 
-            self.query = wrap(_convert.url_param2value(self.query))
-            self.fragment = self.fragment
-        else:
-            output = urlparse(value)
-            self.scheme = output.scheme
-            self.port = output.port
-            self.host = output.netloc.split(":")[0]
-            self.path = output.path
-            self.query = wrap(_convert.url_param2value(output.query))
-            self.fragment = output.fragment
+        try:
+            self.scheme = None
+            self.host = None
+            self.port = None
+            self.path = ""
+            self.query = ""
+            self.fragment = ""
 
+            if value == None:
+                return
+
+            if value.startswith("file://") or value.startswith("//"):
+                # urlparse DOES NOT WORK IN THESE CASES
+                scheme, suffix = value.split("//")
+                self.scheme = scheme.rstrip(":")
+                parse(self, suffix, 0, 1)
+                self.query = wrap(_convert.url_param2value(self.query))
+            else:
+                output = urlparse(value)
+                self.scheme = output.scheme
+                self.port = output.port
+                self.host = output.netloc.split(":")[0]
+                self.path = output.path
+                self.query = wrap(_convert.url_param2value(output.query))
+                self.fragment = output.fragment
+        except Exception, e:
+            _Log.error("problem parsing {{value}} to URL", value=value, cause=e)
     def __nonzero__(self):
         if self.scheme or self.host or self.port or self.path or self.query or self.fragment:
             return True
@@ -88,11 +89,14 @@ class URL(object):
         if self.port:
             url = url + ":" + str(self.port)
         if self.path:
-            url += str(self.path)
+            if self.path[0]=="/":
+                url += str(self.path)
+            else:
+                url += b"/"+str(self.path)
         if self.query:
             url = url + '?' + _convert.value2url(self.query)
         if self.fragment:
-            url = url + '#' + convert.value2url(self.fragment)
+            url = url + '#' + _convert.value2url(self.fragment)
         return url
 
 

@@ -26,6 +26,7 @@ from pyLibrary.jsons.encoder import \
     problem_serializing, \
     _repr, \
     UnicodeBuilder
+from pyLibrary.maths.stats import Stats
 from pyLibrary.strings import utf82unicode
 from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import Duration
@@ -33,19 +34,8 @@ from pyLibrary.times.durations import Duration
 
 json_decoder = json.JSONDecoder().decode
 
-
-# THIS FILE EXISTS TO SERVE AS A FAST REPLACEMENT FOR JSON ENCODING
-# THE DEFAULT JSON ENCODERS CAN NOT HANDLE A DIVERSITY OF TYPES *AND* BE FAST
-#
-# 1) WHEN USING cPython, WE HAVE NO COMPILER OPTIMIZATIONS: THE BEST STRATEGY IS TO
-# CONVERT THE MEMORY STRUCTURE TO STANDARD TYPES AND SEND TO THE INSANELY FAST
-#    DEFAULT JSON ENCODER
-# 2) WHEN USING PYPY, WE USE CLEAR-AND-SIMPLE PROGRAMMING SO THE OPTIMIZER CAN DO
-#    ITS JOB.  ALONG WITH THE UnicodeBuilder WE GET NEAR C SPEEDS
-
-
 append = UnicodeBuilder.append
-
+_ = Stats
 
 def typed_encode(value):
     """

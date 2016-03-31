@@ -20,7 +20,8 @@ from mozillapulse.utils import time_to_string
 
 from pyLibrary.debugs import constants
 from pyLibrary import jsons
-from pyLibrary.debugs.logs import Log, Except
+from pyLibrary.debugs.exceptions import Except
+from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import wrap, coalesce, Dict, set_default
 from pyLibrary.meta import use_settings
 from pyLibrary.thread.threads import Thread
@@ -105,7 +106,7 @@ class Consumer(Thread):
                 self.pulse.listen()
             except Exception, e:
                 if not please_stop:
-                    Log.warning("pulse had problem", e)
+                    Log.warning("Pulse had problem (Have you set your Pulse permissions correctly?", e)
         Log.note("pulse listener is done")
 
 

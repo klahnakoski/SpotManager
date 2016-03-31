@@ -17,6 +17,7 @@ from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import set_default, wrap, Dict, Null
 from pyLibrary.maths import Math
 from pyLibrary.queries.domains import is_keyword
+from pyLibrary.queries.expressions import Expression
 from pyLibrary.queries.namespace import convert_list, Namespace
 from pyLibrary.queries.query import Query
 from pyLibrary.times.dates import Date
@@ -37,6 +38,11 @@ class Typed(Namespace):
         """
         ADD THE ".$value" SUFFIX TO ALL VARIABLES
         """
+        if isinstance(expr, Expression):
+            vars_ = expr.vars()
+            rename = {v: v+".$value" for v in vars_}
+            return expr.map(rename)
+
         if expr is True or expr == None or expr is False:
             return expr
         elif Math.is_number(expr):
@@ -82,7 +88,7 @@ class Typed(Namespace):
 
     def _convert_clause(self, clause):
         """
-        Qb QUERIES HAVE MANY CLAUSES WITH SIMILAR COLUMN DELCARATIONS
+        JSON QUERY EXPRESSIONS HAVE MANY CLAUSES WITH SIMILAR COLUMN DELCARATIONS
         """
         if clause == None:
             return None

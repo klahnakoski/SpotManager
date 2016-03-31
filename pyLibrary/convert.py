@@ -7,35 +7,36 @@
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-from __future__ import unicode_literals
+from __future__ import absolute_import
+from __future__ import absolute_import
 from __future__ import division
-from __future__ import absolute_import
-from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import HTMLParser
 import StringIO
+import ast
 import base64
 import cgi
-from collections import Mapping
 import datetime
-from decimal import Decimal
 import gzip
 import hashlib
-from io import BytesIO
 import json
 import re
+from collections import Mapping
+from decimal import Decimal
+from io import BytesIO
 from tempfile import TemporaryFile
 
 from pyLibrary import strings
-from pyLibrary.dot import wrap, wrap_leaves, unwrap, unwraplist
 from pyLibrary.collections.multiset import Multiset
-from pyLibrary.debugs.logs import Log, Except
+from pyLibrary.debugs.exceptions import Except
+from pyLibrary.debugs.logs import Log
+from pyLibrary.dot import wrap, wrap_leaves, unwrap, unwraplist, split_field, join_field
 from pyLibrary.env.big_data import FileString, safe_size
 from pyLibrary.jsons import quote
 from pyLibrary.jsons.encoder import json_encoder, pypy_json_encode
 from pyLibrary.strings import expand_template
 from pyLibrary.times.dates import Date
-
 
 """
 DUE TO MY POOR MEMORY, THIS IS A LIST OF ALL CONVERSION ROUTINES
@@ -109,11 +110,10 @@ def json2value(json_string, params={}, flexible=False, leaves=False):
             json_string = re.sub(r",\s*\]", r"]", json_string)
 
         if params:
+            # LOOKUP REFERENCES
             json_string = expand_template(json_string, params)
 
-
-        # LOOKUP REFERENCES
-        value = wrap(json_decoder(json_string))
+        value = wrap(json_decoder(unicode(json_string)))
 
         if leaves:
             value = wrap_leaves(value)
@@ -138,11 +138,12 @@ def json2value(json_string, params={}, flexible=False, leaves=False):
 
             Log.error("Can not decode JSON at:\n\t" + sample + "\n\t" + pointer + "\n")
 
-        if len(json_string)>1000:
-            json_string = json_string[0:50] + " ... <snip " + strings.comma(len(json_string)) + " characters> ... " + json_string[len(json_string)-50:len(json_string)]
-        base_str = unicode2utf8(json_string)
+        base_str = unicode2utf8(strings.limit(json_string, 1000))
         hexx_str = bytes2hex(base_str, " ")
-        char_str = " " + ("  ".join((latin12unicode(c) if ord(c) >= 32 else ".") for c in base_str))
+        try:
+            char_str = " " + ("  ".join(c.decode("latin1") if ord(c) >= 32 else ".") for c in base_str)
+        except Exception:
+            char_str = " "
         Log.error("Can not decode JSON:\n" + char_str + "\n" + hexx_str + "\n", e)
 
 
@@ -155,7 +156,12 @@ def str2datetime(value, format=None):
 
 
 def datetime2string(value, format="%Y-%m-%d %H:%M:%S"):
-    return Date(value).format(format=format)
+    try:
+        return value.strftime(format)
+    except Exception, e:
+        from pyLibrary.debugs.logs import Log
+
+        Log.error("Can not format {{value}} with {{format}}", value=value, format=format, cause=e)
 
 
 def datetime2str(value, format="%Y-%m-%d %H:%M:%S"):
@@ -413,10 +419,10 @@ def unicode2latin1(value):
 
 
 def quote2string(value):
-    if value[0] == "\"" and value[-1] == "\"":
-        value = value[1:-1]
-
-    return value.replace("\\\\", "\\").replace("\\\"", "\"").replace("\\'", "'").replace("\\\n", "\n").replace("\\\t", "\t")
+    try:
+        return ast.literal_eval(value)
+    except Exception:
+        pass
 
 # RETURN PYTHON CODE FOR THE SAME
 
@@ -479,6 +485,7 @@ def bytes2sha1(value):
     sha = hashlib.sha1(value)
     return sha.hexdigest()
 
+
 def value2intlist(value):
     if value == None:
         return None
@@ -525,7 +532,7 @@ def latin12unicode(value):
     try:
         return unicode(value.decode('iso-8859-1'))
     except Exception, e:
-        Log.error("Can not convert {{value|quote}} to unicode",  value= value)
+        Log.error("Can not convert {{value|quote}} to unicode", value=value)
 
 
 def pipe2value(value):
@@ -638,3 +645,54 @@ def _unPipe(value):
     return result + value[e::]
 
 json_decoder = json.JSONDecoder().decode
+
+
+def json_schema_to_markdown(schema):
+    from pyLibrary.queries import jx
+
+    def _md_code(code):
+        return "`"+code+"`"
+
+    def _md_italic(value):
+        return "*"+value+"*"
+
+    def _inner(schema, parent_name, indent):
+        more_lines = []
+        for k,v in schema.items():
+            full_name = join_field(split_field(parent_name)+[k])
+            details = indent+"* "+_md_code(full_name)
+            if v.type:
+                details += " - "+_md_italic(v.type)
+            else:
+                Log.error("{{full_name}} is missing type", full_name=full_name)
+            if v.description:
+                details += " " + v.description
+            more_lines.append(details)
+
+            if v.type in ["object", "array", "nested"]:
+                more_lines.extend(_inner(v.properties, full_name, indent+"  "))
+        return more_lines
+
+    lines = []
+    if schema.title:
+        lines.append("#"+schema.title)
+
+    lines.append(schema.description)
+    lines.append("")
+
+    for k, v in jx.sort(schema.properties.items(), 0):
+        full_name = k
+        if v.type in ["object", "array", "nested"]:
+            lines.append("##"+_md_code(full_name)+" Property")
+            if v.description:
+                lines.append(v.description)
+            lines.append("")
+
+            if v.type in ["object", "array", "nested"]:
+                lines.extend(_inner(v.properties, full_name, "  "))
+        else:
+            lines.append("##"+_md_code(full_name)+" ("+v.type+")")
+            if v.description:
+                lines.append(v.description)
+
+    return "\n".join(lines)

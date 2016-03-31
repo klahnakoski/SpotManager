@@ -125,7 +125,11 @@ class PersistentQueue(object):
     def __getitem__(self, item):
         return self.db[str(item + self.start)]
 
-    def pop(self):
+    def pop(self, timeout=None):
+        """
+        :param timeout: OPTIONAL DURATION
+        :return: None, IF timeout PASSES
+        """
         with self.lock:
             while not self.please_stop:
                 if self.db.status.end > self.start:
@@ -133,10 +137,18 @@ class PersistentQueue(object):
                     self.start += 1
                     return value
 
-                try:
-                    self.lock.wait()
-                except Exception, _:
-                    pass
+                if timeout is not None:
+                    try:
+                        self.lock.wait(timeout=timeout)
+                        if self.db.status.end <= self.start:
+                            return None
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        self.lock.wait()
+                    except Exception:
+                        pass
             if DEBUG:
                 Log.note("persistent queue already stopped")
             return Thread.STOP
@@ -175,7 +187,7 @@ class PersistentQueue(object):
                 for i in range(self.db.status.start, self.start):
                     self._add_pending({"remove": str(i)})
 
-                if self.db.status.end - self.start < 10 or Random.range(1000) == 0:  # FORCE RE-WRITE TO LIMIT FILE SIZE
+                if self.db.status.end - self.start < 10 or Random.range(0, 1000) == 0:  # FORCE RE-WRITE TO LIMIT FILE SIZE
                     # SIMPLY RE-WRITE FILE
                     if DEBUG:
                         Log.note("Re-write {{num_keys}} keys to persistent queue", num_keys=self.db.status.end - self.start)

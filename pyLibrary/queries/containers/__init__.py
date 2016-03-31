@@ -35,11 +35,15 @@ def _delayed_imports():
     global _Query
     global _Normal
 
-    from pyLibrary.queries.qb_usingMySQL import MySQL as _MySQL
-    from pyLibrary.queries.qb_usingES import FromES as _FromES
+    try:
+        from pyLibrary.queries.jx_usingMySQL import MySQL as _MySQL
+    except Exception:
+        _MySQL = None
+
+    from pyLibrary.queries.jx_usingES import FromES as _FromES
     from pyLibrary.queries.containers.lists import ListContainer as _ListContainer
     from pyLibrary.queries.containers.cube import Cube as _Cube
-    from pyLibrary.queries.qb import run as _run
+    from pyLibrary.queries.jx import run as _run
     from pyLibrary.queries.query import Query as _Query
 
     set_default(type2container, {
@@ -54,7 +58,7 @@ def _delayed_imports():
 
 
 class Container(object):
-    __slots__ = ["data", "schema", "namespaces"]
+    __slots__ = ["data", "namespaces"]
 
     @classmethod
     def new_instance(type, frum, schema=None):
@@ -79,7 +83,7 @@ class Container(object):
 
             settings = set_default(
                 {
-                    "index": split_field(frum)[0],
+                    "index": join_field(split_field(frum)[:1:]),
                     "name": frum,
                 },
                 config.default.settings
@@ -107,9 +111,7 @@ class Container(object):
 
         self.data = frum
         if isinstance(schema, list):
-            Log.error("expecting map from abs_name to column object")
-        self.schema = schema
-        # self.namespaces = wrap([_Normal()])
+            Log.error("expecting map from es_column to column object")
 
     def query(self, query):
         if query.frum != self:
@@ -143,7 +145,7 @@ class Container(object):
         _ = format
         Log.error("not implemented")
 
-    def get_columns(self, table):
+    def get_columns(self, table_name):
         """
         USE THE frum TO DETERMINE THE COLUMNS
         """

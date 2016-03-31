@@ -15,7 +15,7 @@ import json
 from types import GeneratorType
 
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import split_field, join_field
+from pyLibrary.dot import split_field
 from pyLibrary.env.http import MIN_READ_SIZE
 
 
@@ -42,15 +42,14 @@ def parse(json, path, expected_vars=NO_VARS):
 
     LARGE MANY-PROPERTY OBJECTS CAN BE HANDLED BY `items()`
 
-    path - AN ARRAY OF DOT-SEPARATED STRINGS INDICATING THE NESTED ARRAY
-    BEING ITERATED.
-
-    RETURNS AN ITERATOR OVER ALL OBJECTS FROM NESTED path IN LEAF FORM
-
-    json - SOME STRING-LIKE STRUCTURE THAT CAN ASSUME WE LOOK AT ONE CHARACTER AT A TIME, IN ORDER
-    vars - REQUIRED PROPERTY NAMES, USED TO DETERMINE IF MORE-THAN-ONE PASS IS REQUIRED
+    :param json: SOME STRING-LIKE STRUCTURE THAT CAN ASSUME WE LOOK AT ONE
+                 CHARACTER AT A TIME, IN ORDER
+    :param path: AN ARRAY OF DOT-SEPARATED STRINGS INDICATING THE
+                 NESTED ARRAY BEING ITERATED.
+    :param expected_vars: REQUIRED PROPERTY NAMES, USED TO DETERMINE IF
+                          MORE-THAN-ONE PASS IS REQUIRED
+    :return: RETURNS AN ITERATOR OVER ALL OBJECTS FROM NESTED path IN LEAF FORM
     """
-
     if hasattr(json, "read"):
         # ASSUME IT IS A STREAM
         temp = json
@@ -63,7 +62,6 @@ def parse(json, path, expected_vars=NO_VARS):
         json = List_usingStream(json.next)
     else:
         Log.error("Expecting json to be a stream, or a function that will return more bytes")
-
 
 
     def _decode(index, parent_path, path, name2index, expected_vars=NO_VARS):
@@ -130,6 +128,15 @@ def parse(json, path, expected_vars=NO_VARS):
         return value, index
 
     def _decode_object(index, parent_path, path, name2index, destination=None, expected_vars=NO_VARS):
+        """
+        :param index:
+        :param parent_path:  LIST OF PROPERTY NAMES
+        :param path:         ARRAY OF (LIST OF PROPERTY NAMES)
+        :param name2index:
+        :param destination:
+        :param expected_vars:
+        :return:
+        """
         if destination is None:
             destination = {}
 
@@ -150,10 +157,10 @@ def parse(json, path, expected_vars=NO_VARS):
                 if child_expected and nested_done:
                     Log.error("Expected property found after nested json.  Iteration failed.")
 
-                full_path = join_field(split_field(parent_path)+ [name])
-                if path and (path[0] == full_path or path[0].startswith(full_path+".")):
+                full_path = parent_path + [name]
+                if path and all(p == f for p, f in zip(path[0], full_path)):
                     # THE NESTED PROPERTY WE ARE LOOKING FOR
-                    if path[0] == full_path:
+                    if len(path[0]) == len(full_path):
                         new_path = path[1:]
                     else:
                         new_path = path
@@ -269,7 +276,7 @@ def parse(json, path, expected_vars=NO_VARS):
             c = json[index]
         return c, index + 1
 
-    for j, i in _decode(0, ".", listwrap(path), {}, expected_vars=expected_vars):
+    for j, i in _decode(0, [], map(split_field, listwrap(path)), {}, expected_vars=expected_vars):
         yield j
 
 
@@ -301,7 +308,7 @@ class List_usingStream(object):
     """
     def __init__(self, get_more_bytes):
         """
-        get_more_bytes() SHOULD RETURN AN ARRAY OF BYTES
+        get_more_bytes() SHOULD RETURN AN ARRAY OF BYTES OF ANY SIZE
         """
         if not hasattr(get_more_bytes, "__call__"):
             Log.error("Expecting a function that will return bytes")

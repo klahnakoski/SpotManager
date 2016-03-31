@@ -51,6 +51,7 @@ class Domain(object):
         set_default(self, desc)
         self.name = coalesce(desc.name, desc.type)
         self.isFacet = coalesce(desc.isFacet, False)
+        self.dimension = Null
 
     def _set_slots_to_none(self, cls):
         """
@@ -153,6 +154,9 @@ class DefaultDomain(Domain):
         self.map[key] = canonical
         return canonical
 
+    # def getIndexByKey(self, key):
+    #     return self.map.get(key).dataIndex;
+
     def getKey(self, part):
         return part.value
 
@@ -223,7 +227,7 @@ class SimpleSetDomain(Domain):
             self.label = coalesce(self.label, "name")
             return
         elif desc.key == None:
-            if desc.partitions and len(set(desc.partitions.value)) == len(desc.partitions):
+            if desc.partitions and len(set(desc.partitions.value)-{None}) == len(desc.partitions):
                 # TRY A COMMON KEY CALLED "value".  IT APPEARS UNIQUE
                 self.key = "value"
                 self.map = dict()
@@ -233,6 +237,24 @@ class SimpleSetDomain(Domain):
                     self.map[p[self.key]] = p
                     self.order[p[self.key]] = i
                 self.primitive = False
+            elif all(desc.partitions.where) or all(desc.partitions.esfilter):
+                if not all(desc.partitions.name):
+                    Log.error("Expecting all partitions to have a name")
+                from pyLibrary.queries.expressions import jx_expression
+
+                self.key = "name"
+                self.map = dict()
+                self.map[None] = self.NULL
+                self.order[None] = len(desc.partitions)
+                for i, p in enumerate(desc.partitions):
+                    self.partitions.append({
+                        "where": jx_expression(coalesce(p.where, p.esfilter)),
+                        "name": p.name,
+                        "dataIndex": i
+                    })
+                    self.map[p.name] = p
+                    self.order[p.name] = i
+                return
             else:
                 Log.error("Domains must have keys")
         elif self.key:
@@ -244,11 +266,6 @@ class SimpleSetDomain(Domain):
                 self.map[p[self.key]] = p
                 self.order[p[self.key]] = i
             self.primitive = False
-        elif all(p.esfilter for p in self.partitions):
-            # EVERY PART HAS AN esfilter DEFINED, SO USE THEM
-            for i, p in enumerate(self.partitions):
-                p.dataIndex = i
-
         else:
             Log.error("Can not hanldle")
 
@@ -700,10 +717,14 @@ def value_compare(a, b):
         return 0
 
 
-keyword_pattern = re.compile(r"\w+(?:(\\\.|\.)\w+)*")
+keyword_pattern = re.compile(r"(\$|\w|\\\.)+(?:\.(\$|\w|\\\.)+)*")
 
 
 def is_keyword(value):
+    if value.__class__.__name__ == "Variable":
+        Log.warning("not expected")
+        return True
+
     if not value or not isinstance(value, basestring):
         return False  # _a._b
     if value == ".":

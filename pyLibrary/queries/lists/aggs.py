@@ -14,11 +14,11 @@ import itertools
 
 from pyLibrary.collections.matrix import Matrix
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import listwrap, wrap
+from pyLibrary.dot import listwrap, wrap, Null, coalesce
 from pyLibrary.queries import windows
 from pyLibrary.queries.containers.cube import Cube
 from pyLibrary.queries.domains import SimpleSetDomain, DefaultDomain
-from pyLibrary.queries.expressions import qb_expression_to_function
+from pyLibrary.queries.expressions import jx_expression_to_function
 
 
 def is_aggs(query):
@@ -37,16 +37,16 @@ def list_aggs(frum, query):
             e.domain = SimpleSetDomain(partitions=list(sorted(set(frum.select(e.value)))))
 
     for s in listwrap(query.select):
-        s["exec"] = qb_expression_to_function(s.value)
+        s["exec"] = jx_expression_to_function(s.value)
 
     result = {
         s.name: Matrix(
             dims=[len(e.domain.partitions) + (1 if e.allowNulls else 0) for e in query.edges],
-            zeros=s.aggregate == "count"
+            zeros=s.default
         )
         for s in select
     }
-    where = qb_expression_to_function(query.where)
+    where = jx_expression_to_function(query.where)
     for d in filter(where, frum):
         d = d.copy()
         coord = []  # LIST OF MATCHING COORDINATE FAMILIES, USUALLY ONLY ONE PER FAMILY BUT JOINS WITH EDGES CAN CAUSE MORE

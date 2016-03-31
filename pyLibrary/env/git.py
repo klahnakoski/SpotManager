@@ -12,8 +12,8 @@ from __future__ import unicode_literals
 from __future__ import division
 from __future__ import absolute_import
 
-from pyLibrary.env.processes import Process
 from pyLibrary.meta import cache
+from pyLibrary.thread.multiprocess import Process
 
 
 @cache
@@ -21,11 +21,11 @@ def get_git_revision():
     """
     GET THE CURRENT GIT REVISION
     """
-    proc = Process(["git", "log", "-1"])
+    proc = Process("git log", ["git", "log", "-1"])
 
     try:
         while True:
-            line = proc.readline().strip()
+            line = proc.stdout.pop().strip()
             if not line:
                 continue
             if line.startswith("commit "):
@@ -41,18 +41,20 @@ def get_remote_revision(url, branch):
     """
     GET REVISION OF A REMOTE BRANCH
     """
-    #git ls-remote https://github.com/klahnakoski/TestLog-ETL.git refs/heads/etl
-    proc = Process(["git", "ls-remote", url, "refs/head/" + branch])
+
+    proc = Process("git remote revision", ["git", "ls-remote", url, "refs/heads/" + branch])
 
     try:
         while True:
-            lines = proc.communicate()
-            if not lines:
-                return None
-            if line.startswith("commit "):
-                return line[7:]
+            line = proc.stdout.pop().strip()
+            if not line:
+                continue
+            return line.split("\t")[0]
     finally:
         try:
             proc.join()
         except Exception:
             pass
+
+    return None
+

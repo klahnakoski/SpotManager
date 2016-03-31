@@ -11,23 +11,32 @@ from __future__ import unicode_literals
 from collections import Mapping
 
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import wrap, set_default, split_field
+from pyLibrary.dot import wrap, set_default, split_field, join_field
 from pyLibrary.dot.dicts import Dict
 from pyLibrary.queries import containers
 
 type2container = Dict()
 config = Dict()   # config.default IS EXPECTED TO BE SET BEFORE CALLS ARE MADE
 _ListContainer = None
+_meta = None
+
 
 def _delayed_imports():
     global type2container
     global _ListContainer
+    global _meta
 
+    from pyLibrary.queries import meta as _meta
     from pyLibrary.queries.containers.lists import ListContainer as _ListContainer
     _ = _ListContainer
+    _ = _meta
 
-    from pyLibrary.queries.qb_usingMySQL import MySQL
-    from pyLibrary.queries.qb_usingES import FromES
+    try:
+        from pyLibrary.queries.jx_usingMySQL import MySQL
+    except Exception:
+        MySQL = None
+
+    from pyLibrary.queries.jx_usingES import FromES
     from pyLibrary.queries.meta import FromESMetadata
 
     set_default(type2container, {
@@ -56,17 +65,15 @@ def wrap_from(frum, schema=None):
         type_ = None
         index = frum
         if frum.startswith("meta."):
-            from pyLibrary.queries.meta import FromESMetadata
-
             if frum == "meta.columns":
-                return meta.singlton.columns
+                return _meta.singlton.columns
             elif frum == "meta.table":
-                return meta.singlton.tables
+                return _meta.singlton.tables
             else:
                 Log.error("{{name}} not a recognized table", name=frum)
         else:
             type_ = containers.config.default.type
-            index = split_field(frum)[0]
+            index = join_field(split_field(frum)[:1:])
 
         settings = set_default(
             {
@@ -92,4 +99,7 @@ def wrap_from(frum, schema=None):
 
 
 
-import es09.util
+class Schema(object):
+
+    def get_column(self, name, table):
+        raise NotImplementedError()

@@ -15,10 +15,10 @@ from collections import Mapping
 from pyLibrary import convert
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import Dict, wrap, listwrap, unwraplist, DictList
-from pyLibrary.queries import qb
+from pyLibrary.queries import jx
 from pyLibrary.queries.containers import Container
 from pyLibrary.queries.domains import is_keyword
-from pyLibrary.queries.expressions import TRUE_FILTER, qb_expression_to_python
+from pyLibrary.queries.expressions import TRUE_FILTER, jx_expression, Expression, compile_expression
 from pyLibrary.queries.lists.aggs import is_aggs, list_aggs
 from pyLibrary.queries.meta import Column
 from pyLibrary.thread.threads import Lock
@@ -32,6 +32,8 @@ class ListContainer(Container):
         Container.__init__(self, data, schema)
         if schema == None:
             self.schema = get_schema_from_list(data)
+        else:
+            self.schema = schema
         self.name = name
         self.data = data
         self.locker = Lock()  # JUST IN CASE YOU WANT TO DO MORE THAN ONE THING
@@ -69,36 +71,36 @@ class ListContainer(Container):
         """
         EXPECTING command == {"set":term, "clear":term, "where":where}
         THE set CLAUSE IS A DICT MAPPING NAMES TO VALUES
-        THE where CLAUSE IS AN ES FILTER
+        THE where CLAUSE IS A JSON EXPRESSION FILTER
         """
         command = wrap(command)
-        if command.where==None:
-            filter_ = lambda: True
-        else:
-            filter_ = _exec("temp = lambda row: "+qb_expression_to_python(command.where))
-
+        command_clear = listwrap(command["clear"])
+        command_set = command.set.items()
+        command_where = jx.get(command.where)
 
         for c in self.data:
-            if filter_(c):
-                for k in listwrap(command["clear"]):
+            if command_where(c):
+                for k in command_clear:
                     c[k] = None
-                for k, v in command.set.items():
+                for k, v in command_set:
                     c[k] = v
 
     def filter(self, where):
         return self.where(where)
 
     def where(self, where):
+        temp = None
         if isinstance(where, Mapping):
-            temp = None
-            exec("def temp(row):\n    return "+qb_expression_to_python(where))
+            exec("def temp(row):\n    return "+jx_expression(where).to_python())
+        elif isinstance(where, Expression):
+            exec("def temp(row):\n    return "+where.to_python())
         else:
             temp = where
 
         return ListContainer("from "+self.name, filter(temp, self.data), self.schema)
 
     def sort(self, sort):
-        return ListContainer("from "+self.name, qb.sort(self.data, sort), self.schema)
+        return ListContainer("from "+self.name, jx.sort(self.data, sort), self.schema)
 
     def select(self, select):
         selects = listwrap(select)
@@ -117,7 +119,7 @@ class ListContainer(Container):
 
     def window(self, window):
         _ = window
-        qb.window(self.data, window)
+        jx.window(self.data, window)
         return self
 
     def having(self, having):
@@ -149,7 +151,7 @@ class ListContainer(Container):
             "data": [{k: unwraplist(v) for k, v in row.items()} for row in self.data]
         })
 
-    def get_columns(self, table=None):
+    def get_columns(self, table_name=None):
         return self.schema.values()
 
     def __getitem__(self, item):
@@ -193,7 +195,7 @@ def _get_schema_from_list(frum, columns, prefix, nested_path):
         column = Column(
             table=".",
             name=full_name,
-            abs_name=full_name,
+            es_column=full_name,
             type=t,
             nested_path=nested_path
         )
@@ -311,6 +313,9 @@ _merge_type = {
 
 
 def _exec(code):
-    temp = None
-    exec code
-    return temp
+    try:
+        temp = None
+        exec "temp = " + code
+        return temp
+    except Exception, e:
+        Log.error("Could not execute {{code|quote}}", code=code, cause=e)

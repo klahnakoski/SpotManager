@@ -14,6 +14,8 @@ from __future__ import absolute_import
 import sys
 import math
 
+import itertools
+
 from pyLibrary.queries.containers.cube import Cube
 from pyLibrary.queries.index import value2key
 from pyLibrary.dot.dicts import Dict
@@ -174,7 +176,7 @@ def groupby_min_max_size(data, min_size=0, max_size=None, ):
                 if out:
                     # AT LEAST TRY TO RETURN WHAT HAS BEEN PROCESSED SO FAR
                     yield g, out
-                Log.error("Problem inside qb.groupby", e)
+                Log.error("Problem inside jx.groupby", e)
 
         return _iter()
     elif not isinstance(data, Multiset):

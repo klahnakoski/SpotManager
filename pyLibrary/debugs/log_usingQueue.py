@@ -13,15 +13,18 @@ from __future__ import unicode_literals
 from __future__ import division
 from __future__ import absolute_import
 
-from pyLibrary.debugs.logs import TextLog
-from pyLibrary.strings import expand_template, between
+from pyLibrary.debugs.text_logs import TextLog
+from pyLibrary.strings import expand_template
 from pyLibrary.thread.threads import Queue
 
 
 class TextLog_usingQueue(TextLog):
 
-    def __init__(self):
-        self.queue = Queue("log messages")
+    def __init__(self, name=None):
+        queue_name = "log messages to queue"
+        if name:
+            queue_name += " "+name
+        self.queue = Queue(queue_name)
 
     def write(self, template, params):
         self.queue.add(expand_template(template, params))

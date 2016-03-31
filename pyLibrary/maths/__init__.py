@@ -7,16 +7,15 @@
 #
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import unicode_literals
-from __future__ import division
 from __future__ import absolute_import
-from decimal import Decimal
-import math
+from __future__ import division
+from __future__ import unicode_literals
+
 import __builtin__
+import math
 
-
-from pyLibrary.strings import find_first, _Log
 from pyLibrary.dot import Null, coalesce
+from pyLibrary.strings import find_first
 
 
 class Math(object):
@@ -41,6 +40,7 @@ class Math(object):
             if b == None:
                 continue
             if b >= 1 or b <= 0:
+                from pyLibrary.debugs.logs import Log
                 Log.error("Only allowed values *between* zero and one")
             a = a * b / (a * b + (1 - a) * (1 - b))
 
@@ -138,7 +138,7 @@ class Math(object):
 
     @staticmethod
     def is_nan(s):
-        return math.isnan(s)
+        return s==None or math.isnan(s)
 
     @staticmethod
     def is_integer(s):
@@ -192,24 +192,33 @@ class Math(object):
     def floor(value, mod=1):
         """
         x == Math.floor(x, a) + Math.mod(x, a)  FOR ALL a, x
+        RETURN None WHEN GIVEN INVALID ARGUMENTS
         """
         if value == None:
             return None
-        v = int(math.floor(value))
-        if v < 0:
-            _Log.error("")
+        elif mod <= 0:
+            return None
+        elif mod == 1:
+            return int(math.floor(value))
+        elif Math.is_integer(mod):
+            return int(math.floor(value/mod))*mod
         else:
-            return v - (v % mod)
+            return math.floor(value/mod)*mod
+
+
 
     @staticmethod
     def mod(value, mod=1):
         """
-        RETURN NON-NEGATIVE VALUE
+        RETURN NON-NEGATIVE MODULO
+        RETURN None WHEN GIVEN INVALID ARGUMENTS
         """
         if value == None:
             return None
+        elif mod <= 0:
+            return None
         elif value < 0:
-            return value % mod + mod
+            return (value % mod + mod) % mod
         else:
             return value % mod
 
@@ -309,18 +318,21 @@ class Math(object):
 
 
 def almost_equal(first, second, digits=None, places=None, delta=None):
-    if first == second:
-        return True
-
-    if delta is not None:
-        if abs(first - second) <= delta:
-            return True
-    else:
-        places = coalesce(places, digits, 18)
-        diff = math.log10(abs(first-second))
-        if diff < Math.ceiling(math.log10(first))-places:
+    try:
+        if first == second:
             return True
 
-    return False
+        if delta is not None:
+            if abs(first - second) <= delta:
+                return True
+        else:
+            places = coalesce(places, digits, 18)
+            diff = math.log10(abs(first - second))
+            if diff < Math.ceiling(math.log10(first)) - places:
+                return True
 
+        return False
+    except Exception, e:
+        from pyLibrary.debugs.logs import Log
+        Log.error("problem comparing", cause=e)
 

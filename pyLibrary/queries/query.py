@@ -7,39 +7,40 @@
 #
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import unicode_literals
-from __future__ import division
 from __future__ import absolute_import
+from __future__ import division
+from __future__ import unicode_literals
+
 from collections import Mapping
 
-from pyLibrary.collections import AND, reverse
+from pyLibrary.collections import AND
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot.dicts import Dict
-from pyLibrary.dot import coalesce, split_field, join_field, Null, unwraplist
-from pyLibrary.dot.lists import DictList
+from pyLibrary.dot import coalesce, Null
 from pyLibrary.dot import wrap, unwrap, listwrap
+from pyLibrary.dot.dicts import Dict
+from pyLibrary.dot.lists import DictList
 from pyLibrary.maths import Math
-from pyLibrary.queries import wrap_from
+from pyLibrary.queries import wrap_from, Schema
 from pyLibrary.queries.containers import Container
 from pyLibrary.queries.dimensions import Dimension
 from pyLibrary.queries.domains import Domain, is_keyword
-from pyLibrary.queries.expressions import TRUE_FILTER, simplify_esfilter, query_get_all_vars
-
+from pyLibrary.queries.expressions import TRUE_FILTER, simplify_esfilter, query_get_all_vars, jx_expression, TrueOp
 
 DEFAULT_LIMIT = 10
+MAX_LIMIT = 50000
 
-qb = None
+_jx = None
 _Column = None
 
 
 def _late_import():
-    global qb
+    global _jx
     global _Column
 
     from pyLibrary.queries.meta import Column as _Column
-    from pyLibrary.queries import qb
+    from pyLibrary.queries import jx as _jx
 
-    _ = qb
+    _ = _jx
     _ = _Column
 
 
@@ -66,6 +67,8 @@ class Query(object):
 
         self.format = query.format
         self.frum = wrap_from(query["from"], schema=schema)
+        if not schema and isinstance(self.frum, Schema):
+            schema = self.frum
 
         select = query.select
         if isinstance(select, list):
@@ -82,7 +85,7 @@ class Query(object):
             self.select = _normalize_select(select, schema=schema)
         else:
             if query.edges or query.groupby:
-                self.select = Dict(name="count", value=".", aggregate="count")
+                self.select = Dict(name="count", value=".", aggregate="count", default=0)
             else:
                 self.select = Dict(name=".", value=".", aggregate="none")
 
@@ -102,7 +105,7 @@ class Query(object):
         self.window = [_normalize_window(w) for w in listwrap(query.window)]
         self.having = None
         self.sort = _normalize_sort(query.sort)
-        self.limit = coalesce(query.limit, DEFAULT_LIMIT)
+        self.limit = Math.min(MAX_LIMIT, coalesce(query.limit, DEFAULT_LIMIT))
         if not Math.is_integer(self.limit) or self.limit < 0:
             Log.error("Expecting limit >= 0")
 
@@ -113,19 +116,23 @@ class Query(object):
         # THE from SOURCE IS.
         # TODO: IGNORE REACHING INTO THE NON-NESTED TYPES
         if isinstance(self.frum, list):
-            if not qb:
+            if not _jx:
                 _late_import()
-            columns = qb.get_columns(self.frum)
+            columns = _jx.get_columns(self.frum)
         elif isinstance(self.frum, Container):
-            columns = self.frum.get_columns(table=self.frum.name)
+            try:
+                columns = self.frum.get_columns(table_name=self.frum.name)
+            except Exception, e:
+                Log.error("Problem", cause=e)
         else:
             columns = []
 
-        query_path = coalesce(self.frum.query_path, ".")
-        vars = query_get_all_vars(self, exclude_where=True)  # WE WILL EXCLUDE where VARIABLES
-        for c in columns:
-            if c.name in vars and not query_path.startswith(coalesce(listwrap(c.nested_path)[0], "")):
-                Log.error("This query, with variable {{var_name}} is too deep", var_name=c.name)
+        if self.edges or self.groupby:
+            query_path = coalesce(self.frum.query_path, ".")
+            vars = query_get_all_vars(self, exclude_where=True)  # WE WILL EXCLUDE where VARIABLES
+            for c in columns:
+                if c.name in vars and not query_path.startswith(coalesce(listwrap(c.nested_path)[0], "")):
+                    Log.error("This query, with variable {{var_name}} is too deep", var_name=c.name)
 
     @property
     def columns(self):
@@ -151,13 +158,14 @@ class Query(object):
         return output
 
 
-canonical_aggregates = {
-    "min": "minimum",
-    "max": "maximum",
-    "add": "sum",
-    "avg": "average",
-    "mean": "average"
-}
+canonical_aggregates = wrap({
+    "count": {"name": "count", "default": 0},
+    "min": {"name": "minimum"},
+    "max": {"name": "maximum"},
+    "add": {"name": "sum"},
+    "avg": {"name": "average"},
+    "mean": {"name": "average"},
+})
 
 
 def _normalize_selects(selects, schema=None):
@@ -186,8 +194,15 @@ def _normalize_select(select, schema=None):
                 value="*",
                 aggregate="none"
             )
+        if select == "*":
+            return Dict(
+                name=".",
+                value="*",
+                aggregate="none"
+            )
+
         if schema:
-            s = schema[select]
+            s = schema.get_column(select)
             if s:
                 if isinstance(s, _Column):
                     return Dict(
@@ -212,7 +227,10 @@ def _normalize_select(select, schema=None):
     else:
         select = wrap(select)
         output = select.copy()
-        if not select.value or isinstance(select.value, basestring):
+        if not select.value:
+            output.value = "."
+            output.name = coalesce(select.name, select.aggregate)
+        elif isinstance(select.value, basestring):
             if select.value == ".":
                 output.name = coalesce(select.name, select.aggregate)
             else:
@@ -225,8 +243,10 @@ def _normalize_select(select, schema=None):
         if output.name.endswith(".*"):
             output.name = output.name[:-2]
 
-        output.aggregate = coalesce(canonical_aggregates.get(select.aggregate), select.aggregate, "none")
+        output.aggregate = coalesce(canonical_aggregates[select.aggregate].name, select.aggregate, "none")
+        output.default = coalesce(select.default, canonical_aggregates[output.aggregate].default)
         return output
+
 
 
 def _normalize_edges(edges, schema=None):
@@ -337,8 +357,7 @@ def _normalize_domain(domain=None, schema=None):
         domain = domain.copy()
         domain.name = domain.type
 
-    if not isinstance(domain.partitions, list):
-        domain.partitions = list(domain.partitions)
+    domain.partitions = listwrap(domain.partitions)
 
     return Domain(**domain)
 
@@ -367,11 +386,8 @@ def _normalize_range(range):
 
 def _normalize_where(where, schema=None):
     if where == None:
-        return TRUE_FILTER
-    if schema == None:
-        return where
-    where = simplify_esfilter(_where_terms(where, where, schema))
-    return where
+        return TrueOp()
+    return jx_expression(where)
 
 
 def _map_term_using_schema(master, path, term, schema_edges):

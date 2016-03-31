@@ -20,7 +20,6 @@ from pyLibrary.debugs.logs import Log
 from pyLibrary.maths import Math
 from pyLibrary.dot import split_field, Dict, Null, join_field, coalesce
 from pyLibrary.dot import listwrap
-from pyLibrary.queries.expressions import TRUE_FILTER
 from pyLibrary.times.durations import Duration
 
 
@@ -169,9 +168,9 @@ class _MVEL(object):
         if len(split_field(self.fromData.name)) == 1 and fields:
             if isinstance(fields, Mapping):
                 # CONVERT UNORDERED FIELD DEFS
-                qb_fields, es_fields = zip(*[(k, fields[k]) for k in sorted(fields.keys())])
+                jx_fields, es_fields = zip(*[(k, fields[k]) for k in sorted(fields.keys())])
             else:
-                qb_fields, es_fields = zip(*[(i, e) for i, e in enumerate(fields)])
+                jx_fields, es_fields = zip(*[(i, e) for i, e in enumerate(fields)])
 
             # NO LOOPS BECAUSE QUERY IS SHALLOW
             # DOMAIN IS FROM A DIMENSION, USE IT'S FIELD DEFS TO PULL
@@ -187,7 +186,7 @@ class _MVEL(object):
                 def fromTerm(term):
                     terms = [convert.pipe2value(t) for t in convert.pipe2value(term).split("|")]
 
-                    candidate = dict(zip(qb_fields, terms))
+                    candidate = dict(zip(jx_fields, terms))
                     for p in domain.partitions:
                         for k, t in candidate.items():
                             if p.value[k] != t:
@@ -277,7 +276,7 @@ class _MVEL(object):
         expression = setValues(expression, constants)
 
         fromPath = self.fromData.name           # FIRST NAME IS THE INDEX
-        indexName = split_field(fromPath)[0]
+        indexName = join_field(split_field(fromPath)[:1:])
 
         context = self.getFrameVariables(expression)
         if context == "":
@@ -388,7 +387,7 @@ def unpack_terms(facet, selects):
 #  PASS esFilter SIMPLIFIED ElasticSearch FILTER OBJECT
 #  RETURN MVEL EXPRESSION
 def _where(esFilter, _translate):
-    if not esFilter or esFilter is TRUE_FILTER:
+    if not esFilter or esFilter is True:
         return "true"
 
     keys = esFilter.keys()

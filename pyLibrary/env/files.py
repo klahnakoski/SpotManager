@@ -9,16 +9,15 @@
 #
 
 
-from datetime import datetime
 import io
 import os
 import shutil
+from datetime import datetime
 
-from pyLibrary.strings import utf82unicode
-from pyLibrary.maths import crypto
-from pyLibrary.dot import coalesce, set_default, split_field, join_field
-from pyLibrary.dot import listwrap, wrap
 from pyLibrary import convert
+from pyLibrary.dot import coalesce
+from pyLibrary.maths import crypto
+from pyLibrary.strings import utf82unicode
 
 
 class File(object):
@@ -36,7 +35,14 @@ class File(object):
             Log.error("File must be given a filename")
         elif isinstance(filename, basestring):
             self.key = None
-            self._filename = "/".join(filename.split(os.sep))  # USE UNIX STANDARD
+            if filename.startswith("~"):
+                home_path = os.path.expanduser("~")
+                if os.sep == "\\":
+                    home_path = home_path.replace(os.sep, "/")
+                if home_path.endswith("/"):
+                    home_path = home_path[:-1]
+                filename = home_path + filename[1::]
+            self._filename = filename.replace(os.sep, "/")  # USE UNIX STANDARD
         else:
             self.key = convert.base642bytearray(filename.key)
             self._filename = "/".join(filename.path.split(os.sep))  # USE UNIX STANDARD
@@ -80,7 +86,10 @@ class File(object):
 
             return home_path + self._filename[1::]
         else:
-            return os.path.abspath(self._filename)
+            if os.sep == "\\":
+                return os.path.abspath(self._filename).replace(os.sep, "/")
+            else:
+                return os.path.abspath(self._filename)
 
     @staticmethod
     def add_suffix(filename, suffix):
@@ -173,7 +182,7 @@ class File(object):
         except Exception, e:
             from pyLibrary.debugs.logs import Log
 
-            Log.error("roblem reading file {{filename}}", self.abspath)
+            Log.error("Problem reading file {{filename}}", self.abspath)
 
     def write_bytes(self, content):
         if not self.parent.exists:
@@ -322,3 +331,7 @@ class File(object):
             return os.path.exists(self._filename)
         except Exception, e:
             return False
+
+    @classmethod
+    def copy(cls, from_, to_):
+        File.new_instance(to_).write_bytes(File.new_instance(from_).read_bytes())

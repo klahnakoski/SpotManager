@@ -29,6 +29,8 @@ from pyLibrary.times.timer import Timer
 
 READ_ERROR = "S3 read error"
 MAX_FILE_SIZE = 100 * 1024 * 1024
+VALID_KEY = r"\d+([.:]\d+)*"
+
 
 class File(object):
     def __init__(self, bucket, key):
@@ -75,10 +77,8 @@ class Connection(object):
         except Exception, e:
             Log.error("Problem connecting to S3", e)
 
-
     def __enter__(self):
         return self
-
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.connection:
@@ -98,6 +98,8 @@ class Bucket(object):
     THIS CLASS MANAGES THE ".json" EXTENSION, AND ".gz"
     (ZIP/UNZIP) SHOULD THE FILE BE BIG ENOUGH TO
     JUSTIFY IT
+
+    ALL KEYS ARE DIGITS, SEPARATED BY DOT (.) COLON (:)
     """
 
     @use_settings
@@ -120,7 +122,7 @@ class Bucket(object):
             self.connection = Connection(settings).connection
             self.bucket = self.connection.get_bucket(self.settings.bucket, validate=False)
         except Exception, e:
-            Log.error("Problem connecting to {{bucket}}",  bucket= self.settings.bucket, cause=e)
+            Log.error("Problem connecting to {{bucket}}", bucket=self.settings.bucket, cause=e)
 
 
     def __enter__(self):
@@ -157,12 +159,6 @@ class Bucket(object):
             # key_prefix("2")
             metas = list(self.bucket.list(prefix=key))
             metas = wrap([m for m in metas if m.name.find(".json") != -1])
-
-            if self.name == "ekyle-talos" and key.find(".") == -1:
-                # VERY SPECIFIC CONDITIONS TO ALLOW DELETE, REMOVE THIS CODE IN THE FUTURE (Now==March2015)
-                for m in metas:
-                    self.bucket.delete_key(m.key)
-                return Null
 
             perfect = Null
             favorite = Null
@@ -325,7 +321,8 @@ class Bucket(object):
             if self.settings.public:
                 storage.set_acl('public-read')
         except Exception, e:
-            Log.error("Problem writing {{bytes}} bytes to {{key}} in {{bucket}}",
+            Log.error(
+                "Problem writing {{bytes}} bytes to {{key}} in {{bucket}}",
                 key=key,
                 bucket=self.bucket.name,
                 bytes=len(value),

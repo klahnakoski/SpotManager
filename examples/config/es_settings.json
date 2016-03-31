@@ -1,5 +1,5 @@
 {
-	"budget": 0.40,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"budget": 0.70,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.01,  //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 120,     //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"max_requests_per_type": 2,    //LIMIT THE NUMBER OF NET-NEW REQUESTS BY TYPE

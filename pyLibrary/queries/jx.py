@@ -26,7 +26,8 @@ from pyLibrary.maths import Math
 from pyLibrary.queries import flat_list, query, group_by
 from pyLibrary.queries.containers import Container
 from pyLibrary.queries.cubes.aggs import cube_aggs
-from pyLibrary.queries.expressions import TRUE_FILTER, FALSE_FILTER, compile_expression, jx_expression_to_function
+from pyLibrary.queries.expression_compiler import compile_expression
+from pyLibrary.queries.expressions import TRUE_FILTER, FALSE_FILTER, jx_expression_to_function
 from pyLibrary.queries.flat_list import FlatList
 from pyLibrary.queries.index import Index
 from pyLibrary.queries.query import Query, _normalize_selects, sort_direction, _normalize_select
@@ -544,7 +545,7 @@ def sort(data, fieldnames=None):
             if isinstance(fieldnames, (basestring, int)):
                 fieldnames = wrap({"value": fieldnames, "sort": 1})
 
-            # EXPECTING {"field":f, "sort":i} FORMAT
+            # EXPECTING {"value":f, "sort":i} FORMAT
             fieldnames.sort = sort_direction.get(fieldnames.sort, 1)
             fieldnames.value = coalesce(fieldnames.value, fieldnames.field)
             if fieldnames.value == None:

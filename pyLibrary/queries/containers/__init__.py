@@ -15,9 +15,11 @@ from collections import Mapping
 from copy import copy
 from types import GeneratorType
 
+from pyLibrary.collections.matrix import Matrix
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import set_default, split_field, wrap, DictList
 from pyLibrary.dot.dicts import Dict
+from pyLibrary.queries import jx
 
 type2container = Dict()
 config = Dict()   # config.default IS EXPECTED TO BE SET BEFORE CALLS ARE MADE
@@ -134,8 +136,22 @@ class Container(object):
         Log.error("not implemented")
 
     def window(self, window):
-        _ = window
-        Log.error("not implemented")
+        if window.edges or window.sort:
+            Log.error("not implemented")
+
+        # SET OP
+        canonical = self.data.values()[0]
+        accessor = jx.get(window.value)
+        cnames = self.data.keys()
+
+        # ANNOTATE EXISTING CUBE WITH NEW COLUMN
+        m = self.data[window.name] = Matrix(dims=canonical.dims)
+        for coord in canonical._all_combos():
+            row = {k: self.data[k][coord] for k in cnames}
+            m[coord] = accessor(row)
+
+        return self
+
 
     def having(self, having):
         _ = having

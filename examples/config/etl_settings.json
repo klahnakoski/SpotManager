@@ -96,10 +96,13 @@
 			"$ref": "file://~/private.json#aws_credentials"
 		}
 	},
+	"constants":{
+//		"pyLibrary.queries.expressions.ALLOW_SCRIPTING": true
+	},
 	"debug": {
 		"trace": true,
 		"cprofile": {
-			"enabled": false,
+			"enabled": true,
 			"filename": "results/examples_spot_profile.tab"
 		},
 		"log": [

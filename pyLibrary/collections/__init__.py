@@ -42,9 +42,11 @@ def MIN(*values):
     return output
 
 
-def MAX(*values):
-    if isinstance(values, tuple) and len(values) == 1 and isinstance(values[0], (list, set, tuple, Multiset, types.GeneratorType)):
-        values = values[0]
+def MAX(values, *others):
+    if len(others)>0:
+        from pyLibrary.debugs.logs import Log
+        Log.error("Expecting an list, or iterable, only")
+
     output = Null
     for v in values:
         if v == None:

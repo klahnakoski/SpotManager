@@ -7,17 +7,19 @@
 #
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import unicode_literals
-from __future__ import division
 from __future__ import absolute_import
+from __future__ import division
+from __future__ import unicode_literals
+
 import itertools
 
 from pyLibrary.collections.matrix import Matrix
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import listwrap, wrap, Null, coalesce
+from pyLibrary.dot import listwrap, wrap
 from pyLibrary.queries import windows
 from pyLibrary.queries.containers.cube import Cube
 from pyLibrary.queries.domains import SimpleSetDomain, DefaultDomain
+from pyLibrary.queries.expression_compiler import compile_expression
 from pyLibrary.queries.expressions import jx_expression_to_function
 
 
@@ -34,7 +36,11 @@ def list_aggs(frum, query):
     is_join = False  # True IF MANY TO MANY JOIN WITH AN EDGE
     for e in query.edges:
         if isinstance(e.domain, DefaultDomain):
-            e.domain = SimpleSetDomain(partitions=list(sorted(set(frum.select(e.value)))))
+            unique_values = set(frum.get(e.value))
+            if None in unique_values:
+                e.allowNulls = True
+                unique_values -= {None}
+            e.domain = SimpleSetDomain(partitions=list(sorted(unique_values)))
 
     for s in listwrap(query.select):
         s["exec"] = jx_expression_to_function(s.value)
@@ -46,12 +52,12 @@ def list_aggs(frum, query):
         )
         for s in select
     }
-    where = jx_expression_to_function(query.where)
+    where = compile_expression(query.where.to_python())
+    coord = [0] * len(query.edges)  # LIST OF MATCHING COORDINATE FAMILIES, USUALLY ONLY ONE PER FAMILY BUT JOINS WITH EDGES CAN CAUSE MORE
     for d in filter(where, frum):
         d = d.copy()
-        coord = []  # LIST OF MATCHING COORDINATE FAMILIES, USUALLY ONLY ONE PER FAMILY BUT JOINS WITH EDGES CAN CAUSE MORE
-        for e in query.edges:
-            coord.append(get_matches(e, d))
+        for c, e in enumerate(query.edges):
+            coord[c] = get_matches(e, d)
 
         for s in select:
             mat = result[s.name]

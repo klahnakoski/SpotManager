@@ -20,6 +20,7 @@ from pyLibrary.collections import OR, MAX
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import coalesce, wrap, set_default, literal_field, listwrap, Null, split_field
 from pyLibrary.queries.domains import is_keyword
+from pyLibrary.queries.expression_compiler import compile_expression
 from pyLibrary.times.dates import Date
 
 ALLOW_SCRIPTING = False
@@ -78,7 +79,7 @@ def jx_expression(expr):
         return class_(op, term)
     elif class_ is ScriptOp:
         if ALLOW_SCRIPTING:
-            Log.warning("Scripting has been activated:  This has known security holes!!\nscript = {{script||quote}}", script=term)
+            Log.warning("Scripting has been activated:  This has known security holes!!\nscript = {{script|quote}}", script=term)
             return class_(op, term)
         else:
             Log.error("scripting is disabled")
@@ -102,23 +103,6 @@ def jx_expression(expr):
             return class_(op, term, **clauses)
         else:
             return class_(op, jx_expression(term), **clauses)
-
-
-def compile_expression(source):
-    # FORCE MODULES TO BE IN NAMESPACE
-    _ = coalesce
-    _ = Date
-    _ = convert
-
-    output = None
-    exec """
-def output(row, rownum=None, rows=None):
-    try:
-        return """ + source + """
-    except Exception, e:
-        Log.error("Problem with dynamic function {{func|quote}}",  func= """ + convert.value2quote(source) + """, cause=e)
-"""
-    return output
 
 
 def jx_expression_to_function(expr):
@@ -174,7 +158,7 @@ def edges_get_all_vars(e):
         output |= jx_expression(e.range.max).vars()
     if e.domain.partitions:
         for p in e.domain.partitions:
-            if p.where:
+            if getattr(p, "where", None):
                 output |= p.where.vars()
     return output
 
@@ -324,12 +308,18 @@ class Variable(Expression):
 
 
 class ScriptOp(Expression):
+    """
+    ONLY FOR TESTING AND WHEN YOU TRUST THE SCRIPT SOURCE
+    """
 
     def __init__(self, op, script):
         Expression.__init__(self, "", None)
         self.script = script
 
     def to_ruby(self, not_null=False, boolean=False):
+        return self.script
+
+    def to_python(self, not_null=False, boolean=False):
         return self.script
 
     def vars(self):

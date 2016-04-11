@@ -223,11 +223,11 @@ class FromESMetadata(Schema):
                 columns = jx.sort(columns, "name")
                 if fail_when_not_found:
                     # AT LEAST WAIT FOR THE COLUMNS TO UPDATE
-                    while len(self.todo) and not all(columns.select("last_updated")):
+                    while len(self.todo) and not all(columns.get("last_updated")):
                         Log.note("waiting for columns to update {{columns|json}}", columns=[c.table+"."+c.es_column for c in columns if not c.last_updated])
                         Thread.sleep(seconds=1)
                     return columns
-                elif all(columns.select("last_updated")):
+                elif all(columns.get("last_updated")):
                     return columns
         except Exception, e:
             Log.error("Not expected", cause=e)

@@ -20,11 +20,11 @@ from pyLibrary.dot import wrap, unwrap, listwrap
 from pyLibrary.dot.dicts import Dict
 from pyLibrary.dot.lists import DictList
 from pyLibrary.maths import Math
-from pyLibrary.queries import wrap_from, Schema
+from pyLibrary.queries import Schema, wrap_from
 from pyLibrary.queries.containers import Container
 from pyLibrary.queries.dimensions import Dimension
 from pyLibrary.queries.domains import Domain, is_keyword
-from pyLibrary.queries.expressions import TRUE_FILTER, simplify_esfilter, query_get_all_vars, jx_expression, TrueOp
+from pyLibrary.queries.expressions import query_get_all_vars, jx_expression, TrueOp
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50000

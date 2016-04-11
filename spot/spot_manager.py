@@ -19,8 +19,8 @@ from boto.ec2.spotpricehistory import SpotPriceHistory
 from boto.utils import ISO8601
 
 from pyLibrary import convert
-from pyLibrary.collections import SUM
-from pyLibrary.debugs import startup
+from pyLibrary.collections import SUM, MAX
+from pyLibrary.debugs import startup, constants
 from pyLibrary.debugs.logs import Log, Except
 from pyLibrary.debugs.startup import SingleInstance
 from pyLibrary.dot import unwrap, coalesce, DictList, wrap, listwrap, Dict
@@ -28,8 +28,7 @@ from pyLibrary.dot.objects import dictwrap
 from pyLibrary.env.files import File
 from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings, new_instance, cache
-from pyLibrary.queries import qb
-from pyLibrary.queries.expressions import CODE
+from pyLibrary.queries import jx, expressions
 from pyLibrary.queries.unique_index import UniqueIndex
 from pyLibrary.thread.threads import Lock, Thread, MAIN_THREAD, Signal
 from pyLibrary.times.dates import Date
@@ -37,7 +36,7 @@ from pyLibrary.times.durations import DAY, HOUR, WEEK, MINUTE, SECOND, Duration
 from pyLibrary.times.timer import Timer
 
 
-DEBUG_PRICING = False
+DEBUG_PRICING = True
 TIME_FROM_RUNNING_TO_LOGIN = 5 * MINUTE
 ERROR_ON_CALL_TO_SETUP="Problem with setup()"
 
@@ -291,7 +290,7 @@ class SpotManager(object):
             except Exception, e:
                 r.markup = self.price_lookup[r.instance_type, r.placement]
                 Log.error("No pricing!!!", e)
-        instances = qb.sort(instances, [
+        instances = jx.sort(instances, [
             {"value": "markup.type.utility", "sort": -1},
             {"value": "markup.estimated_value", "sort": 1}
         ])
@@ -309,7 +308,7 @@ class SpotManager(object):
                     net_new_utility += self.settings.utility[r.launch_specification.instance_type].utility
                     remaining_budget += r.price
 
-        instances = qb.sort(self.running_instances(), "markup.estimated_value")
+        instances = jx.sort(self.running_instances(), "markup.estimated_value")
 
         remove_list = wrap([])
         for s in instances:
@@ -432,6 +431,7 @@ class SpotManager(object):
 
             Log.note("life cycle watcher has stopped")
 
+        Log.warning("lifecycle watcher is disabled")
         # self.watcher = Thread.run("lifecycle watcher", life_cycle_watcher)
 
     def _get_valid_availability_zones(self):
@@ -507,14 +507,16 @@ class SpotManager(object):
 
             prices = self._get_spot_prices_from_aws()
 
+            expressions.ALLOW_SCRIPTING = True
+
             with Timer("processing pricing data"):
-                hourly_pricing = qb.run({
+                hourly_pricing = jx.run({
                     "from": {
                         # AWS PRICING ONLY SENDS timestamp OF CHANGES, MATCH WITH NEXT INSTANCE
                         "from": prices,
                         "window": {
                             "name": "expire",
-                            "value": CODE("coalesce(rows[rownum+1].timestamp, Date.eod())"),
+                            "value": {"script": "coalesce(rows[rownum+1].timestamp, Date.eod())"},  # TODO: SUPPORT  {"coalesce": [{"row":{"timestamp":1}}, {"date":"eod"}]}
                             "edges": ["availability_zone", "instance_type"],
                             "sort": "timestamp"
                         }
@@ -535,11 +537,14 @@ class SpotManager(object):
                     ],
                     "where": {"gt": {"expire": Date.now().floor(HOUR) - DAY}},
                     "window": {
-                        "name": "current_price", "value": CODE("rows.last().price"), "edges": ["availability_zone", "instance_type"], "sort": "time",
+                        "name": "current_price",
+                        "value": {"script": "rows.last().price"},  # TODO: SUPPORT "rows.last.price"
+                        "edges": ["availability_zone", "instance_type"],
+                        "sort": "time",
                     }
                 }).data
 
-                bid80 = qb.run({
+                bid80 = jx.run({
                     "from": hourly_pricing,
                     "edges": [
                         {
@@ -566,7 +571,7 @@ class SpotManager(object):
                     ]
                 })
 
-                output = qb.run({
+                output = jx.run({
                     "from": bid80.data,
                     "sort": {"value": "estimated_value", "sort": -1}
                 })
@@ -583,7 +588,7 @@ class SpotManager(object):
             except Exception, e:
                 cache = DictList()
 
-        most_recents = qb.run({
+        most_recents = jx.run({
             "from": cache,
             "edges": ["instance_type", "availability_zone"],
             "select": {"value": "timestamp", "aggregate": "max"}
@@ -599,10 +604,7 @@ class SpotManager(object):
                             "instance_type": instance_type,
                             "availability_zone": zone
                         }].timestamp
-                        if most_recent == None:
-                            start_at = Date.today() - WEEK
-                        else:
-                            start_at = Date(most_recent)
+                        start_at = MAX([Date(most_recent), Date.today() - WEEK])
                     else:
                         start_at = Date.today() - WEEK
 
@@ -637,7 +639,7 @@ class SpotManager(object):
                             break
 
         with Timer("Save prices to file"):
-            new_prices = qb.filter(prices, {"gte": {"timestamp": Date.today() - (2*WEEK)}})
+            new_prices = jx.filter(prices, {"gte": {"timestamp": Date.today() - (2*WEEK)}})
             File(self.settings.price_file).write(convert.value2json(new_prices))
 
         return prices
@@ -680,6 +682,7 @@ RUNNING_STATUS_CODES = {
 def main():
     try:
         settings = startup.read_settings()
+        constants.set(settings.constants)
         settings.run_interval = Duration(settings.run_interval)
         Log.start(settings.debug)
         with SingleInstance(flavor_id=settings.args.filename):
@@ -694,7 +697,8 @@ def main():
             settings.utility = UniqueIndex(["instance_type"], data=settings.utility)
             instance_manager = new_instance(settings.instance)
             m = SpotManager(instance_manager, settings=settings)
-            m.update_spot_requests(instance_manager.required_utility())
+            Log.warning("Disabled updating spot requests")
+            # m.update_spot_requests(instance_manager.required_utility())
 
             if m.watcher:
                 m.watcher.join()

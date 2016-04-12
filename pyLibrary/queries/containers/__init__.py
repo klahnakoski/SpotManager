@@ -17,9 +17,8 @@ from types import GeneratorType
 
 from pyLibrary.collections.matrix import Matrix
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import set_default, split_field, wrap, DictList
+from pyLibrary.dot import set_default, split_field, wrap, DictList, join_field
 from pyLibrary.dot.dicts import Dict
-from pyLibrary.queries import jx
 
 type2container = Dict()
 config = Dict()   # config.default IS EXPECTED TO BE SET BEFORE CALLS ARE MADE
@@ -138,6 +137,8 @@ class Container(object):
     def window(self, window):
         if window.edges or window.sort:
             Log.error("not implemented")
+
+        from pyLibrary.queries import jx
 
         # SET OP
         canonical = self.data.values()[0]

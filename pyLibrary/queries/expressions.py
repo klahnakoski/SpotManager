@@ -1890,6 +1890,7 @@ operators = {
     "gt": BinaryOp,
     "gte": BinaryOp,
     "in": InOp,
+    "instr": ContainsOp,
     "left": LeftOp,
     "length": LengthOp,
     "literal": Literal,

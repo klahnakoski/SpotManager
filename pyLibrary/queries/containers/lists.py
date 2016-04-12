@@ -19,7 +19,8 @@ from pyLibrary.dot import Dict, wrap, listwrap, unwraplist, DictList
 from pyLibrary.queries import jx
 from pyLibrary.queries.containers import Container
 from pyLibrary.queries.domains import is_keyword
-from pyLibrary.queries.expressions import TRUE_FILTER, jx_expression, Expression
+from pyLibrary.queries.expression_compiler import compile_expression
+from pyLibrary.queries.expressions import TRUE_FILTER, jx_expression, Expression, TrueOp
 from pyLibrary.queries.lists.aggs import is_aggs, list_aggs
 from pyLibrary.queries.meta import Column
 from pyLibrary.thread.threads import Lock
@@ -54,7 +55,7 @@ class ListContainer(Container):
             except AttributeError, e:
                 pass
 
-            if q.where is not TRUE_FILTER:
+            if q.where is not TRUE_FILTER and not isinstance(q.where, TrueOp):
                 frum = frum.filter(q.where)
 
             if q.sort:
@@ -94,7 +95,7 @@ class ListContainer(Container):
         if isinstance(where, Mapping):
             exec("def temp(row):\n    return "+jx_expression(where).to_python())
         elif isinstance(where, Expression):
-            exec("def temp(row):\n    return "+where.to_python())
+            temp = compile_expression(where.to_python())
         else:
             temp = where
 

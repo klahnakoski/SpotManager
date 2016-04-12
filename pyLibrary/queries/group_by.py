@@ -74,10 +74,7 @@ def groupby(data, keys=None, size=None, min_size=None, max_size=None, contiguous
         agg = {}
         for d in data:
             key = value2key(keys, d)
-            try:
-                pair = agg.get(key)
-            except Exception, e:
-                Log.error("")
+            pair = agg.get(key, None)
             if pair is None:
                 pair = agg[key] = (get_keys(d), DictList())
 

@@ -49,6 +49,9 @@ def jx_expression(expr):
         return Variable(expr)
     elif expr == "":
         Log.error("expression is empty")
+    elif isinstance(expr, (list, tuple)):
+        return jx_expression({"tuple": expr})  # FORMALIZE
+
 
     expr = wrap(expr)
     if expr.date:
@@ -595,6 +598,49 @@ class DateOp(Literal):
 
     def __str__(self):
         return str(self.json)
+
+
+class TupleOp(Expression):
+
+    def __init__(self, op, terms):
+        Expression.__init__(self, op, terms)
+        if terms == None:
+            self.terms = []
+        elif isinstance(terms, list):
+            self.terms = terms
+        else:
+            self.terms = [terms]
+
+    def to_ruby(self, not_null=False, boolean=False):
+        Log.error("not supported")
+
+    def to_python(self, not_null=False, boolean=False):
+        if len(self.terms) == 0:
+            return "tuple()"
+        elif len(self.terms) == 1:
+            return "(" + self.terms[0].to_python() + ",)"
+        else:
+            return "(" + (",".join(t.to_python() for t in self.terms)) + ")"
+
+    def to_esfilter(self):
+        Log.error("not supported")
+
+    def to_dict(self):
+        return {"tuple": [t.to_dict() for t in self.terms]}
+
+    def vars(self):
+        output = set()
+        for t in self.terms:
+            output |= t.vars()
+        return output
+
+    def map(self, map_):
+        return TupleOp("tuple", [t.map(map_) for t in self.terms])
+
+    def missing(self):
+        return False
+
+
 
 
 class BinaryOp(Expression):
@@ -1923,6 +1969,7 @@ operators = {
     "sum": MultiOp,
     "term": EqOp,
     "terms": InOp,
+    "tuple": TupleOp,
     "when": WhenOp,
 }
 

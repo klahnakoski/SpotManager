@@ -974,10 +974,10 @@ def window(data, param):
     name = param.name            # column to assign window function result
     edges = param.edges          # columns to gourp by
     where = param.where          # DO NOT CONSIDER THESE VALUES
-    sortColumns = param.sort            # columns to sort by
-    calc_value = wrap_function(jx.get(param.value)) # function that takes a record and returns a value (for aggregation)
+    sortColumns = param.sort     # columns to sort by
+    calc_value = wrap_function(jx_expression_to_function(param.value))  # function that takes a record and returns a value (for aggregation)
     aggregate = param.aggregate  # WindowFunction to apply
-    _range = param.range          # of form {"min":-10, "max":0} to specify the size and relative position of window
+    _range = param.range         # of form {"min":-10, "max":0} to specify the size and relative position of window
 
     data = filter(data, where)
 

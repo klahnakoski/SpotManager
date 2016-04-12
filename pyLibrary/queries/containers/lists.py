@@ -15,7 +15,7 @@ from collections import Mapping
 
 from pyLibrary import convert
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import Dict, wrap, listwrap, unwraplist, DictList
+from pyLibrary.dot import Dict, wrap, listwrap, unwraplist, DictList, unwrap
 from pyLibrary.queries import jx
 from pyLibrary.queries.containers import Container
 from pyLibrary.queries.domains import is_keyword
@@ -30,7 +30,7 @@ from pyLibrary.times.dates import Date
 class ListContainer(Container):
     def __init__(self, name, data, schema=None):
         #TODO: STORE THIS LIKE A CUBE FOR FASTER ACCESS AND TRANSFORMATION
-        data = list(data)
+        data = list(unwrap(data))
         Container.__init__(self, data, schema)
         if schema == None:
             self.schema = get_schema_from_list(data)

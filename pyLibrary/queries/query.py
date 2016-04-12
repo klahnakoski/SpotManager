@@ -357,8 +357,6 @@ def _normalize_domain(domain=None, schema=None):
         domain = domain.copy()
         domain.name = domain.type
 
-    domain.partitions = listwrap(domain.partitions)
-
     return Domain(**domain)
 
 

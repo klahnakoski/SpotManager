@@ -26,7 +26,6 @@ from pyLibrary.times.dates import Date
 ALLOW_SCRIPTING = False
 TRUE_FILTER = True
 FALSE_FILTER = False
-EMPTY_DICT = {}
 
 _Query = None
 
@@ -263,6 +262,19 @@ class Variable(Expression):
         agg = "row"
         if not path:
             return agg
+        elif path[0] in ["row", "rownum"]:
+            # MAGIC VARIABLES
+            agg = path[0]
+            path = path[1:]
+        elif path[0] == "rows":
+            if len(path) == 1:
+                return "rows"
+            elif path[1] in ["first", "last"]:
+                agg = "rows." + path[1] + "()"
+                path = path[2:]
+            else:
+                Log.error("do not know what {{var}} of `rows` is", var=path[1])
+
         for p in path[:-1]:
             agg = agg+".get("+convert.value2quote(p)+", EMPTY_DICT)"
         return agg+".get("+convert.value2quote(path[-1])+")"
@@ -310,13 +322,40 @@ class Variable(Expression):
         return str(self.var)
 
 
+class RowsOp(Expression):
+    has_simple_form = True
+
+    def __init__(self, op, term):
+        Expression.__init__(self, op, term)
+        self.var, self.offset = term
+
+    def to_python(self, not_null=False, boolean=False):
+        path = split_field(self.var.var)
+        agg = "rows[rownum+" + unicode(self.offset) + "]"
+        if not path:
+            return agg
+
+        for p in path[:-1]:
+            agg = agg+".get("+convert.value2quote(p)+", EMPTY_DICT)"
+        return agg+".get("+convert.value2quote(path[-1])+")"
+
+    def to_dict(self):
+        return {"rows": {self.var: self.offset}}
+
+    def vars(self):
+        return {self.var, "rows", "rownum"}
+
+    def map(self, map_):
+        return RowsOp("rows", {self.var.map(map_): self.offset})
+
+
 class ScriptOp(Expression):
     """
     ONLY FOR TESTING AND WHEN YOU TRUST THE SCRIPT SOURCE
     """
 
     def __init__(self, op, script):
-        Expression.__init__(self, "", None)
+        Expression.__init__(self, op, None)
         self.script = script
 
     def to_ruby(self, not_null=False, boolean=False):
@@ -753,7 +792,6 @@ class BinaryOp(Expression):
 class DivOp(Expression):
     has_simple_form = True
 
-
     def __init__(self, op, terms, default=NullOp()):
         Expression.__init__(self, op, terms)
         self.lhs, self.rhs = terms
@@ -776,7 +814,7 @@ class DivOp(Expression):
         return output
 
     def to_python(self, not_null=False, boolean=False):
-        return "(" + self.lhs.to_python() + ") / (" + self.rhs.to_python()+")"
+        return "None if ("+self.missing().to_python()+") else (" + self.lhs.to_python(not_null=True) + ") / (" + self.rhs.to_python(not_null=True)+")"
 
     def to_esfilter(self):
         if not isinstance(self.lhs, Variable) or not isinstance(self.rhs, Literal):
@@ -1936,7 +1974,6 @@ operators = {
     "gt": BinaryOp,
     "gte": BinaryOp,
     "in": InOp,
-    "instr": ContainsOp,
     "left": LeftOp,
     "length": LengthOp,
     "literal": Literal,
@@ -1962,6 +1999,7 @@ operators = {
     "regex": RegExpOp,
     "regexp": RegExpOp,
     "right": RightOp,
+    "rows": RowsOp,
     "script": ScriptOp,
     "string": StringOp,
     "sub": BinaryOp,

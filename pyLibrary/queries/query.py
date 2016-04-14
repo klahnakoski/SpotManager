@@ -121,7 +121,7 @@ class Query(object):
             columns = _jx.get_columns(self.frum)
         elif isinstance(self.frum, Container):
             try:
-                columns = self.frum.get_columns(table_name=self.frum.name)
+                columns = self.frum.get_columns()
             except Exception, e:
                 Log.error("Problem", cause=e)
         else:

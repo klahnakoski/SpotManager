@@ -16,11 +16,10 @@ from collections import Mapping
 from pyLibrary import convert
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import Dict, wrap, listwrap, unwraplist, DictList, unwrap
-from pyLibrary.queries import jx
 from pyLibrary.queries.containers import Container
 from pyLibrary.queries.domains import is_keyword
 from pyLibrary.queries.expression_compiler import compile_expression
-from pyLibrary.queries.expressions import TRUE_FILTER, jx_expression, Expression, TrueOp
+from pyLibrary.queries.expressions import TRUE_FILTER, jx_expression, Expression, TrueOp, jx_expression_to_function
 from pyLibrary.queries.lists.aggs import is_aggs, list_aggs
 from pyLibrary.queries.meta import Column
 from pyLibrary.thread.threads import Lock
@@ -49,11 +48,11 @@ class ListContainer(Container):
         if is_aggs(q):
             frum = list_aggs(frum.data, q)
         else:  # SETOP
-            try:
-                if q.filter != None or q.esfilter != None:
-                    Log.error("use 'where' clause")
-            except AttributeError, e:
-                pass
+            # try:
+            #     if q.filter != None or q.esfilter != None:
+            #         Log.error("use 'where' clause")
+            # except AttributeError, e:
+            #     pass
 
             if q.where is not TRUE_FILTER and not isinstance(q.where, TrueOp):
                 frum = frum.filter(q.where)
@@ -63,9 +62,10 @@ class ListContainer(Container):
 
             if q.select:
                 frum = frum.select(q.select)
+
         #TODO: ADD EXTRA COLUMN DESCRIPTIONS TO RESULTING SCHEMA
-        for param in q.window:
-            frum.window(param)
+        for w in q.window:
+            frum.window(w)
 
         return frum
 
@@ -78,7 +78,7 @@ class ListContainer(Container):
         command = wrap(command)
         command_clear = listwrap(command["clear"])
         command_set = command.set.items()
-        command_where = jx.get(command.where)
+        command_where = jx_expression_to_function(command.where)
 
         for c in self.data:
             if command_where(c):
@@ -102,6 +102,8 @@ class ListContainer(Container):
         return ListContainer("from "+self.name, filter(temp, self.data), self.schema)
 
     def sort(self, sort):
+        from pyLibrary.queries import jx
+
         return ListContainer("from "+self.name, jx.sort(self.data, sort), self.schema)
 
     def get(self, select):
@@ -130,8 +132,10 @@ class ListContainer(Container):
         return ListContainer("from "+self.name, data=new_data, schema=new_schema)
 
     def window(self, window):
-        _ = window
+        from pyLibrary.queries import jx
+
         jx.window(self.data, window)
+        self.schema[window.name] = window
         return self
 
     def having(self, having):

@@ -12,9 +12,11 @@ from __future__ import division
 from __future__ import unicode_literals
 
 from pyLibrary import convert
+from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import coalesce
 from pyLibrary.times.dates import Date
 
+EMPTY_DICT = {}
 
 def compile_expression(source):
     """
@@ -28,6 +30,8 @@ def compile_expression(source):
     _ = coalesce
     _ = Date
     _ = convert
+    _ = Log
+    _ = EMPTY_DICT
 
     output = None
     exec """

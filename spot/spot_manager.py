@@ -516,7 +516,8 @@ class SpotManager(object):
                         "from": prices,
                         "window": {
                             "name": "expire",
-                            "value": {"script": "coalesce(rows[rownum+1].timestamp, Date.eod())"},  # TODO: SUPPORT  {"coalesce": [{"row":{"timestamp":1}}, {"date":"eod"}]}
+                            "value": {"coalesce": [{"rows":{"timestamp":1}}, {"date":"eod"}]},
+                            # "value": lambda row, rownum, rows: coalesce(rows[rownum+1].timestamp, Date.eod()),
                             "edges": ["availability_zone", "instance_type"],
                             "sort": "timestamp"
                         }
@@ -538,7 +539,7 @@ class SpotManager(object):
                     "where": {"gt": {"expire": Date.now().floor(HOUR) - DAY}},
                     "window": {
                         "name": "current_price",
-                        "value": {"script": "rows.last().price"},  # TODO: SUPPORT "rows.last.price"
+                        "value": "rows.last.price",
                         "edges": ["availability_zone", "instance_type"],
                         "sort": "time",
                     }
@@ -567,12 +568,12 @@ class SpotManager(object):
                     ],
                     "window": [
                         {"name": "estimated_value", "value": {"div": ["type.utility", "price_80"]}},
-                        {"name": "higher_price", "value": lambda row: find_higher(row.all_price, row.price_80)}
+                        {"name": "higher_price", "value": lambda row: find_higher(row.all_price, row.price_80)}  # TODO: SUPPORT {"from":"all_price", "where":{"gt":[".", "price_80"]}, "select":{"aggregate":"min"}}
                     ]
                 })
 
                 output = jx.run({
-                    "from": bid80.data,
+                    "from": bid80,
                     "sort": {"value": "estimated_value", "sort": -1}
                 })
 
@@ -649,7 +650,7 @@ def find_higher(candidates, reference):
     """
     RETURN ONE PRICE HIGHER THAN reference
     """
-    output = wrap([c for c in candidates if c > reference])[0]
+    output = wrap(sorted(c for c in candidates if c > reference))[0]
     return output
 
 

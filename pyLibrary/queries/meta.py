@@ -16,11 +16,11 @@ from copy import copy
 from itertools import product
 
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import coalesce, set_default, Null, literal_field, listwrap, split_field, join_field
+from pyLibrary.dot import coalesce, set_default, Null, literal_field, listwrap
 from pyLibrary.dot import wrap
 from pyLibrary.dot.dicts import Dict
 from pyLibrary.meta import use_settings, DataClass
-from pyLibrary.queries import jx, Schema
+from pyLibrary.queries import Schema
 from pyLibrary.queries.query import Query
 from pyLibrary.thread.threads import Queue, Thread
 from pyLibrary.times.dates import Date
@@ -117,6 +117,7 @@ class FromESMetadata(Schema):
     def _get_columns(self, table=None):
         # TODO: HANDLE MORE THEN ONE ES, MAP TABLE SHORT_NAME TO ES INSTANCE
         metadata = self.default_es.get_metadata(force=True)
+        from pyLibrary.queries import jx
         for abs_index, meta in jx.sort(metadata.indices.items(), {"value": 0, "sort": -1}):
             if meta.index != abs_index:
                 continue
@@ -213,6 +214,8 @@ class FromESMetadata(Schema):
         """
         RETURN METADATA COLUMNS
         """
+        from pyLibrary.queries import jx
+
         try:
             with self.columns.locker:
                 columns = [c for c in self.columns.data if c.table == table_name and (column_name is None or c.name==column_name)]
@@ -243,6 +246,8 @@ class FromESMetadata(Schema):
         """
         QUERY ES TO FIND CARDINALITY AND PARTITIONS FOR A SIMPLE COLUMN
         """
+        from pyLibrary.queries import jx
+
         if c.type in ["object", "nested"]:
             Log.error("not supported")
         try:

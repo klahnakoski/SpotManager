@@ -20,7 +20,6 @@ from pyLibrary.collections.multiset import Multiset
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import wrap
 from pyLibrary.dot.lists import DictList
-from pyLibrary.queries.containers.cube import Cube
 from pyLibrary.queries.expressions import jx_expression_to_function
 
 
@@ -36,6 +35,8 @@ def groupby(data, keys=None, size=None, min_size=None, max_size=None, contiguous
         if size != None:
             max_size = size
         return groupby_min_max_size(data, min_size=min_size, max_size=max_size)
+
+    from pyLibrary.queries.containers.cube import Cube
 
     if isinstance(data, Cube):
         return data.groupby(keys)

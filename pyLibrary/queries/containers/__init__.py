@@ -135,24 +135,7 @@ class Container(object):
         Log.error("not implemented")
 
     def window(self, window):
-        if window.edges or window.sort:
-            Log.error("not implemented")
-
-        from pyLibrary.queries import jx
-
-        # SET OP
-        canonical = self.data.values()[0]
-        accessor = jx.get(window.value)
-        cnames = self.data.keys()
-
-        # ANNOTATE EXISTING CUBE WITH NEW COLUMN
-        m = self.data[window.name] = Matrix(dims=canonical.dims)
-        for coord in canonical._all_combos():
-            row = {k: self.data[k][coord] for k in cnames}
-            m[coord] = accessor(row)
-
-        return self
-
+        Log.error("not implemented")
 
     def having(self, having):
         _ = having

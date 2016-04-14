@@ -18,7 +18,6 @@ from pyLibrary.collections.matrix import Matrix
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import listwrap, wrap
 from pyLibrary.queries import windows
-from pyLibrary.queries.containers.cube import Cube
 from pyLibrary.queries.domains import SimpleSetDomain, DefaultDomain
 from pyLibrary.queries.expression_compiler import compile_expression
 from pyLibrary.queries.expressions import jx_expression_to_function, jx_expression
@@ -92,6 +91,8 @@ def list_aggs(frum, query):
         for c, var in m.items():
             if var != None:
                 m[c] = var.end()
+
+    from pyLibrary.queries.containers.cube import Cube
 
     output = Cube(select, query.edges, result)
     return output

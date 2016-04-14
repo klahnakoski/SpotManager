@@ -8,9 +8,10 @@
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-from __future__ import unicode_literals
-from __future__ import division
 from __future__ import absolute_import
+from __future__ import division
+from __future__ import unicode_literals
+
 import __builtin__
 from collections import Mapping
 from types import GeneratorType
@@ -18,20 +19,19 @@ from types import GeneratorType
 from pyLibrary import dot, convert
 from pyLibrary.collections import UNION, MIN
 from pyLibrary.debugs.logs import Log
+from pyLibrary.dot import listwrap, wrap, unwrap
 from pyLibrary.dot import set_default, Null, Dict, split_field, coalesce, join_field
 from pyLibrary.dot.lists import DictList
-from pyLibrary.dot import listwrap, wrap, unwrap
 from pyLibrary.dot.objects import DictObject
 from pyLibrary.maths import Math
 from pyLibrary.queries import flat_list, query, group_by
 from pyLibrary.queries.containers import Container
-from pyLibrary.queries.cubes.aggs import cube_aggs
+from pyLibrary.queries.containers.cube import Cube
 from pyLibrary.queries.expression_compiler import compile_expression
 from pyLibrary.queries.expressions import TRUE_FILTER, FALSE_FILTER, jx_expression_to_function
 from pyLibrary.queries.flat_list import FlatList
 from pyLibrary.queries.index import Index
 from pyLibrary.queries.query import Query, _normalize_selects, sort_direction, _normalize_select
-from pyLibrary.queries.containers.cube import Cube
 from pyLibrary.queries.unique_index import UniqueIndex
 
 # A COLLECTION OF DATABASE OPERATORS (RELATIONAL ALGEBRA OPERATORS)
@@ -61,10 +61,6 @@ def run(query, frum=None):
         return frum.query(query)
     elif isinstance(frum, (list, set, GeneratorType)):
         frum = wrap(list(frum))
-    elif isinstance(frum, Cube):
-        if is_aggs(query):
-            return cube_aggs(frum, query)
-
     elif isinstance(frum, Query):
         frum = run(frum)
     else:
@@ -92,8 +88,8 @@ def run(query, frum=None):
         if isinstance(frum, Cube):
             frum = list(frum.values())
 
-        for param in query.window:
-            window(frum, param)
+        for w in query.window:
+            window(frum, w)
 
     # AT THIS POINT frum IS IN LIST FORMAT, NOW PACKAGE RESULT
     if query.format == "cube":

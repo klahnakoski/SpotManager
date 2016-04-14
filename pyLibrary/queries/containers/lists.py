@@ -167,7 +167,7 @@ class ListContainer(Container):
             "data": [{k: unwraplist(v) for k, v in row.items()} for row in self.data]
         })
 
-    def get_columns(self, table_name=None):
+    def get_leaves(self, table_name=None):
         return self.schema.values()
 
     def __getitem__(self, item):

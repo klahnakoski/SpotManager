@@ -31,7 +31,7 @@ from pyLibrary.queries.expression_compiler import compile_expression
 from pyLibrary.queries.expressions import TRUE_FILTER, FALSE_FILTER, jx_expression_to_function
 from pyLibrary.queries.flat_list import FlatList
 from pyLibrary.queries.index import Index
-from pyLibrary.queries.query import Query, _normalize_selects, sort_direction, _normalize_select
+from pyLibrary.queries.query import QueryOp, _normalize_selects, sort_direction, _normalize_select
 from pyLibrary.queries.unique_index import UniqueIndex
 
 # A COLLECTION OF DATABASE OPERATORS (RELATIONAL ALGEBRA OPERATORS)
@@ -55,13 +55,13 @@ def run(query, frum=None):
     THIS FUNCTION IS SIMPLY SWITCHING BASED ON THE query["from"] CONTAINER,
     BUT IT IS ALSO PROCESSING A list CONTAINER; SEPARATE TO A ListContainer
     """
-    query = Query(query)
+    query = QueryOp.wrap(query)
     frum = coalesce(frum, query["from"])
     if isinstance(frum, Container):
         return frum.query(query)
     elif isinstance(frum, (list, set, GeneratorType)):
         frum = wrap(list(frum))
-    elif isinstance(frum, Query):
+    elif isinstance(frum, QueryOp):
         frum = run(frum)
     else:
         Log.error("Do not know how to handle {{type}}",  type=frum.__class__.__name__)
@@ -260,29 +260,6 @@ def _tuple_deep(v, field, depth, record):
     return 0, None, record + (v.get(f), )
 
 
-def select_one(record, selection):
-    """
-    APPLY THE selection TO A SINGLE record
-    """
-    record = wrap(record)
-    selection = wrap(selection)
-
-    if isinstance(selection, Mapping):
-        selection = wrap(selection)
-        return record[selection.value]
-    elif isinstance(selection, basestring):
-        return record[selection]
-    elif isinstance(selection, list):
-        output = Dict()
-        for f in selection:
-            f = _normalize_select(f)
-            output[f.name] = record[f.value]
-        return output
-    else:
-        Log.error("Do not know how to handle")
-
-
-
 def select(data, field_name):
     """
     return list with values from field_name
@@ -452,10 +429,12 @@ def _select_deep_meta(field, depth):
 
 
 def get_columns(data, leaves=False):
+    # TODO Split this into two functions
     if not leaves:
         return wrap([{"name": n} for n in UNION(set(d.keys()) for d in data)])
     else:
         return wrap([{"name": leaf} for leaf in set(leaf for row in data for leaf, _ in row.leaves())])
+
 
 _ = """
 DEEP ITERATOR FOR NESTED DOCUMENTS

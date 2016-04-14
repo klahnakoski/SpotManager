@@ -95,8 +95,8 @@ def wrap_from(frum, schema=None):
             Log.error("Expecting from clause to have a 'type' property")
         return type2container[frum.type](frum.settings)
     elif isinstance(frum, Mapping) and (frum["from"] or isinstance(frum["from"], (list, set))):
-        from pyLibrary.queries.query import Query
-        return Query(frum, schema=schema)
+        from pyLibrary.queries.query import QueryOp
+        return QueryOp.wrap(frum, schema=schema)
     elif isinstance(frum, (list, set)):
         return _ListContainer("test_list", frum)
     else:

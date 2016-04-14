@@ -52,8 +52,8 @@ def list_aggs(frum, query):
         )
         for s in select
     }
-    where = compile_expression(query.where.to_python())
-    coord = [0] * len(query.edges)  # LIST OF MATCHING COORDINATE FAMILIES, USUALLY ONLY ONE PER FAMILY BUT JOINS WITH EDGES CAN CAUSE MORE
+    where = jx_expression_to_function(query.where)
+    coord = [None]*len(query.edges)
 
     net_new_edge_names = set(wrap(query.edges).name) - UNION(jx_expression(e.value).vars() for e in query.edges)
     if net_new_edge_names & UNION(e.vars() for e in s_expressions):

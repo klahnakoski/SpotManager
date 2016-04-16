@@ -20,7 +20,8 @@ from pyLibrary.collections.multiset import Multiset
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import wrap
 from pyLibrary.dot.lists import DictList
-from pyLibrary.queries.expressions import jx_expression_to_function
+from pyLibrary.queries.expression_compiler import compile_expression
+from pyLibrary.queries.expressions import jx_expression_to_function, Expression
 
 
 def groupby(data, keys=None, size=None, min_size=None, max_size=None, contiguous=False):

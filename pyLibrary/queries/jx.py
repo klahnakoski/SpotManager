@@ -28,10 +28,10 @@ from pyLibrary.queries import flat_list, query, group_by
 from pyLibrary.queries.containers import Container
 from pyLibrary.queries.containers.cube import Cube
 from pyLibrary.queries.expression_compiler import compile_expression
-from pyLibrary.queries.expressions import TRUE_FILTER, FALSE_FILTER, jx_expression_to_function
+from pyLibrary.queries.expressions import TRUE_FILTER, FALSE_FILTER, jx_expression_to_function, TupleOp
 from pyLibrary.queries.flat_list import FlatList
 from pyLibrary.queries.index import Index
-from pyLibrary.queries.query import QueryOp, _normalize_selects, sort_direction, _normalize_select
+from pyLibrary.queries.query import QueryOp, _normalize_selects, sort_direction
 from pyLibrary.queries.unique_index import UniqueIndex
 
 # A COLLECTION OF DATABASE OPERATORS (RELATIONAL ALGEBRA OPERATORS)
@@ -526,20 +526,11 @@ def sort(data, fieldnames=None):
             if fieldnames.value == None:
                 Log.error("Expecting sort to have 'value' attribute")
 
-            if fieldnames.value == ".":
-                #VALUE COMPARE
-                def _compare_v(l, r):
-                    return value_compare(l, r, fieldnames.sort)
-                return DictList([unwrap(d) for d in sorted(data, cmp=_compare_v)])
-            elif isinstance(fieldnames.value, Mapping):
-                func = jx_expression_to_function(fieldnames.value)
-                def _compare_o(left, right):
-                    return value_compare(func(coalesce(left)), func(coalesce(right)), fieldnames.sort)
-                return DictList([unwrap(d) for d in sorted(data, cmp=_compare_o)])
-            else:
-                def _compare_o(left, right):
-                    return value_compare(coalesce(left)[fieldnames.value], coalesce(right)[fieldnames.value], fieldnames.sort)
-                return DictList([unwrap(d) for d in sorted(data, cmp=_compare_o)])
+            accessor = jx_expression_to_function(fieldnames.value)
+
+            def _compare_o(left, right):
+                return value_compare(accessor(left), accessor(right), fieldnames.sort)
+            return DictList([unwrap(d) for d in sorted(data, cmp=_compare_o)])
 
         formal = query._normalize_sort(fieldnames)
         for f in formal:
@@ -950,7 +941,7 @@ def window(data, param):
     edges = param.edges          # columns to gourp by
     where = param.where          # DO NOT CONSIDER THESE VALUES
     sortColumns = param.sort     # columns to sort by
-    calc_value = wrap_function(jx_expression_to_function(param.value))  # function that takes a record and returns a value (for aggregation)
+    calc_value = wrap_function(compile_expression(param.value.to_python()))  # function that takes a record and returns a value (for aggregation)
     aggregate = param.aggregate  # WindowFunction to apply
     _range = param.range         # of form {"min":-10, "max":0} to specify the size and relative position of window
 
@@ -965,7 +956,7 @@ def window(data, param):
         return
 
     if not aggregate or aggregate == "none":
-        for _, values in groupby(data, edges.value):
+        for _, values in groupby(data, TupleOp("tuple", edges.value)):
             if not values:
                 continue     # CAN DO NOTHING WITH THIS ZERO-SAMPLE
 

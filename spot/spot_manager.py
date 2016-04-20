@@ -568,7 +568,7 @@ class SpotManager(object):
                     ],
                     "window": [
                         {"name": "estimated_value", "value": {"div": ["type.utility", "price_80"]}},
-                        {"name": "higher_price", "value": lambda row: find_higher(row.all_price, row.price_80)}  # TODO: SUPPORT {"from":"all_price", "where":{"gt":[".", "price_80"]}, "select":{"aggregate":"min"}}
+                        {"name": "higher_price", "value": {"script": "find_higher(row.all_price, row.price_80)"}}  # TODO: SUPPORT {"from":"all_price", "where":{"gt":[".", "price_80"]}, "select":{"aggregate":"min"}}
                     ]
                 })
 

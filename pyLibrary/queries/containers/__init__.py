@@ -146,9 +146,9 @@ class Container(object):
         _ = format
         Log.error("not implemented")
 
-    def get_leaves(self, table_name):
+    def get_columns(self, table_name):
         """
-        RETURN COLUMNS THAT STORE PRIMITIVE VALUES
+        USE THE frum TO DETERMINE THE COLUMNS
         """
         Log.error("Not implemented")
 

@@ -12,14 +12,14 @@ from __future__ import division
 from __future__ import unicode_literals
 
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import listwrap, Dict, wrap, literal_field, set_default, coalesce, Null, split_field, DictList, unwrap
+from pyLibrary.dot import listwrap, Dict, wrap, literal_field, set_default, coalesce, Null, split_field, DictList, unwrap, \
+    join_field
 from pyLibrary.maths import Math
 from pyLibrary.queries import es09
-from pyLibrary.queries.domains import is_keyword
 from pyLibrary.queries.es14.decoders import DefaultDecoder, AggsDecoder
 from pyLibrary.queries.es14.decoders import DimFieldListDecoder
 from pyLibrary.queries.es14.util import aggregates1_4, NON_STATISTICAL_AGGS
-from pyLibrary.queries.expressions import simplify_esfilter, split_expression_by_depth, jx_expression, AndOp
+from pyLibrary.queries.expressions import simplify_esfilter, split_expression_by_depth, jx_expression, AndOp, Variable
 from pyLibrary.queries.query import MAX_LIMIT
 from pyLibrary.times.timer import Timer
 
@@ -40,7 +40,6 @@ def get_decoders_by_depth(query):
     for e in coalesce(query.edges, query.groupby, []):
         if e.value != None:
             e = e.copy()
-            e.value = jx_expression(e.value)
             vars_ = e.value.vars()
 
             for v in vars_:
@@ -50,8 +49,8 @@ def get_decoders_by_depth(query):
             e.value = e.value.map({schema[v].name: schema[v].es_column for v in vars_})
         elif e.range:
             e = e.copy()
-            min_ = jx_expression(e.range.min)
-            max_ = jx_expression(e.range.max)
+            min_ = e.range.min
+            max_ = e.range.max
             vars_ = min_.vars() | max_.vars()
 
             for v in vars_:
@@ -84,43 +83,45 @@ def get_decoders_by_depth(query):
 
 def es_aggsop(es, frum, query):
     select = wrap([s.copy() for s in listwrap(query.select)])
+    es_column_map = {c.name: c.es_column for c in frum._columns}
 
     es_query = Dict()
     new_select = Dict()  #MAP FROM canonical_name (USED FOR NAMES IN QUERY) TO SELECT MAPPING
     formula = []
     for s in select:
-        if s.aggregate == "count" and (s.value == None or s.value == "."):
+        if s.aggregate == "count" and isinstance(s.value, Variable) and s.value.var == ".":
             s.pull = "doc_count"
-        elif s.value == ".":
-            if frum.typed:
-                # STATISITCAL AGGS IMPLY $value, WHILE OTHERS CAN BE ANYTHING
-                if s.aggregate in NON_STATISTICAL_AGGS:
-                    #TODO: HANDLE BOTH $value AND $objects TO COUNT
-                    Log.error("do not know how to handle")
+        elif isinstance(s.value, Variable):
+            if s.value.var==".":
+                if frum.typed:
+                    # STATISITCAL AGGS IMPLY $value, WHILE OTHERS CAN BE ANYTHING
+                    if s.aggregate in NON_STATISTICAL_AGGS:
+                        #TODO: HANDLE BOTH $value AND $objects TO COUNT
+                        Log.error("do not know how to handle")
+                    else:
+                        s.value.var = "$value"
+                        new_select["$value"] += [s]
                 else:
-                    s.value = "$value"
-                    new_select["$value"] += [s]
+                    if s.aggregate in NON_STATISTICAL_AGGS:
+                        #TODO:  WE SHOULD BE ABLE TO COUNT, BUT WE MUST *OR* ALL LEAF VALUES TO DO IT
+                        Log.error("do not know how to handle")
+                    else:
+                        Log.error('Not expecting ES to have a value at "." which {{agg}} can be applied', agg=s.aggregate)
+            elif s.aggregate == "count":
+                s.value = s.value.map(es_column_map)
+                new_select["count_"+literal_field(s.value.var)] += [s]
             else:
-                if s.aggregate in NON_STATISTICAL_AGGS:
-                    #TODO:  WE SHOULD BE ABLE TO COUNT, BUT WE MUST *OR* ALL LEAF VALUES TO DO IT
-                    Log.error("do not know how to handle")
-                else:
-                    Log.error('Not expecting ES to have a value at "." which {{agg}} can be applied', agg=s.aggregate)
-        elif is_keyword(s.value) and s.aggregate=="count":
-            s.value = coalesce(frum[s.value].es_column, s.value)
-            new_select["count_"+literal_field(s.value)] += [s]
-        elif is_keyword(s.value):
-            s.value = coalesce(frum[s.value].es_column, s.value)
-            new_select[literal_field(s.value)] += [s]
+                s.value = s.value.map(es_column_map)
+                new_select[literal_field(s.value.var)] += [s]
         else:
             formula.append(s)
 
     for canonical_name, many in new_select.items():
         representative = many[0]
-        if representative.value == ".":
+        if representative.value.var == ".":
             Log.error("do not know how to handle")
         else:
-            field_name = representative.value
+            field_name = representative.value.var
 
         # canonical_name=literal_field(many[0].name)
         for s in many:
@@ -184,7 +185,7 @@ def es_aggsop(es, frum, query):
 
     for i, s in enumerate(formula):
         canonical_name = literal_field(s.name)
-        abs_value = jx_expression(s.value).map({c.name: c.es_column for c in frum._columns})
+        abs_value = jx_expression(s.value).map(es_column_map)
 
         if s.aggregate == "count":
             es_query.aggs[literal_field(canonical_name)].value_count.script = abs_value.to_ruby()
@@ -246,10 +247,9 @@ def es_aggsop(es, frum, query):
     start = 0
 
     vars_ = query.where.vars()
-    map_ = {v: frum[v].es_column for v in vars_}
 
     #<TERRIBLE SECTION> THIS IS WHERE WE WEAVE THE where CLAUSE WITH nested
-    split_where = split_expression_by_depth(query.where, schema=frum, map_=map_)
+    split_where = split_expression_by_depth(query.where, schema=frum, map_=es_column_map)
 
     if len(split_field(frum.name)) > 1:
         if any(split_where[2::]):

@@ -26,6 +26,7 @@ from pyLibrary.times.dates import Date
 ALLOW_SCRIPTING = False
 TRUE_FILTER = True
 FALSE_FILTER = False
+EMPTY_DICT = {}
 
 _Query = None
 
@@ -45,12 +46,13 @@ def jx_expression(expr):
     if isinstance(expr, Expression):
         Log.error("Expecting JSON, not expression")
 
-    if expr in (True, False, None) or expr == None or isinstance(expr, (float, int, Decimal)) or isinstance(expr, Date):
+    if expr in (True, False, None) or expr == None or isinstance(expr, (float, int, Decimal, Date)):
         return Literal(None, expr)
-    elif is_keyword(expr):
-        return Variable(expr)
-    elif expr == "":
-        Log.error("expression is empty")
+    elif isinstance(expr, unicode):
+        if is_keyword(expr):
+            return Variable(expr)
+        else:
+            Log.error("expression is not recognized: {{expr}}", expr=expr)
     elif isinstance(expr, (list, tuple)):
         return jx_expression({"tuple": expr})  # FORMALIZE
 
@@ -122,7 +124,6 @@ def jx_expression_to_function(expr):
 
 class Expression(object):
     has_simple_form = False
-
 
     def __init__(self, op, terms):
         if isinstance(terms, (list, tuple)):
@@ -224,19 +225,6 @@ class Variable(Expression):
         agg = "row"
         if not path:
             return agg
-        elif path[0] in ["row", "rownum"]:
-            # MAGIC VARIABLES
-            agg = path[0]
-            path = path[1:]
-        elif path[0] == "rows":
-            if len(path) == 1:
-                return "rows"
-            elif path[1] in ["first", "last"]:
-                agg = "rows." + path[1] + "()"
-                path = path[2:]
-            else:
-                Log.error("do not know what {{var}} of `rows` is", var=path[1])
-
         for p in path[:-1]:
             agg = agg+".get("+convert.value2quote(p)+", EMPTY_DICT)"
         return agg+".get("+convert.value2quote(path[-1])+")"
@@ -289,40 +277,13 @@ class Variable(Expression):
         return str(self.var)
 
 
-class RowsOp(Expression):
-    has_simple_form = True
-
-    def __init__(self, op, term):
-        Expression.__init__(self, op, term)
-        self.var, self.offset = term
-
-    def to_python(self, not_null=False, boolean=False):
-        path = split_field(self.var.var)
-        agg = "rows[rownum+" + unicode(self.offset) + "]"
-        if not path:
-            return agg
-
-        for p in path[:-1]:
-            agg = agg+".get("+convert.value2quote(p)+", EMPTY_DICT)"
-        return agg+".get("+convert.value2quote(path[-1])+")"
-
-    def to_dict(self):
-        return {"rows": {self.var: self.offset}}
-
-    def vars(self):
-        return {self.var, "rows", "rownum"}
-
-    def map(self, map_):
-        return RowsOp("rows", {self.var.map(map_): self.offset})
-
-
 class ScriptOp(Expression):
     """
     ONLY FOR TESTING AND WHEN YOU TRUST THE SCRIPT SOURCE
     """
 
     def __init__(self, op, script):
-        Expression.__init__(self, op, None)
+        Expression.__init__(self, "", None)
         self.script = script
 
     def to_ruby(self, not_null=False, boolean=False):
@@ -682,13 +643,13 @@ class LeavesOp(Expression):
         Log.error("not supported")
 
     def to_dict(self):
-        return {"leaves": self.terms.to_dict()}
+        return {"leaves": self.term.to_dict()}
 
     def vars(self):
         return self.term.vars()
 
     def map(self, map_):
-        return LeavesOp("leaves", [t.map(map_) for t in self.terms])
+        return LeavesOp("leaves", self.term.map(map_))
 
     def missing(self):
         return False
@@ -811,6 +772,7 @@ class BinaryOp(Expression):
 class DivOp(Expression):
     has_simple_form = True
 
+
     def __init__(self, op, terms, default=NullOp()):
         Expression.__init__(self, op, terms)
         self.lhs, self.rhs = terms
@@ -833,7 +795,7 @@ class DivOp(Expression):
         return output
 
     def to_python(self, not_null=False, boolean=False):
-        return "None if ("+self.missing().to_python()+") else (" + self.lhs.to_python(not_null=True) + ") / (" + self.rhs.to_python(not_null=True)+")"
+        return "(" + self.lhs.to_python() + ") / (" + self.rhs.to_python()+")"
 
     def to_sql(self, not_null=False, boolean=False):
         return "(" + self.lhs.to_sql() + ") / (" + self.rhs.to_sql()+")"
@@ -1022,13 +984,22 @@ class AndOp(Expression):
             self.terms = [terms]
 
     def to_ruby(self, not_null=False, boolean=False):
-        return " && ".join("(" + t.to_ruby() + ")" for t in self.terms)
+        if not self.terms:
+            return "true"
+        else:
+            return " && ".join("(" + t.to_ruby() + ")" for t in self.terms)
 
     def to_python(self, not_null=False, boolean=False):
-        return " and ".join("(" + t.to_python() + ")" for t in self.terms)
+        if not self.terms:
+            return "True"
+        else:
+            return " and ".join("(" + t.to_python() + ")" for t in self.terms)
 
     def to_sql(self, not_null=False, boolean=False):
-        return " AND ".join("(" + t.to_sql() + ")" for t in self.terms)
+        if not self.terms:
+            return "1=1"
+        else:
+            return " AND ".join("(" + t.to_sql() + ")" for t in self.terms)
 
     def to_esfilter(self):
         if not len(self.terms):
@@ -1858,7 +1829,7 @@ def simplify_esfilter(esfilter):
     except Exception, e:
         from pyLibrary.debugs.logs import Log
 
-        Log.unexpected("programmer error", e)
+        Log.unexpected("programmer error", cause=e)
 
 
 def removeOr(esfilter):
@@ -2066,6 +2037,7 @@ operators = {
     "gt": BinaryOp,
     "gte": BinaryOp,
     "in": InOp,
+    "instr": ContainsOp,
     "left": LeftOp,
     "length": LengthOp,
     "literal": Literal,
@@ -2091,7 +2063,6 @@ operators = {
     "regex": RegExpOp,
     "regexp": RegExpOp,
     "right": RightOp,
-    "rows": RowsOp,
     "script": ScriptOp,
     "string": StringOp,
     "sub": BinaryOp,

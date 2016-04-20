@@ -712,6 +712,10 @@ def quote_value(value):
         return "'" + value.replace("'", "''") + "'"
     elif value == None:
         return "NULL"
+    elif value is True:
+        return "1"
+    elif value is False:
+        return "0"
     else:
         return unicode(value)
 

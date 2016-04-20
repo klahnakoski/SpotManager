@@ -7,24 +7,19 @@
 #
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import absolute_import
-from __future__ import division
 from __future__ import unicode_literals
-
+from __future__ import division
+from __future__ import absolute_import
 from collections import Mapping
-
-from pyLibrary import convert
 from pyLibrary import dot
-from pyLibrary.collections import MAX, OR
+from pyLibrary import convert
 from pyLibrary.collections.matrix import Matrix
-from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import Null, Dict
-from pyLibrary.dot import wrap, wrap_leaves, listwrap
-from pyLibrary.dot.lists import DictList
+from pyLibrary.collections import MAX, OR
 from pyLibrary.queries.containers import Container
-from pyLibrary.queries.containers.lists import ListContainer
-from pyLibrary.queries.cubes.aggs import cube_aggs
-from pyLibrary.queries.lists.aggs import is_aggs
+from pyLibrary.dot import Null, Dict
+from pyLibrary.dot.lists import DictList
+from pyLibrary.dot import wrap, wrap_leaves, listwrap
+from pyLibrary.debugs.logs import Log
 from pyLibrary.queries.query import _normalize_edge
 
 
@@ -113,17 +108,6 @@ class Cube(Container):
 
         Log.error("This is a multicube")
 
-    def query(self, q):
-        frum = self
-        if is_aggs(q):
-            return cube_aggs(frum, q)
-
-        columns = wrap({s.name: s for s in self.select + self.edges})
-
-        # DEFER TO ListContainer
-        frum = ListContainer(name="", data=frum.values(), schema=columns)
-        return frum.query(q)
-
     def values(self):
         """
         TRY NOT TO USE THIS, IT IS SLOW
@@ -133,7 +117,7 @@ class Cube(Container):
         s_names = self.select.name
         parts = [e.domain.partitions.value if e.domain.primitive else e.domain.partitions for e in self.edges]
         for c in matrix._all_combos():
-            output = {e_name: parts[i][c[i]] for i, e_name in enumerate(e_names)}
+            output = {n: parts[i][c[i]] for i, n in enumerate(e_names)}
             for s in s_names:
                 output[s] = self.data[s][c]
             yield wrap(output)
@@ -250,7 +234,7 @@ class Cube(Container):
     def __getattr__(self, item):
         return self.data[item]
 
-    def get_leaves(self):
+    def get_columns(self):
         return self.edges + listwrap(self.select)
 
     def forall(self, method):
@@ -399,32 +383,6 @@ class Cube(Container):
             )
 
         return output
-
-    def window(self, window):
-        if window.edges or window.sort:
-            Log.error("not implemented")
-
-        from pyLibrary.queries import jx
-
-        # SET OP
-        canonical = self.data.values()[0]
-        accessor = jx.get(window.value)
-        cnames = self.data.keys()
-
-        # ANNOTATE EXISTING CUBE WITH NEW COLUMN
-        m = self.data[window.name] = Matrix(dims=canonical.dims)
-        for coord in canonical._all_combos():
-            row = Dict()  # IT IS SAD WE MUST HAVE A Dict(), THERE ARE {"script": expression} USING THE DOT NOTATION
-            for k in cnames:
-                row[k] = self.data[k][coord]
-            for c, e in zip(coord, self.edges):
-                row[e.name] = e.domain.partitions[c]
-            m[coord] = accessor(row)
-
-        self.select.append(window)
-        return self
-
-
 
     def format(self, format):
         if format == None or format == "cube":

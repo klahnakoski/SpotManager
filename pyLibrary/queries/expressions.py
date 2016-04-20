@@ -225,6 +225,19 @@ class Variable(Expression):
         agg = "row"
         if not path:
             return agg
+        elif path[0] in ["row", "rownum"]:
+            # MAGIC VARIABLES
+            agg = path[0]
+            path = path[1:]
+        elif path[0] == "rows":
+            if len(path) == 1:
+                return "rows"
+            elif path[1] in ["first", "last"]:
+                agg = "rows." + path[1] + "()"
+                path = path[2:]
+            else:
+                Log.error("do not know what {{var}} of `rows` is", var=path[1])
+
         for p in path[:-1]:
             agg = agg+".get("+convert.value2quote(p)+", EMPTY_DICT)"
         return agg+".get("+convert.value2quote(path[-1])+")"
@@ -276,6 +289,40 @@ class Variable(Expression):
     def __str__(self):
         return str(self.var)
 
+class RowsOp(Expression):
+    has_simple_form = True
+
+    def __init__(self, op, term):
+        Expression.__init__(self, op, term)
+        self.var, self.offset = term
+        if isinstance(self.var, Variable) and not any(self.var.var.startswith(p) for p in ["row.", "rows.", "rownum"]):  # VARIABLES ARE INTERPRETED LITERALLY
+            self.var = Literal("literal", self.var.var)
+
+    def to_python(self, not_null=False, boolean=False):
+        path = split_field(self.var.to_python(not_null=True))
+        agg = "rows[rownum+" + unicode(self.offset) + "]"
+        if not path:
+            return agg
+
+        for p in path[:-1]:
+            agg = agg+".get("+convert.value2quote(p)+", EMPTY_DICT)"
+        return agg+".get("+convert.value2quote(path[-1])+")"
+
+    def to_dict(self):
+        if isinstance(self.var, Literal) and isinstance(self.offset, Literal):
+            return {"rows": {self.var.json, convert.json2value(self.offset.json)}}
+        else:
+            return {"rows": [self.var.to_dict(), self.offset.to_dict()]}
+
+    def vars(self):
+        return self.var.vars() | self.offset.vars() | {"rows", "rownum"}
+
+    def map(self, map_):
+        return BinaryOp("rows", [self.var.map(map_), self.offset.map(map_)])
+
+    def missing(self):
+        return MissingOp("missing", self)
+
 
 class ScriptOp(Expression):
     """
@@ -283,7 +330,7 @@ class ScriptOp(Expression):
     """
 
     def __init__(self, op, script):
-        Expression.__init__(self, "", None)
+        Expression.__init__(self, op, None)
         self.script = script
 
     def to_ruby(self, not_null=False, boolean=False):
@@ -772,7 +819,6 @@ class BinaryOp(Expression):
 class DivOp(Expression):
     has_simple_form = True
 
-
     def __init__(self, op, terms, default=NullOp()):
         Expression.__init__(self, op, terms)
         self.lhs, self.rhs = terms
@@ -795,7 +841,7 @@ class DivOp(Expression):
         return output
 
     def to_python(self, not_null=False, boolean=False):
-        return "(" + self.lhs.to_python() + ") / (" + self.rhs.to_python()+")"
+        return "None if ("+self.missing().to_python()+") else (" + self.lhs.to_python(not_null=True) + ") / (" + self.rhs.to_python(not_null=True)+")"
 
     def to_sql(self, not_null=False, boolean=False):
         return "(" + self.lhs.to_sql() + ") / (" + self.rhs.to_sql()+")"
@@ -823,34 +869,6 @@ class DivOp(Expression):
             return FalseOp()
         else:
             return OrOp("or", [self.lhs.missing(), self.rhs.missing(), EqOp("eq", [self.rhs, Literal("literal", 0)])])
-
-
-class RowsOp(Expression):
-    has_simple_form = True
-
-    def __init__(self, op, terms):
-        Expression.__init__(self, op, terms)
-        self.lhs, self.rhs = terms
-        if isinstance(self.lhs, Variable) and not any(self.lhs.var.startswith(p) for p in ["row.", "rows.", "rownum"]):  # VARIABLES ARE INTERPRETED LITERALLY
-            self.lhs = Literal("literal", self.lhs.var)
-
-    def to_python(self, not_null=False, boolean=False):
-        return "rows[rownum + ("+self.rhs.to_python(not_null=True)+")]["+self.lhs.to_python(not_null=True)+"]"
-
-    def to_dict(self):
-        if isinstance(self.lhs, Variable) and isinstance(self.rhs, Literal):
-            return {"rows": {self.lhs.var, convert.json2value(self.rhs.json)}}
-        else:
-            return {"rows": [self.lhs.to_dict(), self.rhs.to_dict()]}
-
-    def vars(self):
-        return self.lhs.vars() | self.rhs.vars()
-
-    def map(self, map_):
-        return BinaryOp("rows", [self.lhs.map(map_), self.rhs.map(map_)], default=self.default.map(map_))
-
-    def missing(self):
-        return MissingOp("missing", self)
 
 
 class EqOp(Expression):

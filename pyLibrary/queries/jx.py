@@ -15,6 +15,8 @@ import __builtin__
 from collections import Mapping
 from types import GeneratorType
 
+import itertools
+
 from pyLibrary import dot, convert
 from pyLibrary.collections import UNION, MIN
 from pyLibrary.debugs.logs import Log
@@ -520,15 +522,12 @@ def sort(data, fieldnames=None, already_normalized=False):
         else:
             formal = query._normalize_sort(fieldnames)
 
-        for f in formal:
-            f.func = jx_expression_to_function(f.value)
+        funcs = [(jx_expression_to_function(f.value), f.sort) for f in formal]
 
         def comparer(left, right):
-            left = coalesce(left)
-            right = coalesce(right)
-            for f in formal:
+            for func, sort_ in funcs:
                 try:
-                    result = value_compare(f.func(left), f.func(right), f.sort)
+                    result = value_compare(func(left), func(right), sort_)
                     if result != 0:
                         return result
                 except Exception, e:
@@ -549,6 +548,14 @@ def sort(data, fieldnames=None, already_normalized=False):
 
 
 def value_compare(l, r, ordering=1):
+    """
+    SORT VALUES, NULL IS THE LEAST VALUE
+    :param l: LHS
+    :param r: RHS
+    :param ordering: (-1, 0, 0) TO AFFECT SORT ORDER
+    :return: The return value is negative if x < y, zero if x == y and strictly positive if x > y.
+    """
+
     if l == None:
         if r == None:
             return 0
@@ -562,10 +569,16 @@ def value_compare(l, r, ordering=1):
             c = value_compare(a, b) * ordering
             if c != 0:
                 return c
-        return 0
+
+        if len(l) < len(r):
+            return - ordering
+        elif len(l) > len(r):
+            return ordering
+        else:
+            return 0
     elif isinstance(l, Mapping):
         if isinstance(r, Mapping):
-            for k in set(l.keys()) | set(r.keys()):
+            for k in sorted(set(l.keys()) | set(r.keys())):
                 c = value_compare(l.get(k), r.get(k)) * ordering
                 if c != 0:
                     return c
@@ -576,9 +589,6 @@ def value_compare(l, r, ordering=1):
         return -1
     else:
         return cmp(l, r) * ordering
-
-
-
 
 
 def pairwise(values):

@@ -114,11 +114,11 @@
 				"encoding": "utf8"
 			},
 			{
-				"log_type": "ses", "$ref": "file://~/private.json#aws_credentials",
+				"log_type": "email",
 				"from_address": "klahnakoski@mozilla.com",
 				"to_address": "klahnakoski@mozilla.com",
 				"subject": "[ALERT][DEV] Problem in ETL Spot",
-
+				"$ref": "file://~/private.json#email"
 			},
 			{
 				"log_type": "console"

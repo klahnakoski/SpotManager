@@ -516,7 +516,7 @@ class SpotManager(object):
                         "from": prices,
                         "window": {
                             "name": "expire",
-                            "value": {"coalesce": [{"rows":{"timestamp":1}}, {"date":"eod"}]},
+                            "value": {"coalesce": [{"rows": {"timestamp": 1}}, {"date": "eod"}]},
                             # "value": lambda row, rownum, rows: coalesce(rows[rownum+1].timestamp, Date.eod()),
                             "edges": ["availability_zone", "instance_type"],
                             "sort": "timestamp"

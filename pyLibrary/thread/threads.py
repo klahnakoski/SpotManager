@@ -441,7 +441,7 @@ class Thread(object):
         self.please_stop.go()
 
         if DEBUG:
-            _Log.note("Thread {{name|quote}} now stopped", name=self.name)
+            _Log.note("Thread {{name|quote}} got request to stop", name=self.name)
 
     def add_child(self, child):
         self.children.append(child)
@@ -530,7 +530,7 @@ class Thread(object):
                         self.synch_lock.wait(0.5)
 
                 if DEBUG:
-                    _Log.note("Waiting on thread {{thread|json}}", thread=self.name)
+                    _Log.note("{{parent|quote}} waiting on thread {{child|quote}}", parent=Thread.current().name, child=self.name)
         else:
             self.stopped.wait_for_go(till=till)
             if self.stopped:

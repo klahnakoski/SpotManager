@@ -54,7 +54,7 @@ def jx_expression(expr):
         else:
             Log.error("expression is not recognized: {{expr}}", expr=expr)
     elif isinstance(expr, (list, tuple)):
-        return jx_expression({"tuple": expr})  # FORMALIZE
+        return TupleOp("tuple", expr)  # FORMALIZE
 
     expr = wrap(expr)
     if expr.date:
@@ -823,6 +823,34 @@ class DivOp(Expression):
             return FalseOp()
         else:
             return OrOp("or", [self.lhs.missing(), self.rhs.missing(), EqOp("eq", [self.rhs, Literal("literal", 0)])])
+
+
+class RowsOp(Expression):
+    has_simple_form = True
+
+    def __init__(self, op, terms):
+        Expression.__init__(self, op, terms)
+        self.lhs, self.rhs = terms
+        if isinstance(self.lhs, Variable) and not any(self.lhs.var.startswith(p) for p in ["row.", "rows.", "rownum"]):  # VARIABLES ARE INTERPRETED LITERALLY
+            self.lhs = Literal("literal", self.lhs.var)
+
+    def to_python(self, not_null=False, boolean=False):
+        return "rows[rownum + ("+self.rhs.to_python(not_null=True)+")]["+self.lhs.to_python(not_null=True)+"]"
+
+    def to_dict(self):
+        if isinstance(self.lhs, Variable) and isinstance(self.rhs, Literal):
+            return {"rows": {self.lhs.var, convert.json2value(self.rhs.json)}}
+        else:
+            return {"rows": [self.lhs.to_dict(), self.rhs.to_dict()]}
+
+    def vars(self):
+        return self.lhs.vars() | self.rhs.vars()
+
+    def map(self, map_):
+        return BinaryOp("rows", [self.lhs.map(map_), self.rhs.map(map_)], default=self.default.map(map_))
+
+    def missing(self):
+        return MissingOp("missing", self)
 
 
 class EqOp(Expression):
@@ -2063,6 +2091,7 @@ operators = {
     "regex": RegExpOp,
     "regexp": RegExpOp,
     "right": RightOp,
+    "rows": RowsOp,
     "script": ScriptOp,
     "string": StringOp,
     "sub": BinaryOp,

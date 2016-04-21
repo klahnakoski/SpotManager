@@ -116,7 +116,10 @@ def jx_expression_to_function(expr):
     RETURN FUNCTION THAT REQUIRES PARAMETERS (row, rownum=None, rows=None):
     """
     if isinstance(expr, Expression):
-        return compile_expression(expr.to_python())
+        if isinstance(expr, ScriptOp) and not isinstance(expr.script, unicode):
+            return expr.script
+        else:
+            return compile_expression(expr.to_python())
     if expr != None and not isinstance(expr, (Mapping, list)) and hasattr(expr, "__call__"):
         return expr
     return compile_expression(jx_expression(expr).to_python())
@@ -299,7 +302,11 @@ class RowsOp(Expression):
             self.var = Literal("literal", self.var.var)
 
     def to_python(self, not_null=False, boolean=False):
-        path = split_field(self.var.to_python(not_null=True))
+        if isinstance(self.var, Literal):
+            path = split_field(convert.json2value(self.var.json))
+        else:
+            raise Log.error("dynamic varibale look up not supported yet")
+
         agg = "rows[rownum+" + unicode(self.offset) + "]"
         if not path:
             return agg
@@ -1385,7 +1392,11 @@ class CoalesceOp(Expression):
         return acc
 
     def to_python(self, not_null=False, boolean=False):
-        return "coalesce(" + (",".join(t.to_python() for t in self.terms)) + ")"
+        agg = "None"
+        for t in reversed(self.terms):
+            agg = "(lambda p: p if p!=None else (" + agg + "))(" + t.to_python() + ")"
+        return agg
+        # return "coalesce(" + (",".join(t.to_python() for t in self.terms)) + ")"
 
     def to_sql(self, not_null=False, boolean=False):
         return "COALESCE(" + (",".join(t.to_sql() for t in self.terms)) + ")"

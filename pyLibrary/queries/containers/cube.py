@@ -254,6 +254,9 @@ class Cube(Container):
     def get_columns(self):
         return self.edges + listwrap(self.select)
 
+    def get_leaves(self):
+        return self.edges + listwrap(self.select)
+
     def forall(self, method):
         """
         TODO: I AM NOT HAPPY THAT THIS WILL NOT WORK WELL WITH WINDOW FUNCTIONS
@@ -420,7 +423,7 @@ class Cube(Container):
                 row[k] = self.data[k][coord]
             for c, e in zip(coord, self.edges):
                 row[e.name] = e.domain.partitions[c]
-            m[coord] = accessor(row)
+            m[coord] = accessor(row, Null, Null)  # DUMMY Null VALUES BECAUSE I DO NOT KNOW WHAT TO DO
 
         self.select.append(window)
         return self

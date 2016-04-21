@@ -13,11 +13,12 @@ from __future__ import unicode_literals
 
 from collections import Mapping
 from copy import copy
+from types import NoneType
 
 from pyLibrary import convert
 from pyLibrary.collections import AND, UNION
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import coalesce, Null, set_default, unwraplist, literal_field
+from pyLibrary.dot import coalesce, Null, set_default, unwraplist, literal_field, NullType
 from pyLibrary.dot import wrap, unwrap, listwrap
 from pyLibrary.dot.dicts import Dict
 from pyLibrary.dot.lists import DictList
@@ -26,7 +27,7 @@ from pyLibrary.queries import Schema, wrap_from
 from pyLibrary.queries.containers import Container
 from pyLibrary.queries.dimensions import Dimension
 from pyLibrary.queries.domains import Domain, is_keyword
-from pyLibrary.queries.expressions import jx_expression, TrueOp, Expression, FalseOp, Variable, LeavesOp
+from pyLibrary.queries.expressions import jx_expression, TrueOp, Expression, FalseOp, Variable, LeavesOp, ScriptOp
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50000
@@ -204,12 +205,12 @@ class QueryOp(Expression):
             schema = output.frum
 
         if query.select:
-            output.select = _normalize_selects(query.select, query.frum, schema=schema)
+            output.select = _normalize_selects(query.select, output.frum, schema=schema)
         else:
             if query.edges or query.groupby:
                 output.select = Dict(name="count", value=jx_expression("."), aggregate="count", default=0)
             else:
-                output.select = _normalize_selects(".", query["from"])
+                output.select = _normalize_selects(".", None)
 
         if query.groupby and query.edges:
             Log.error("You can not use both the `groupby` and `edges` clauses in the same query!")
@@ -276,7 +277,7 @@ canonical_aggregates = wrap({
 
 
 def _normalize_selects(selects, frum, schema=None, ):
-    if frum == None or isinstance(frum, (list, set)):
+    if isinstance(frum, (NoneType, NullType, QueryOp, list, set)):
         if isinstance(selects, list):
             output = [_normalize_select_no_context(s, schema=schema) for s in selects]
         else:
@@ -317,7 +318,7 @@ def _normalize_select(select, frum, schema=None):
         return frum._normalize_select(canonical)
 
     output = []
-    if not select.value or select.value == ".":
+    if canonical.aggregate == "none" and (not select.value or select.value == "."):
         output.extend([
             set_default(
                 {
@@ -530,9 +531,16 @@ def _normalize_domain(domain=None, schema=None):
 
 
 def _normalize_window(window, schema=None):
+    v = window.value
+    try:
+        expr = jx_expression(v)
+    except Exception:
+        expr = ScriptOp("script", v)
+
+
     return Dict(
         name=coalesce(window.name, window.value),
-        value=jx_expression(window.value),
+        value=expr,
         edges=[_normalize_edge(e, schema) for e in listwrap(window.edges)],
         sort=_normalize_sort(window.sort),
         aggregate=window.aggregate,

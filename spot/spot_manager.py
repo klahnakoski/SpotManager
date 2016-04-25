@@ -600,7 +600,7 @@ class SpotManager(object):
         with Timer("Get pricing from AWS"):
             for instance_type in self.settings.utility.keys():
                 for zone in zones:
-                    if most_recents:
+                    if cache:
                         most_recent = most_recents[{
                             "instance_type": instance_type,
                             "availability_zone": zone

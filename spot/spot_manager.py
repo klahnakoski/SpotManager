@@ -194,7 +194,7 @@ class SpotManager(object):
                 bid = min_bid + (i * price_interval)
                 if bid < p.current_price:
                     Log.note(
-                        "failed bid of ${{bid}}/hour on {{type}} is over current price of ${{current_price}}/hour",
+                        "failed bid of ${{bid}}/hour on {{type}} is under current price of ${{current_price}}/hour",
                         type=p.type.instance_type,
                         bid=bid,
                         current_price=p.current_price
@@ -655,6 +655,7 @@ def find_higher(candidates, reference):
 
 
 TERMINATED_STATUS_CODES = {
+    "marked-for-termination",   # AS GOOD AS DEAD
     "capacity-oversubscribed",
     "capacity-not-available",
     "instance-terminated-capacity-oversubscribed",
@@ -672,6 +673,7 @@ PENDING_STATUS_CODES = {
 }
 PROBABLY_NOT_FOR_A_WHILE = {
     "az-group-constraint",
+    "placement-group-constraint",
     "price-too-low"
 }
 RUNNING_STATUS_CODES = {

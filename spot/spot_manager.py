@@ -144,7 +144,7 @@ class SpotManager(object):
                 break
 
             if p.current_price == None:
-                Log.note("{{type}} has no price",
+                Log.note("{{type}} has no current price",
                     type=p.type.instance_type
                 )
                 continue
@@ -194,7 +194,7 @@ class SpotManager(object):
                 bid = min_bid + (i * price_interval)
                 if bid < p.current_price:
                     Log.note(
-                        "failed bid of ${{bid}}/hour on {{type}} is under current price of ${{current_price}}/hour",
+                        "Did not bid ${{bid}}/hour on {{type}}: Under current price of ${{current_price}}/hour",
                         type=p.type.instance_type,
                         bid=bid,
                         current_price=p.current_price
@@ -202,7 +202,7 @@ class SpotManager(object):
                     continue
                 if bid > remaining_budget:
                     Log.note(
-                        "Failed bid of ${{bid}}/hour on {{type}} is over remaining budget of ${{remaining}}/hour",
+                        "Did not bid ${{bid}}/hour on {{type}}: Over remaining budget of ${{remaining}}/hour",
                         type=p.type.instance_type,
                         bid=bid,
                         remaining=remaining_budget

@@ -431,8 +431,8 @@ class SpotManager(object):
 
             Log.note("life cycle watcher has stopped")
 
-        Log.warning("lifecycle watcher is disabled")
-        # self.watcher = Thread.run("lifecycle watcher", life_cycle_watcher)
+        # Log.warning("lifecycle watcher is disabled")
+        self.watcher = Thread.run("lifecycle watcher", life_cycle_watcher)
 
     def _get_valid_availability_zones(self):
         subnets = list(self.vpc_conn.get_all_subnets(subnet_ids=self.settings.ec2.request.network_interfaces.subnet_id))
@@ -579,7 +579,7 @@ class SpotManager(object):
 
                 self.prices = output.data
                 self.price_lookup = UniqueIndex(("type.instance_type", "availability_zone"), data=self.prices)
-            return self.prices
+            return wrap(self.prices)
 
     def _get_spot_prices_from_aws(self):
         with Timer("Read pricing file"):
@@ -698,8 +698,9 @@ def main():
             settings.utility = UniqueIndex(["instance_type"], data=settings.utility)
             instance_manager = new_instance(settings.instance)
             m = SpotManager(instance_manager, settings=settings)
-            Log.warning("Disabled updating spot requests")
-            # m.update_spot_requests(instance_manager.required_utility())
+
+            # Log.warning("Disabled updating spot requests")
+            m.update_spot_requests(instance_manager.required_utility())
 
             if m.watcher:
                 m.watcher.join()

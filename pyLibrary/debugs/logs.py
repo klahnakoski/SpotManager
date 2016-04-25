@@ -453,18 +453,18 @@ machine_metadata = wrap({
 })
 
 
-# GET FROM AWS, IF WE CAN
-def _get_metadata_from_from_aws(please_stop):
+def _update_with_ec2_info(please_stop):
+    # GET EC2 MACHINE METADATA
     try:
         from pyLibrary import aws
 
-        ec2 = aws.get_instance_metadata(timeout=20*SECOND)
+        ec2 = aws.get_instance_metadata()
         machine_metadata.aws_instance_type = ec2.instance_type
-        machine_metadata.name = ec2.instance_id
-    except Exception, e:
+        machine_metadata.name = coalesce(ec2.instance_id, machine_metadata.name)
+    except Exception:
         pass
-Thread.run("get aws machine metadata", _get_metadata_from_from_aws)
 
+Thread.run("get ec2 info", _update_with_ec2_info)
 
 if not Log.main_log:
     Log.main_log = TextLog_usingStream(sys.stdout)

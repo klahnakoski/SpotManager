@@ -59,8 +59,8 @@ class Queue(object):
         self.close()
 
     def __len__(self):
-        attrib = self.queue.get_attributes("ApproximateNumberOfMessages")
-        return int(attrib['ApproximateNumberOfMessages'])
+        attrib = self.queue.get_attributes()
+        return int(attrib["ApproximateNumberOfMessages"])+int(attrib["ApproximateNumberOfMessagesDelayed"])+int(attrib["ApproximateNumberOfMessagesNotVisible"])
 
     def add(self, message):
         message = wrap(message)
@@ -143,11 +143,11 @@ def capture_termination_signal(please_stop):
     Thread.run("listen for termination", worker)
 
 
-def get_instance_metadata(timeout):
+def get_instance_metadata(timeout=None):
     if not isinstance(timeout, (int, float)):
         timeout = Duration(timeout).seconds
 
-    output = wrap({k.replace("-", "_"): v for k, v in boto_utils.get_instance_metadata(timeout=timeout).items()})
+    output = wrap({k.replace("-", "_"): v for k, v in boto_utils.get_instance_metadata(timeout=5, num_retries=2).items()})
     return output
 
 

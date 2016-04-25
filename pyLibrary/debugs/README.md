@@ -130,7 +130,7 @@ should have no need to create new exception sub-types.
 
 **Testing for exception "types"**
 
-This library advocates chaining exceptions early and often, and this hides  
+This library advocates chaining exceptions early and often, and this hides
 important exception types in a long causal chain.   MoLogs allows you to easily 
 test if a type (or string, or template) can be found in the causal chain by using 
 the `in` keyword:   

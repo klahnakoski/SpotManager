@@ -168,7 +168,7 @@ class SpotManager(object):
                 )
                 continue
 
-            naive_number_needed = int(Math.round(net_new_utility / p.type.utility))
+            naive_number_needed = int(Math.round(float(net_new_utility) / float(p.type.utility), decimal=0))
             limit_total = None
             if self.settings.max_percent_per_type < 1:
                 current_count = sum(1 for a in self.active if a.launch_specification.instance_type == p.type.instance_type and a.launch_specification.placement == p.availability_zone)
@@ -577,9 +577,9 @@ class SpotManager(object):
                     "sort": {"value": "estimated_value", "sort": -1}
                 })
 
-                self.prices = output.data
+                self.prices = wrap(output.data)
                 self.price_lookup = UniqueIndex(("type.instance_type", "availability_zone"), data=self.prices)
-            return wrap(self.prices)
+            return self.prices
 
     def _get_spot_prices_from_aws(self):
         with Timer("Read pricing file"):

@@ -196,8 +196,6 @@ class DocStore(Container):
     def get_leaves(self, table_name):
         return {"name":c for c in self._index.keys()}
 
-
-
     def _filter(self, where):
         return filters[where.name](self, where)
 

@@ -198,13 +198,12 @@ def _get_schema_from_list(frum, columns, prefix, nested_path):
     """
     SCAN THE LIST FOR COLUMN TYPES
     """
-    names = {}
+    name_to_type = {}
     for d in frum:
         for name, value in d.items():
-            agg_type = names.get(name, "undefined")
+            agg_type = name_to_type.get(name, "undefined")
             this_type = _type_to_name[value.__class__]
-            new_type = _merge_type[agg_type][this_type]
-            names[name] = new_type
+            name_to_type[name] = _merge_type[agg_type][this_type]
 
             if this_type == "object":
                 _get_schema_from_list([value], columns, prefix + [name], nested_path)
@@ -213,7 +212,7 @@ def _get_schema_from_list(frum, columns, prefix, nested_path):
                 newpath = unwraplist([".".join((np[0], name))]+np)
                 _get_schema_from_list(value, columns, prefix + [name], newpath)
 
-    for n, t in names.items():
+    for n, t in name_to_type.items():
         full_name = ".".join(prefix + [n])
         column = Column(
             name=full_name,

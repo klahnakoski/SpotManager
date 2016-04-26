@@ -117,7 +117,7 @@
 				"log_type": "ses",
 				"from_address": "klahnakoski@mozilla.com",
 				"to_address": "klahnakoski@mozilla.com",
-				"subject": "[ALERT][DEV] Problem in ES Spot",
+				"subject": "[ALERT][Manager] Problem in ETL Spot",
 				"$ref": "file://~/private.json#aws_credentials"
 			},
 			{

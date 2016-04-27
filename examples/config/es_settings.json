@@ -72,6 +72,7 @@
 			"count": 1,
 			"type": "one-time",
 			"valid_from": null,
+			"expiration": "hour",  //SPECIAL, USED TO FILL valid_until
 			"valid_until": null,
 			"launch_group": null,
 			"availability_zone_group": null,

@@ -8,7 +8,7 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
-from copy import deepcopy
+from copy import deepcopy, copy
 
 import boto
 import boto.vpc
@@ -214,7 +214,7 @@ class SpotManager(object):
                         price=bid,
                         availability_zone_group=p.availability_zone,
                         instance_type=p.type.instance_type,
-                        settings=self.settings.ec2.request
+                        settings=copy(self.settings.ec2.request)
                     )
                     Log.note(
                         "Request {{num}} instance {{type}} in {{zone}} with utility {{utility}} at ${{price}}/hour",
@@ -668,11 +668,11 @@ RETRY_STATUS_CODES = {
     "instance-terminated-by-user"
 }
 PENDING_STATUS_CODES = {
+    "az-group-constraint",
     "pending-evaluation",
     "pending-fulfillment"
 }
 PROBABLY_NOT_FOR_A_WHILE = {
-    "az-group-constraint",
     "placement-group-constraint",
     "price-too-low"
 }

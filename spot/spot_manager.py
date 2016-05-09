@@ -39,7 +39,7 @@ from pyLibrary.times.timer import Timer
 DEBUG_PRICING = True
 TIME_FROM_RUNNING_TO_LOGIN = 5 * MINUTE
 ERROR_ON_CALL_TO_SETUP="Problem with setup()"
-DELAY_BEFORE_STARTUP = MINUTE
+DELAY_BEFORE_SETUP = MINUTE
 
 
 class SpotManager(object):
@@ -209,7 +209,6 @@ class SpotManager(object):
                         bid=bid,
                         remaining=remaining_budget
                     )
-                    continue
 
                 try:
                     new_requests = self._request_spot_instances(

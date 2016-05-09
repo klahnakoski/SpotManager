@@ -39,6 +39,8 @@ from pyLibrary.times.timer import Timer
 DEBUG_PRICING = True
 TIME_FROM_RUNNING_TO_LOGIN = 5 * MINUTE
 ERROR_ON_CALL_TO_SETUP="Problem with setup()"
+DELAY_BEFORE_STARTUP = MINUTE
+
 
 class SpotManager(object):
     @use_settings
@@ -365,7 +367,10 @@ class SpotManager(object):
                 instances = wrap({i.id: i for r in self.ec2_conn.get_all_instances() for i in r.instances})
                 # INSTANCES THAT REQUIRE SETUP
                 time_to_stop_trying = {}
-                please_setup = [(i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests] if i.id and not i.tags.get("Name") and i._state.name == "running"]
+                please_setup = [
+                    (i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests]
+                    if i.id and not i.tags.get("Name") and i._state.name == "running" and Date.now() > Date(i.launch_time) + DELAY_BEFORE_SETUP
+                ]
                 for i, r in please_setup:
                     try:
                         p = self.settings.utility[i.instance_type]

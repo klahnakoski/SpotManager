@@ -37,9 +37,9 @@ from pyLibrary.times.timer import Timer
 
 
 DEBUG_PRICING = True
-TIME_FROM_RUNNING_TO_LOGIN = 5 * MINUTE
-ERROR_ON_CALL_TO_SETUP="Problem with setup()"
-DELAY_BEFORE_SETUP = 2 * MINUTE  # PROBLEM WITH CONNECTING ONLY HAPPENS WITH BIGGER ES MACHINES
+TIME_FROM_RUNNING_TO_LOGIN = 7 * MINUTE
+ERROR_ON_CALL_TO_SETUP = "Problem with setup()"
+DELAY_BEFORE_SETUP = 1 * MINUTE  # PROBLEM WITH CONNECTING ONLY HAPPENS WITH BIGGER ES MACHINES
 
 
 class SpotManager(object):
@@ -158,7 +158,7 @@ class SpotManager(object):
 
             # DO NOT BID HIGHER THAN WHAT WE ARE WILLING TO PAY
             max_acceptable_price = p.type.utility * self.settings.max_utility_price + p.type.discount
-            max_bid = Math.min(p.higher_price, max_acceptable_price)
+            max_bid = Math.min(p.higher_price, max_acceptable_price, remaining_budget)
             min_bid = p.price_80
 
             if min_bid > max_bid:
@@ -209,6 +209,7 @@ class SpotManager(object):
                         bid=bid,
                         remaining=remaining_budget
                     )
+                    continue
 
                 try:
                     new_requests = self._request_spot_instances(

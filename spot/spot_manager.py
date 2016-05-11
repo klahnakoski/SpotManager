@@ -408,6 +408,7 @@ class SpotManager(object):
 
                 pending = wrap([r for r in spot_requests if r.status.code in PENDING_STATUS_CODES])
                 give_up = wrap([r for r in spot_requests if r.status.code in PROBABLY_NOT_FOR_A_WHILE])
+                ignore = wrap([r for r in spot_requests if r.status.code in MIGHT_HAPPEN]) # MIGHT HAPPEN, BUT NO NEED TO WAIT FOR IT
 
                 if self.done_spot_requests:
                     with self.net_new_locker:
@@ -417,6 +418,8 @@ class SpotManager(object):
                                 ## SOMETIMES REQUESTS NEVER GET INTO THE MAIN LIST OF REQUESTS
                                 self.net_new_spot_requests.remove(ii)
                         for g in give_up:
+                            self.net_new_spot_requests.remove(g.id)
+                        for g in ignore:
                             self.net_new_spot_requests.remove(g.id)
                         pending = UniqueIndex(("id",), data=pending)
                         pending = pending | self.net_new_spot_requests
@@ -673,14 +676,18 @@ RETRY_STATUS_CODES = {
     "instance-terminated-by-user"
 }
 PENDING_STATUS_CODES = {
-    "az-group-constraint",
     "pending-evaluation",
     "pending-fulfillment"
+}
+MIGHT_HAPPEN = {
+    "az-group-constraint"
 }
 PROBABLY_NOT_FOR_A_WHILE = {
     "placement-group-constraint",
     "price-too-low"
 }
+
+
 RUNNING_STATUS_CODES = {
     "fulfilled",
     "request-canceled-and-instance-running"

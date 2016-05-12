@@ -73,7 +73,7 @@ class SpotManager(object):
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
         all_instances = UniqueIndex("id", data=self._get_managed_instances())
-        self.active = active = wrap([r for r in spot_requests if r.status.code in RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE])
+        self.active = active = wrap([r for r in spot_requests if r.status.code in RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE | MIGHT_HAPPEN])
 
         for a in active.copy():
             if a.status.code == "request-canceled-and-instance-running" and all_instances[a.instance_id] == None:
@@ -305,7 +305,7 @@ class SpotManager(object):
         if remaining_budget < 0:
             requests = self._get_managed_spot_requests()
             for r in requests:
-                if r.status.code in PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE:
+                if r.status.code in PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE | MIGHT_HAPPEN:
                     remove_spot_requests.append(r.id)
                     net_new_utility += self.settings.utility[r.launch_specification.instance_type].utility
                     remaining_budget += r.price

@@ -161,14 +161,24 @@ class SpotManager(object):
             max_bid = Math.min(p.higher_price, max_acceptable_price, remaining_budget)
             min_bid = p.price_80
 
-            if min_bid > max_bid:
+            if min_bid > max_acceptable_price:
                 Log.note(
-                    "{{type}} @ {{price|round(decimal=4)}}/hour is over budget of {{limit}}",
+                    "Did not bid ${{bid}}/hour on {{type}}: Over remaining acceptable price of ${{remaining}}/hour",
                     type=p.type.instance_type,
                     price=min_bid,
-                    limit=p.type.utility * self.settings.max_utility_price
+                    remaining=max_acceptable_price
                 )
                 continue
+            elif min_bid > remaining_budget:
+                Log.note(
+                    "Did not bid ${{bid}}/hour on {{type}}: Over budget of ${{remaining_budget}}/hour",
+                    type=p.type.instance_type,
+                    bid=min_bid,
+                    remaining_budget=remaining_budget
+                )
+                continue
+            elif min_bid > max_bid:
+                Log.error("not expected")
 
             naive_number_needed = int(Math.round(float(net_new_utility) / float(p.type.utility), decimal=0))
             limit_total = None
@@ -198,7 +208,7 @@ class SpotManager(object):
                     Log.note(
                         "Did not bid ${{bid}}/hour on {{type}}: Under current price of ${{current_price}}/hour",
                         type=p.type.instance_type,
-                        bid=bid_per_machine,
+                        bid=bid_per_machine - p.type.discount,
                         current_price=p.current_price
                     )
                     continue
@@ -206,7 +216,7 @@ class SpotManager(object):
                     Log.note(
                         "Did not bid ${{bid}}/hour on {{type}}: Over remaining budget of ${{remaining}}/hour",
                         type=p.type.instance_type,
-                        bid=bid_per_machine,
+                        bid=bid_per_machine - p.type.discount,
                         remaining=remaining_budget
                     )
                     continue

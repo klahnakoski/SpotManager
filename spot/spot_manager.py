@@ -193,27 +193,30 @@ class SpotManager(object):
                 price_interval = Math.min(min_bid / 10, (max_bid - min_bid) / (num - 1))
 
             for i in range(num):
-                bid = min_bid + (i * price_interval)
-                if bid < p.current_price:
+                bid_per_machine = min_bid + (i * price_interval)
+                if bid_per_machine < p.current_price:
                     Log.note(
                         "Did not bid ${{bid}}/hour on {{type}}: Under current price of ${{current_price}}/hour",
                         type=p.type.instance_type,
-                        bid=bid,
+                        bid=bid_per_machine,
                         current_price=p.current_price
                     )
                     continue
-                if bid > remaining_budget:
+                if bid_per_machine - p.type.discount > remaining_budget:
                     Log.note(
                         "Did not bid ${{bid}}/hour on {{type}}: Over remaining budget of ${{remaining}}/hour",
                         type=p.type.instance_type,
-                        bid=bid,
+                        bid=bid_per_machine,
                         remaining=remaining_budget
                     )
                     continue
 
                 try:
+                    if self.settings.ec2.request.count == None or self.settings.ec2.request.count != 1:
+                        Log.error("Spot Manager can only request machine one-at-a-time")
+
                     new_requests = self._request_spot_instances(
-                        price=bid,
+                        price=bid_per_machine,
                         availability_zone_group=p.availability_zone,
                         instance_type=p.type.instance_type,
                         settings=copy(self.settings.ec2.request)
@@ -224,10 +227,10 @@ class SpotManager(object):
                         type=p.type.instance_type,
                         zone=p.availability_zone,
                         utility=p.type.utility,
-                        price=bid
+                        price=bid_per_machine
                     )
                     net_new_utility -= p.type.utility * len(new_requests)
-                    remaining_budget -= (bid - p.type.discount) * len(new_requests)
+                    remaining_budget -= (bid_per_machine - p.type.discount) * len(new_requests)
                     with self.net_new_locker:
                         for ii in new_requests:
                             self.net_new_spot_requests.add(ii)
@@ -456,9 +459,9 @@ class SpotManager(object):
 
     @use_settings
     def _request_spot_instances(self, price, availability_zone_group, instance_type, settings):
-        #m3 INSTANCES ARE NOT ALLOWED PLACEMENT GROUP
         settings.settings = None
 
+        # m3 INSTANCES ARE NOT ALLOWED PLACEMENT GROUP
         if instance_type.startswith("m3."):
             settings.placement_group = None
 
@@ -492,7 +495,7 @@ class SpotManager(object):
             settings.valid_until = (Date.now() + Duration(settings.expiration)).format(ISO8601)
             settings.expiration = None
 
-        #ATTACH NEW EBS VOLUMES
+        # ATTACH NEW EBS VOLUMES
         for i, drive in enumerate(self.settings.utility[instance_type].drives):
             letter = convert.ascii2char(98 + i + num_ephemeral_volumes)
             device = drive.device = coalesce(drive.device, "/dev/sd" + letter)

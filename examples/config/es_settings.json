@@ -50,9 +50,10 @@
 		{"instance_type": "m3.xlarge", "utility": 15, "discount": -0.035, "drives":{"$ref":"#more_drives"}},
 		{"instance_type": "m3.2xlarge", "utility": 30, "discount": -0.035, "drives":{"$ref":"#more_drives"}},
 
-		{"instance_type": "r3.xlarge", "utility": 15, "discount": -0.035, "drives":	[
+		// r3.xlarge CAN NOT HANDLE LARGE SHARDS, ONLY TWO CPU KEEP IT BUSY 100% OF THE TIME
+		{"instance_type": "r3.xlarge", "utility": 7, "discount": -0.035, "drives":	[
 			{"path":"/data1", "device":"/dev/sdb"},
-			{"path":"/data2", "size":1000, "volume_type":"standard"}
+			{"path":"/data2", "size":500, "volume_type":"standard"}
 		]},
 		{"instance_type": "r3.2xlarge", "utility": 30, "discount": -0.035, "drives":[
 			{"path":"/data1", "device":"/dev/sdb"},

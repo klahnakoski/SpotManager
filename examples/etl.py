@@ -74,15 +74,15 @@ class ETL(InstanceManager):
                 sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
                 sudo("python get-pip.py")
 
-        if not fabric_files.exists("/home/ubuntu/TestLog-ETL/README.md"):
+        if not fabric_files.exists("/home/ubuntu/ActiveData-ETL/README.md"):
             with cd("/home/ubuntu"):
                 sudo("apt-get -yf install git-core")
-                run('rm -fr /home/ubuntu/TestLog-ETL')
-                run("git clone https://github.com/klahnakoski/TestLog-ETL.git")
-                run("mkdir -p /home/ubuntu/TestLog-ETL/results/logs")
+                run('rm -fr /home/ubuntu/ActiveData-ETL')
+                run("git clone https://github.com/klahnakoski/ActiveData-ETL.git")
+                run("mkdir -p /home/ubuntu/ActiveData-ETL/results/logs")
 
 
-        with cd("/home/ubuntu/TestLog-ETL"):
+        with cd("/home/ubuntu/ActiveData-ETL"):
             run("git checkout etl")
             # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
             sudo("pip install BeautifulSoup")
@@ -106,7 +106,7 @@ class ETL(InstanceManager):
         File("./temp/etl_supervisor.conf.alt").write_bytes(content)
         sudo("rm -f /etc/supervisor/conf.d/etl_supervisor.conf")
         put("./temp/etl_supervisor.conf.alt", '/etc/supervisor/conf.d/etl_supervisor.conf', use_sudo=True)
-        run("mkdir -p /home/ubuntu/TestLog-ETL/results/logs")
+        run("mkdir -p /home/ubuntu/ActiveData-ETL/results/logs")
 
         # POKE supervisor TO NOTICE THE CHANGE
         sudo("supervisorctl reread")

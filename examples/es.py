@@ -180,12 +180,12 @@ class ESSpot(InstanceManager):
         Log.note("Install indexer at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
         self._install_python()
 
-        if not fabric_files.exists("/home/ec2-user/TestLog-ETL/"):
+        if not fabric_files.exists("/home/ec2-user/ActiveData-ETL/"):
             with cd("/home/ec2-user"):
                 sudo("yum -y install git")
-                run("git clone https://github.com/klahnakoski/TestLog-ETL.git")
+                run("git clone https://github.com/klahnakoski/ActiveData-ETL.git")
 
-        with cd("/home/ec2-user/TestLog-ETL/"):
+        with cd("/home/ec2-user/ActiveData-ETL/"):
             run("git checkout push-to-es")
             sudo("pip install -r requirements.txt")
 

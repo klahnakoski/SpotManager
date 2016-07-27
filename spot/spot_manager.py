@@ -669,7 +669,7 @@ class SpotManager(object):
                     yield convert.value2json(p)
                     prefix = ",\n"
                 yield "]"
-            File(self.settings.price_file).write(stream)
+            File(self.settings.price_file).write(stream())
 
         return prices
 

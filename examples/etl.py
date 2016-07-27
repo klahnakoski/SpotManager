@@ -64,6 +64,7 @@ class ETL(InstanceManager):
         sudo("dpkg --configure -a")
         sudo("apt-get update")
         sudo("apt-get clean")
+        sudo("apt-get install -y python2.7")
 
         if not fabric_files.exists("/usr/local/bin/pip"):
             run("mkdir -p /home/ubuntu/temp")

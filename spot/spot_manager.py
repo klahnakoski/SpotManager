@@ -661,8 +661,15 @@ class SpotManager(object):
                             break
 
         with Timer("Save prices to file"):
-            new_prices = jx.filter(prices, {"gte": {"timestamp": Date.today() - (2*WEEK)}})
-            File(self.settings.price_file).write(convert.value2json(new_prices))
+            new_prices = jx.filter(prices, {"gte": {"timestamp": {"date": "today-2week"}}})
+            def stream():  # IT'S A LOT OF PRICES, STREAM THEM TO FILE
+                prefix = "[\n"
+                for p in new_prices:
+                    yield prefix
+                    yield convert.value2json(p)
+                    prefix = ",\n"
+                yield "]"
+            File(self.settings.price_file).write(stream)
 
         return prices
 

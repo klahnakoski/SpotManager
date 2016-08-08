@@ -145,6 +145,8 @@ class ESSpot(InstanceManager):
         sudo("sed -i '$ a\\ec2-user soft nofile 50000' /etc/security/limits.conf")
         sudo("sed -i '$ a\\ec2-user hard nofile 100000' /etc/security/limits.conf")
         sudo("sed -i '$ a\\ec2-user memlock unlimited' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\root soft nofile 50000' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\root hard nofile 100000' /etc/security/limits.conf")
         sudo("sed -i '$ a\\root memlock unlimited' /etc/security/limits.conf")
 
         # EFFECTIVE LOGIN TO LOAD CHANGES TO FILE HANDLES

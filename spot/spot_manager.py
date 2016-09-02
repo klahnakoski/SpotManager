@@ -388,7 +388,12 @@ class SpotManager(object):
                     try:
                         p = self.settings.utility[i.instance_type]
                         if p == None:
-                            Log.error("Can not setup unknown instance type {{type}}", type=i.instance_type)
+                            try:
+                                self.ec2_conn.terminate_instances(instance_ids=[i.id])
+                                with self.net_new_locker:
+                                    self.net_new_spot_requests.remove(r.id)
+                            finally:
+                                Log.error("Can not setup unknown {{instance_id}} of type {{type}}", instance_id=i.id, type=i.instance_type)
                         i.markup = p
                         try:
                             self.instance_manager.setup(i, coalesce(p.utility, 0))
@@ -408,6 +413,8 @@ class SpotManager(object):
                             with self.net_new_locker:
                                 self.net_new_spot_requests.remove(r.id)
                             Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id, cause=e)
+                        elif "Can not setup unknown " in e:
+                            Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
                         elif ERROR_ON_CALL_TO_SETUP in e:
                             if len(failed_attempts[r.id]) > 2:
                                 Log.warning("Problem with setup() of {{instance_id}}", instance_id=i.id, cause=failed_attempts[r.id])

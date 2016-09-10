@@ -50,6 +50,7 @@ class ESSpot(InstanceManager):
             Log.note("setup {{instance}}", instance=instance.id)
             with hide('output'):
                 self._config_fabric(instance)
+                self._set_mtu(1500)
                 self._install_es(gigabytes)
                 self._install_indexer()
                 self._install_supervisor()
@@ -63,11 +64,16 @@ class ESSpot(InstanceManager):
             self.instance = instance
             Log.note("teardown {{instance}}", instance=instance.id)
             self._config_fabric(instance)
+
+            # ASK NICELY TO STOP Elasticsearch PROCESS
+            with fabric_settings(warn_only=True):
+                sudo("supervisorctl stop es")
+
             # ASK NICELY TO STOP "supervisord" PROCESS
             with fabric_settings(warn_only=True):
                 sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}' | xargs kill -SIGINT")
 
-            #WAIT FOR SUPERVISOR SHUTDOWN
+            # WAIT FOR SUPERVISOR SHUTDOWN
             pid = True
             while pid:
                 with hide('output'):
@@ -81,6 +87,20 @@ class ESSpot(InstanceManager):
             env[k] = v
         env.host_string = instance.ip_address
         env.abort_exception = Log.error
+
+    def _set_mtu(self, mtu=1500):
+        # SET RIGHT NOW
+        sudo("ifconfig eth0 mtu "+unicode(mtu))
+
+        # DESPITE THE FILE CHANGE, THE MTU VALUE DOES NOT STICK
+        local_file = File("./results/temp/ifcfg-eth0")
+        local_file.delete()
+        get("/etc/sysconfig/network-scripts/ifcfg-eth0", "./results/temp/ifcfg-eth0", use_sudo=True)
+        lines = local_file.read()
+        if lines.find("MTU=1500") == -1:
+            lines += "\nMTU=1500"
+        local_file.write(lines)
+        put("./results/temp/ifcfg-eth0", "/etc/sysconfig/network-scripts/ifcfg-eth0", use_sudo=True)
 
     def _install_es(self, gigabytes):
         volumes = self.instance.markup.drives

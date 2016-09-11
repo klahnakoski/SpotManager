@@ -50,7 +50,6 @@ class ESSpot(InstanceManager):
             Log.note("setup {{instance}}", instance=instance.id)
             with hide('output'):
                 self._config_fabric(instance)
-                self._set_mtu(1500)
                 self._install_es(gigabytes)
                 self._install_indexer()
                 self._install_supervisor()

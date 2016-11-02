@@ -86,7 +86,7 @@
 		"request": {
 			//SEE http://boto.readthedocs.org/en/latest/ref/ec2.html#boto.ec2.connection.EC2Connection.request_spot_instances
 			"price": 0.001,
-			"image_id": "ami-e7527ed7",
+			"image_id": "ami-e7527ed7", //"ami-7172b611"
 			"count": 1,
 			"type": "one-time",
 			"valid_from": null,

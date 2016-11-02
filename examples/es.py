@@ -132,7 +132,7 @@ class ESSpot(InstanceManager):
 
         self.conn = self.instance.connection
 
-        #MOUNT AND FORMAT THE EBS VOLUMES (list with `lsblk`)
+        # MOUNT AND FORMAT THE EBS VOLUMES (list with `lsblk`)
         for i, k in enumerate(volumes):
             if not fabric_files.exists(k.path):
                 sudo('yes | sudo mkfs -t ext4 '+k.device)

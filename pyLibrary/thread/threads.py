@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 from pyLibrary import strings
 from pyLibrary.debugs.exceptions import Except
 from pyLibrary.debugs.profiles import CProfiler
-from pyLibrary.dot import coalesce, Dict
+from pyLibrary.dot import coalesce, Dict, Null
 from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import SECOND, Duration
 
@@ -466,6 +466,9 @@ class Thread(object):
                     response = self.target(*a, **k)
                     with self.synch_lock:
                         self.end_of_thread = Dict(response=response)
+                else:
+                    with self.synch_lock:
+                        self.end_of_thread = Null
             except Exception, e:
                 with self.synch_lock:
                     self.end_of_thread = Dict(exception=_Except.wrap(e))

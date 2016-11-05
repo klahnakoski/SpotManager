@@ -1,9 +1,9 @@
 {
-	"budget": 1.50,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"budget": 3.00,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.01,  //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 120,     //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"max_requests_per_type": 2,    //LIMIT THE NUMBER OF NET-NEW REQUESTS BY TYPE
-	"max_percent_per_type": 0.50,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES (USED TO MITIGATE LOOSING ALL INSTANCES AT ONCE)
+	"max_percent_per_type": 0.30,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES (USED TO MITIGATE LOOSING ALL INSTANCES AT ONCE)
 	"bid_percentile": 0.95,     //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
 	"price_file": "resources/aws/prices.json",
 	"run_interval": "10minute", //HOW LONG BEFORE NEXT RUN
@@ -86,7 +86,7 @@
 		"request": {
 			//SEE http://boto.readthedocs.org/en/latest/ref/ec2.html#boto.ec2.connection.EC2Connection.request_spot_instances
 			"price": 0.001,
-			"image_id": "ami-e7527ed7", //"ami-7172b611"
+			"image_id": "ami-e7527ed7",
 			"count": 1,
 			"type": "one-time",
 			"valid_from": null,
@@ -123,7 +123,7 @@
 	},
 	"instance":{
 		"class":"examples.es.ESSpot",
-		"minimum_utility": 800,
+		"minimum_utility": 2000,
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 			"user": "ec2-user",

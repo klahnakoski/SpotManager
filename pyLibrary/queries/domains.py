@@ -193,7 +193,7 @@ class SimpleSetDomain(Domain):
         if isinstance(self.key, set):
             Log.error("problem")
 
-        if not desc.key and (len(desc.partitions)==0 or isinstance(desc.partitions[0], (basestring, Number))):
+        if not desc.key and (len(desc.partitions)==0 or isinstance(desc.partitions[0], (basestring, Number, tuple))):
             # ASSUME PARTS ARE STRINGS, CONVERT TO REAL PART OBJECTS
             self.key = "value"
             self.map = {}
@@ -227,17 +227,7 @@ class SimpleSetDomain(Domain):
             self.label = coalesce(self.label, "name")
             return
         elif desc.key == None:
-            if desc.partitions and len(set(desc.partitions.value)-{None}) == len(desc.partitions):
-                # TRY A COMMON KEY CALLED "value".  IT APPEARS UNIQUE
-                self.key = "value"
-                self.map = dict()
-                self.map[None] = self.NULL
-                self.order[None] = len(desc.partitions)
-                for i, p in enumerate(desc.partitions):
-                    self.map[p[self.key]] = p
-                    self.order[p[self.key]] = i
-                self.primitive = False
-            elif all(desc.partitions.where) or all(desc.partitions.esfilter):
+            if desc.partitions and all(desc.partitions.where) or all(desc.partitions.esfilter):
                 if not all(desc.partitions.name):
                     Log.error("Expecting all partitions to have a name")
                 from pyLibrary.queries.expressions import jx_expression
@@ -255,8 +245,18 @@ class SimpleSetDomain(Domain):
                     self.map[p.name] = p
                     self.order[p.name] = i
                 return
+            elif desc.partitions and len(set(desc.partitions.value)-{None}) == len(desc.partitions):
+                # TRY A COMMON KEY CALLED "value".  IT APPEARS UNIQUE
+                self.key = "value"
+                self.map = dict()
+                self.map[None] = self.NULL
+                self.order[None] = len(desc.partitions)
+                for i, p in enumerate(desc.partitions):
+                    self.map[p[self.key]] = p
+                    self.order[p[self.key]] = i
+                self.primitive = False
             else:
-                Log.error("Domains must have keys")
+                Log.error("Domains must have keys, or partitions")
         elif self.key:
             self.key = desc.key
             self.map = dict()
@@ -272,7 +272,7 @@ class SimpleSetDomain(Domain):
         self.label = coalesce(self.label, "name")
 
         if hasattr(desc.partitions, "__iter__"):
-            self.partitions = list(desc.partitions)
+            self.partitions = wrap(list(desc.partitions))
         else:
             Log.error("expecting a list of partitions")
 
@@ -342,12 +342,12 @@ class SetDomain(Domain):
         if isinstance(self.key, set):
             Log.error("problem")
 
-        if isinstance(desc.partitions[0], basestring):
+        if isinstance(desc.partitions[0], (int, float, basestring)):
             # ASSMUE PARTS ARE STRINGS, CONVERT TO REAL PART OBJECTS
-            self.key = ("value", )
+            self.key = "value"
             self.order[None] = len(desc.partitions)
             for i, p in enumerate(desc.partitions):
-                part = {"name": p, "value": p}
+                part = {"name": p, "value": p, "dataIndex": i}
                 self.partitions.append(part)
                 self.map[p] = part
                 self.order[p] = i
@@ -382,11 +382,6 @@ class SetDomain(Domain):
             Log.error("Can not hanldle")
 
         self.label = coalesce(self.label, "name")
-
-        if isinstance(desc.partitions, list):
-            self.partitions = desc.partitions.copy()
-        else:
-            Log.error("expecting a list of partitions")
 
     def compare(self, a, b):
         return value_compare(self.getKey(a), self.getKey(b))

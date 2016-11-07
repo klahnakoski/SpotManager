@@ -18,14 +18,14 @@ not have the features listed here.
  1. `a.b == a["b"]`
  2. missing property names are handled gracefully, which is beneficial when being used in
     set operations (database operations) without raising exceptions <pre>
-a = wrap({})
-&gt;&gt;&gt; a == {}
-a.b == None
-&gt;&gt;&gt; True
-a.b.c == None
-&gt;&gt;&gt; True
-a[None] == None
-&gt;&gt;&gt; True</pre>
+&gt;&gt;&gt; a = wrap({})
+a == {}
+&gt;&gt;&gt; a.b == None
+True
+&gt;&gt;&gt; a.b.c == None
+True
+&gt;&gt;&gt; a[None] == None
+True</pre>
     missing property names are common when dealing with JSON, which is often almost anything.
     Unfortunately, you do loose the ability to perform <code>a is None</code>
     checks: **You must always use <code>a == None</code> instead**.
@@ -34,25 +34,25 @@ a[None] == None
  this creates a need to refer to literal dot (`.`), which can be done by
  escaping with backslash: `a["b\\.c"] == a["b\.c"]`
  5. you can set paths to values, missing dicts along the path are created:<pre>
-a = wrap({})
-&gt;&gt;&gt; a == {}
-a["b.c"] = 42   # same as a.b.c = 42
-&gt;&gt;&gt; a == {"b": {"c": 42}}</pre>
+&gt;&gt;&gt; a = wrap({})
+a == {}
+&gt;&gt;&gt; a["b.c"] = 42   # same as a.b.c = 42
+a == {"b": {"c": 42}}</pre>
  6. path assignment also works for the `+=` operator <pre>
-a = wrap({})
-&gt;&gt;&gt; a == {}
-a.b.c += 1
-&gt;&gt;&gt; a == {"b": {"c": 1}}
-a.b.c += 42
-&gt;&gt;&gt; a == {"b": {"c": 43}}
+&gt;&gt;&gt; a = wrap({})
+a == {}
+&gt;&gt;&gt; a.b.c += 1
+a == {"b": {"c": 1}}
+&gt;&gt;&gt; a.b.c += 42
+a == {"b": {"c": 43}}
 </pre>
- 7. `+=` on lists (`[]`) will `append()`<pre>
-a = wrap({})
-&gt;&gt;&gt; a == {}
-a.b.c += [1]
-&gt;&gt;&gt; a == {"b": {"c": [1]}}
-a.b.c += [42]
-&gt;&gt;&gt; a == {"b": {"c": [1, 42]}}
+ 7. `+=` with a list (`[]`) will `append()`<pre>
+&gt;&gt;&gt; a = wrap({})
+a == {}
+&gt;&gt;&gt; a.b.c += [1]
+a == {"b": {"c": [1]}}
+&gt;&gt;&gt; a.b.c += [42]
+a == {"b": {"c": [1, 42]}}
 </pre>
  8. property names are coerced to unicode - it appears Python's
  object.getattribute() is called with str() even when using `from __future__
@@ -101,7 +101,7 @@ have that property: Asking for the physical height of poem is nonsense, and
 we return None/null to indicate this. Databases use `null` in this way to
 simultaneously deal with multiple (sub)types and keep records in fewer tables
 to minimize query complexity. Call this version of None the "*Out of Context*"
-definition.  
+definition.
 
 Python, and the *pythonic way*, and many of its libraries, assume None is a
 *Missing Value*. This assumption results in an excess of exception handling
@@ -115,7 +115,7 @@ more generic when dealing with sets and lists with members of non-uniform type.
 
 I would like to override `None` in order to change its behaviour.
 Unfortunately, `None` is a primitive that can not be extended, so we create
-a new type, `NullType` and instances, `Null` ([a null object](https://en.wikipedia.org/wiki/Null_Object_pattern)), which are closed under the dot(.), access [], and slice [::] 
+a new type, `NullType` and instances, `Null` ([a null object](https://en.wikipedia.org/wiki/Null_Object_pattern)), which are closed under the dot(`.`), access (`[]`), and slice (`[::]`)
 operators. `Null` acts as both an impotent list and an impotent dict:
 
  1. `a[Null] == Null`
@@ -131,14 +131,13 @@ replaced with `None` in all cases.
 
 ###Identity and Absorbing (Zero) Elements###
 
-With closure we can realize we have defined an [algebraic semigroup](https://en.wikipedia.org/wiki/Semigroup): The 
-identity element is the dot string (`"."`) and the zero element is `Null` 
+With `Null` defined, we have met the requirements for an [algebraic semigroup](https://en.wikipedia.org/wiki/Semigroup): The identity element is the dot string (`"."`) and the zero element is `Null`
 (or `None`).
 
  1. `a[Null] == Null`
  2. `a["."] == a`
 
-which are true for all `a`
+which are true for all `a`.  I hope, dear reader, you do not see this a some peculiar pattern, but rather a clean basis that allows us to perform complex operations over heterogeneous data with less code.
 
 
 ###NullTypes are Lazy###
@@ -167,7 +166,7 @@ in `Null`:
  * `a ∘ Null == Null`
  * `Null ∘ a == Null`
 
-where `∘` is standing in for most binary operators. Operators `and` and `or` 
+where `∘` is standing in for most binary operators. Operators `and` and `or`
 are exceptions, and behave as expected with [three-valued logic](https://en.wikipedia.org/wiki/Three-valued_logic):
 
  * `True or Null == True`
@@ -233,16 +232,16 @@ The dot operator on a `DictList` performs a simple projection; it will return a 
 DictObject for data
 -------------------
 
-There are two major families of objects in Object Oriented programming. The 
-first, are ***Actors***: characterized by a number of useful instance methods 
-and some state bundled into a package. The second are ***Data***: Primarily 
-a set of properties, with only (de)serialization functions, or algebraic 
-operators defined. Boto has many examples of these *Data* classes, 
+There are two major families of objects in Object Oriented programming. The
+first, are ***Actors***: characterized by a number of useful instance methods
+and some state bundled into a package. The second are ***Data***: Primarily
+a set of properties, with only (de)serialization functions, or algebraic
+operators defined. Boto has many examples of these *Data* classes,
 [here is one](https://github.com/boto/boto/blob/4b8269562e663f090403e57ba1a3a471b6e0aa0e/boto/ec2/networkinterface.py).
 
-The problem with *Data* objects is they have an useless distinction between 
-attributes and properties. This prevents us from using the dot (`.`) operator for 
-dereferencing, forcing us to use the verbose `getattr()` for parametric 
+The problem with *Data* objects is they have an useless distinction between
+attributes and properties. This prevents us from using the dot (`.`) operator for
+dereferencing, forcing us to use the verbose `getattr()` for parametric
 dereferencing. It also prevents the use of query operators over these objects.
 
 You can wrap any object to make it appear like a Dict.
@@ -251,26 +250,26 @@ You can wrap any object to make it appear like a Dict.
 	d = DictObject(my_data_object)
 ```
 
-This allows you to use the query operators of this `dot` library on this 
-object. Care is required though: Your object may not be a pure data object, 
-and there can be conflicts between the object methods and the properties it 
+This allows you to use the query operators of this `dot` library on this
+object. Care is required though: Your object may not be a pure data object,
+and there can be conflicts between the object methods and the properties it
 is expected to have.
 
 
 Mapping Leaves
 --------------
 
-The implications of allowing `a["b.c"] == a.b.c` opens up two different Dict 
+The implications of allowing `a["b.c"] == a.b.c` opens up two different Dict
 forms: *standard form* and *leaf form*
 
 ###Standard Form
 
-The `[]` operator in `Dict` has been overridden to assume dots (`.`) represent 
-paths rather than literal string values; but, the internal representation of 
-`Dict` is the same as `dict`; the property names are treated as black box 
+The `[]` operator in `Dict` has been overridden to assume dots (`.`) represent
+paths rather than literal string values; but, the internal representation of
+`Dict` is the same as `dict`; the property names are treated as black box
 strings. `[]` just provides convenience.
 
-When wrapping `dict`, the property names are **NOT** interpreted as paths; 
+When wrapping `dict`, the property names are **NOT** interpreted as paths;
 property names can include dots (`.`).
 
 ```python
@@ -283,12 +282,12 @@ property names can include dots (`.`).
 	Null    # because b.c path does not exist
 
 	>>> a["b\.c"]
-	42      # escaping the dot (`.`) makes it literal 
+	42      # escaping the dot (`.`) makes it literal
 ```
 
 ###Leaf form
 
-Leaf form is used in some JSON, or YAML, configuration files. Here is an 
+Leaf form is used in some JSON, or YAML, configuration files. Here is an
 example from my ElasticSearch configuration:
 
 **YAML**
@@ -309,18 +308,18 @@ Both are intended to represent the deeply nested JSON
 	{"discovery": {"zen": {"ping": {"multicast": {"enabled": true}}}}}
 ```
 
-Upon importing such files, it is good practice to convert it to standard form 
+Upon importing such files, it is good practice to convert it to standard form
 immediately:
 
 ```python
 	config = wrap_leaves(config)
 ```
 
-`wrap_leaves()` assumes any dots found in JSON names are referring to paths 
+`wrap_leaves()` assumes any dots found in JSON names are referring to paths
 into objects, not a literal dots.
 
-When accepting input from other automations and users, your property names 
-can potentially contain dots; which must be properly escaped to produce the 
+When accepting input from other automations and users, your property names
+can potentially contain dots; which must be properly escaped to produce the
 JSON you are expecting. Specifically, this happens with URLs:
 
 **BAD** - dots in url are interpreted as paths
@@ -351,7 +350,7 @@ JSON you are expecting. Specifically, this happens with URLs:
 	Dict({u'example.html': 3})
 ```
 
-You can produce leaf form by iterating over all leaves. This is good for 
+You can produce leaf form by iterating over all leaves. This is good for
 simplifying iteration over deep object structures.
 
 ```python

@@ -16,7 +16,7 @@ import itertools
 from pyLibrary.collections import UNION
 from pyLibrary.collections.matrix import Matrix
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import listwrap, wrap, Null
+from pyLibrary.dot import listwrap, wrap
 from pyLibrary.queries import windows
 from pyLibrary.queries.domains import SimpleSetDomain, DefaultDomain
 from pyLibrary.queries.expression_compiler import compile_expression
@@ -39,14 +39,9 @@ def list_aggs(frum, query):
         if isinstance(e.domain, DefaultDomain):
             accessor = jx_expression_to_function(e.value)
             unique_values = set(map(accessor, frum))
-            if e.allowNulls is False:
-                unique_values -= {None, Null}
-            elif None in unique_values:
+            if None in unique_values:
                 e.allowNulls = True
                 unique_values -= {None}
-            elif Null in unique_values:
-                e.allowNulls = True
-                unique_values -= {Null}
             e.domain = SimpleSetDomain(partitions=list(sorted(unique_values)))
 
     s_accessors = [(ss.name, compile_expression(ss.value.to_python())) for ss in select]

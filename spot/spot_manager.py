@@ -35,6 +35,7 @@ from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import DAY, HOUR, WEEK, MINUTE, SECOND, Duration
 from pyLibrary.times.timer import Timer
 
+ENABLE_SIDE_EFFECTS = False
 
 DEBUG_PRICING = True
 TIME_FROM_RUNNING_TO_LOGIN = 7 * MINUTE
@@ -61,7 +62,7 @@ class SpotManager(object):
         self.net_new_spot_requests = UniqueIndex(("id",))  # SPOT REQUESTS FOR THIS SESSION
         self.watcher = None
         self.active = None
-        if instance_manager and instance_manager.setup_required():
+        if ENABLE_SIDE_EFFECTS and instance_manager and instance_manager.setup_required():
             self._start_life_cycle_watcher()
         if not disable_prices:
             self.pricing()
@@ -545,7 +546,6 @@ class SpotManager(object):
                         "window": {
                             "name": "expire",
                             "value": {"coalesce": [{"rows": {"timestamp": 1}}, {"date": "eod"}]},
-                            # "value": lambda row, rownum, rows: coalesce(rows[rownum+1].timestamp, Date.eod()),
                             "edges": ["availability_zone", "instance_type"],
                             "sort": "timestamp"
                         }
@@ -569,7 +569,7 @@ class SpotManager(object):
                         "name": "current_price",
                         "value": "rows.last.price",
                         "edges": ["availability_zone", "instance_type"],
-                        "sort": "time",
+                        "sort": "time"
                     }
                 }).data
 

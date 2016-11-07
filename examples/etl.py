@@ -47,12 +47,16 @@ class ETL(InstanceManager):
         with self.locker:
             cpu_count = int(round(utility))
 
-            Log.note("setup {{instance}}", instance=instance.id)
             with hide('output'):
+                Log.note("setup {{instance}}", instance=instance.id)
                 self._config_fabric(instance)
+                Log.note("setup etl on {{instance}}", instance=instance.id)
                 self._setup_etl_code()
+                Log.note("add config file on {{instance}}", instance=instance.id)
                 self._add_private_file()
+                Log.note("setup supervisor on {{instance}}", instance=instance.id)
                 self._setup_etl_supervisor(cpu_count)
+                Log.note("setup done {{instance}}", instance=instance.id)
 
     def teardown(self, instance):
         with self.locker:

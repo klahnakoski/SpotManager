@@ -63,11 +63,16 @@ class ESSpot(InstanceManager):
             self.instance = instance
             Log.note("teardown {{instance}}", instance=instance.id)
             self._config_fabric(instance)
+
+            # ASK NICELY TO STOP Elasticsearch PROCESS
+            with fabric_settings(warn_only=True):
+                sudo("supervisorctl stop es")
+
             # ASK NICELY TO STOP "supervisord" PROCESS
             with fabric_settings(warn_only=True):
                 sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}' | xargs kill -SIGINT")
 
-            #WAIT FOR SUPERVISOR SHUTDOWN
+            # WAIT FOR SUPERVISOR SHUTDOWN
             pid = True
             while pid:
                 with hide('output'):
@@ -81,6 +86,20 @@ class ESSpot(InstanceManager):
             env[k] = v
         env.host_string = instance.ip_address
         env.abort_exception = Log.error
+
+    def _set_mtu(self, mtu=1500):
+        # SET RIGHT NOW
+        sudo("ifconfig eth0 mtu "+unicode(mtu))
+
+        # DESPITE THE FILE CHANGE, THE MTU VALUE DOES NOT STICK
+        local_file = File("./results/temp/ifcfg-eth0")
+        local_file.delete()
+        get("/etc/sysconfig/network-scripts/ifcfg-eth0", "./results/temp/ifcfg-eth0", use_sudo=True)
+        lines = local_file.read()
+        if lines.find("MTU=1500") == -1:
+            lines += "\nMTU=1500"
+        local_file.write(lines)
+        put("./results/temp/ifcfg-eth0", "/etc/sysconfig/network-scripts/ifcfg-eth0", use_sudo=True)
 
     def _install_es(self, gigabytes):
         volumes = self.instance.markup.drives
@@ -113,7 +132,7 @@ class ESSpot(InstanceManager):
 
         self.conn = self.instance.connection
 
-        #MOUNT AND FORMAT THE EBS VOLUMES (list with `lsblk`)
+        # MOUNT AND FORMAT THE EBS VOLUMES (list with `lsblk`)
         for i, k in enumerate(volumes):
             if not fabric_files.exists(k.path):
                 sudo('yes | sudo mkfs -t ext4 '+k.device)
@@ -145,6 +164,8 @@ class ESSpot(InstanceManager):
         sudo("sed -i '$ a\\ec2-user soft nofile 50000' /etc/security/limits.conf")
         sudo("sed -i '$ a\\ec2-user hard nofile 100000' /etc/security/limits.conf")
         sudo("sed -i '$ a\\ec2-user memlock unlimited' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\root soft nofile 50000' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\root hard nofile 100000' /etc/security/limits.conf")
         sudo("sed -i '$ a\\root memlock unlimited' /etc/security/limits.conf")
 
         # EFFECTIVE LOGIN TO LOAD CHANGES TO FILE HANDLES
@@ -180,12 +201,12 @@ class ESSpot(InstanceManager):
         Log.note("Install indexer at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
         self._install_python()
 
-        if not fabric_files.exists("/home/ec2-user/TestLog-ETL/"):
+        if not fabric_files.exists("/home/ec2-user/ActiveData-ETL/"):
             with cd("/home/ec2-user"):
                 sudo("yum -y install git")
-                run("git clone https://github.com/klahnakoski/TestLog-ETL.git")
+                run("git clone https://github.com/klahnakoski/ActiveData-ETL.git")
 
-        with cd("/home/ec2-user/TestLog-ETL/"):
+        with cd("/home/ec2-user/ActiveData-ETL/"):
             run("git checkout push-to-es")
             sudo("pip install -r requirements.txt")
 

@@ -35,11 +35,12 @@ from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import DAY, HOUR, WEEK, MINUTE, SECOND, Duration
 from pyLibrary.times.timer import Timer
 
+ENABLE_SIDE_EFFECTS = False
 
 DEBUG_PRICING = True
-TIME_FROM_RUNNING_TO_LOGIN = 5 * MINUTE
-ERROR_ON_CALL_TO_SETUP="Problem with setup()"
-DELAY_BEFORE_SETUP = MINUTE
+TIME_FROM_RUNNING_TO_LOGIN = 7 * MINUTE
+ERROR_ON_CALL_TO_SETUP = "Problem with setup()"
+DELAY_BEFORE_SETUP = 1 * MINUTE  # PROBLEM WITH CONNECTING ONLY HAPPENS WITH BIGGER ES MACHINES
 
 
 class SpotManager(object):
@@ -61,7 +62,7 @@ class SpotManager(object):
         self.net_new_spot_requests = UniqueIndex(("id",))  # SPOT REQUESTS FOR THIS SESSION
         self.watcher = None
         self.active = None
-        if instance_manager and instance_manager.setup_required():
+        if ENABLE_SIDE_EFFECTS and instance_manager and instance_manager.setup_required():
             self._start_life_cycle_watcher()
         if not disable_prices:
             self.pricing()
@@ -73,7 +74,7 @@ class SpotManager(object):
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
         all_instances = UniqueIndex("id", data=self._get_managed_instances())
-        self.active = active = wrap([r for r in spot_requests if r.status.code in RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE])
+        self.active = active = wrap([r for r in spot_requests if r.status.code in RUNNING_STATUS_CODES | PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE | MIGHT_HAPPEN])
 
         for a in active.copy():
             if a.status.code == "request-canceled-and-instance-running" and all_instances[a.instance_id] == None:
@@ -158,17 +159,27 @@ class SpotManager(object):
 
             # DO NOT BID HIGHER THAN WHAT WE ARE WILLING TO PAY
             max_acceptable_price = p.type.utility * self.settings.max_utility_price + p.type.discount
-            max_bid = Math.min(p.higher_price, max_acceptable_price)
+            max_bid = Math.min(p.higher_price, max_acceptable_price, remaining_budget)
             min_bid = p.price_80
 
-            if min_bid > max_bid:
+            if min_bid > max_acceptable_price:
                 Log.note(
-                    "{{type}} @ {{price|round(decimal=4)}}/hour is over budget of {{limit}}",
+                    "Did not bid ${{bid}}/hour on {{type}}: Over remaining acceptable price of ${{remaining}}/hour",
                     type=p.type.instance_type,
                     price=min_bid,
-                    limit=p.type.utility * self.settings.max_utility_price
+                    remaining=max_acceptable_price
                 )
                 continue
+            elif min_bid > remaining_budget:
+                Log.note(
+                    "Did not bid ${{bid}}/hour on {{type}}: Over budget of ${{remaining_budget}}/hour",
+                    type=p.type.instance_type,
+                    bid=min_bid,
+                    remaining_budget=remaining_budget
+                )
+                continue
+            elif min_bid > max_bid:
+                Log.error("not expected")
 
             naive_number_needed = int(Math.round(float(net_new_utility) / float(p.type.utility), decimal=0))
             limit_total = None
@@ -193,26 +204,30 @@ class SpotManager(object):
                 price_interval = Math.min(min_bid / 10, (max_bid - min_bid) / (num - 1))
 
             for i in range(num):
-                bid = min_bid + (i * price_interval)
-                if bid < p.current_price:
+                bid_per_machine = min_bid + (i * price_interval)
+                if bid_per_machine < p.current_price:
                     Log.note(
                         "Did not bid ${{bid}}/hour on {{type}}: Under current price of ${{current_price}}/hour",
                         type=p.type.instance_type,
-                        bid=bid,
+                        bid=bid_per_machine - p.type.discount,
                         current_price=p.current_price
                     )
                     continue
-                if bid > remaining_budget:
+                if bid_per_machine - p.type.discount > remaining_budget:
                     Log.note(
                         "Did not bid ${{bid}}/hour on {{type}}: Over remaining budget of ${{remaining}}/hour",
                         type=p.type.instance_type,
-                        bid=bid,
+                        bid=bid_per_machine - p.type.discount,
                         remaining=remaining_budget
                     )
+                    continue
 
                 try:
+                    if self.settings.ec2.request.count == None or self.settings.ec2.request.count != 1:
+                        Log.error("Spot Manager can only request machine one-at-a-time")
+
                     new_requests = self._request_spot_instances(
-                        price=bid,
+                        price=bid_per_machine,
                         availability_zone_group=p.availability_zone,
                         instance_type=p.type.instance_type,
                         settings=copy(self.settings.ec2.request)
@@ -223,10 +238,10 @@ class SpotManager(object):
                         type=p.type.instance_type,
                         zone=p.availability_zone,
                         utility=p.type.utility,
-                        price=bid
+                        price=bid_per_machine
                     )
                     net_new_utility -= p.type.utility * len(new_requests)
-                    remaining_budget -= (bid - p.type.discount) * len(new_requests)
+                    remaining_budget -= (bid_per_machine - p.type.discount) * len(new_requests)
                     with self.net_new_locker:
                         for ii in new_requests:
                             self.net_new_spot_requests.add(ii)
@@ -304,7 +319,7 @@ class SpotManager(object):
         if remaining_budget < 0:
             requests = self._get_managed_spot_requests()
             for r in requests:
-                if r.status.code in PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE:
+                if r.status.code in PENDING_STATUS_CODES | PROBABLY_NOT_FOR_A_WHILE | MIGHT_HAPPEN:
                     remove_spot_requests.append(r.id)
                     net_new_utility += self.settings.utility[r.launch_specification.instance_type].utility
                     remaining_budget += r.price
@@ -323,7 +338,7 @@ class SpotManager(object):
             return remaining_budget, net_new_utility
 
         # SEND SHUTDOWN TO EACH INSTANCE
-        Log.note("Shutdown {{instances}}", instances=remove_list.id)
+        Log.warning("Shutdown {{instances}} to save money!", instances=remove_list.id)
         for i in remove_list:
             try:
                 self.instance_manager.teardown(i)
@@ -374,7 +389,12 @@ class SpotManager(object):
                     try:
                         p = self.settings.utility[i.instance_type]
                         if p == None:
-                            Log.error("Can not setup unknown instance type {{type}}", type=i.instance_type)
+                            try:
+                                self.ec2_conn.terminate_instances(instance_ids=[i.id])
+                                with self.net_new_locker:
+                                    self.net_new_spot_requests.remove(r.id)
+                            finally:
+                                Log.error("Can not setup unknown {{instance_id}} of type {{type}}", instance_id=i.id, type=i.instance_type)
                         i.markup = p
                         try:
                             self.instance_manager.setup(i, coalesce(p.utility, 0))
@@ -394,6 +414,8 @@ class SpotManager(object):
                             with self.net_new_locker:
                                 self.net_new_spot_requests.remove(r.id)
                             Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id, cause=e)
+                        elif "Can not setup unknown " in e:
+                            Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
                         elif ERROR_ON_CALL_TO_SETUP in e:
                             if len(failed_attempts[r.id]) > 2:
                                 Log.warning("Problem with setup() of {{instance_id}}", instance_id=i.id, cause=failed_attempts[r.id])
@@ -407,6 +429,7 @@ class SpotManager(object):
 
                 pending = wrap([r for r in spot_requests if r.status.code in PENDING_STATUS_CODES])
                 give_up = wrap([r for r in spot_requests if r.status.code in PROBABLY_NOT_FOR_A_WHILE])
+                ignore = wrap([r for r in spot_requests if r.status.code in MIGHT_HAPPEN]) # MIGHT HAPPEN, BUT NO NEED TO WAIT FOR IT
 
                 if self.done_spot_requests:
                     with self.net_new_locker:
@@ -416,6 +439,8 @@ class SpotManager(object):
                                 ## SOMETIMES REQUESTS NEVER GET INTO THE MAIN LIST OF REQUESTS
                                 self.net_new_spot_requests.remove(ii)
                         for g in give_up:
+                            self.net_new_spot_requests.remove(g.id)
+                        for g in ignore:
                             self.net_new_spot_requests.remove(g.id)
                         pending = UniqueIndex(("id",), data=pending)
                         pending = pending | self.net_new_spot_requests
@@ -452,9 +477,9 @@ class SpotManager(object):
 
     @use_settings
     def _request_spot_instances(self, price, availability_zone_group, instance_type, settings):
-        #m3 INSTANCES ARE NOT ALLOWED PLACEMENT GROUP
         settings.settings = None
 
+        # m3 INSTANCES ARE NOT ALLOWED PLACEMENT GROUP
         if instance_type.startswith("m3."):
             settings.placement_group = None
 
@@ -488,7 +513,7 @@ class SpotManager(object):
             settings.valid_until = (Date.now() + Duration(settings.expiration)).format(ISO8601)
             settings.expiration = None
 
-        #ATTACH NEW EBS VOLUMES
+        # ATTACH NEW EBS VOLUMES
         for i, drive in enumerate(self.settings.utility[instance_type].drives):
             letter = convert.ascii2char(98 + i + num_ephemeral_volumes)
             device = drive.device = coalesce(drive.device, "/dev/sd" + letter)
@@ -521,7 +546,6 @@ class SpotManager(object):
                         "window": {
                             "name": "expire",
                             "value": {"coalesce": [{"rows": {"timestamp": 1}}, {"date": "eod"}]},
-                            # "value": lambda row, rownum, rows: coalesce(rows[rownum+1].timestamp, Date.eod()),
                             "edges": ["availability_zone", "instance_type"],
                             "sort": "timestamp"
                         }
@@ -545,7 +569,7 @@ class SpotManager(object):
                         "name": "current_price",
                         "value": "rows.last.price",
                         "edges": ["availability_zone", "instance_type"],
-                        "sort": "time",
+                        "sort": "time"
                     }
                 }).data
 
@@ -644,8 +668,15 @@ class SpotManager(object):
                             break
 
         with Timer("Save prices to file"):
-            new_prices = jx.filter(prices, {"gte": {"timestamp": Date.today() - (2*WEEK)}})
-            File(self.settings.price_file).write(convert.value2json(new_prices))
+            new_prices = jx.filter(prices, {"gte": {"timestamp": {"date": "today-2week"}}})
+            def stream():  # IT'S A LOT OF PRICES, STREAM THEM TO FILE
+                prefix = "[\n"
+                for p in new_prices:
+                    yield prefix
+                    yield convert.value2json(p)
+                    prefix = ",\n"
+                yield "]"
+            File(self.settings.price_file).write(stream())
 
         return prices
 
@@ -672,14 +703,18 @@ RETRY_STATUS_CODES = {
     "instance-terminated-by-user"
 }
 PENDING_STATUS_CODES = {
-    "az-group-constraint",
     "pending-evaluation",
     "pending-fulfillment"
+}
+MIGHT_HAPPEN = {
+    "az-group-constraint"
 }
 PROBABLY_NOT_FOR_A_WHILE = {
     "placement-group-constraint",
     "price-too-low"
 }
+
+
 RUNNING_STATUS_CODES = {
     "fulfilled",
     "request-canceled-and-instance-running"

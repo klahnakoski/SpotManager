@@ -4,14 +4,14 @@
 	"max_new_utility": 120,     //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"max_requests_per_type": 2,    //LIMIT THE NUMBER OF NET-NEW REQUESTS BY TYPE
 	"max_percent_per_type": 0.30,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES (USED TO MITIGATE LOOSING ALL INSTANCES AT ONCE)
-	"bid_percentile": 0.95,   //THE PROBABLITY WE ACHIEVE OUR UPTIME
+	"bid_percentile": 0.95,   //THE PROBABILITY WE ACHIEVE OUR UPTIME
 	"uptime":{
 		"history": "week",       //HOW MUCH HISTORY TO USE
-		"duration": "24hour",    //HOW LONG WE WOULD LIKE OUR MACHINE TO TO STAY UP
-		"bid_percentile": 0.95   //THE PROBABLITY WE ACHIEVE OUR UPTIME
+		"duration": "day",    //HOW LONG WE WOULD LIKE OUR MACHINE TO TO STAY UP
+		"bid_percentile": 0.95   //THE PROBABILITY WE ACHIEVE OUR UPTIME
 	},
 	"price_file": "resources/aws/prices.json",
-	"run_interval": "10minute", //HOW LONG BEFORE NEXT RUN
+	"run_interval": "10minute",  //HOW LONG BEFORE NEXT RUN
 	"availability_zone": "us-west-2c",
 	"product":"Linux/UNIX (Amazon VPC)",
 	"aws": {

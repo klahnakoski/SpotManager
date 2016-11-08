@@ -19,11 +19,10 @@ from pyLibrary import convert
 from pyLibrary.collections import OR, MAX
 from pyLibrary.debugs.exceptions import suppress_exception
 from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import coalesce, wrap, set_default, literal_field, listwrap, Null, split_field, startswith_field, \
-    Dict, join_field, unwraplist, unwrap, ROOT_PATH
+from pyLibrary.dot import coalesce, wrap, set_default, literal_field, listwrap, Null, split_field, startswith_field, Dict, join_field, unwraplist, unwrap, \
+    ROOT_PATH
 from pyLibrary.maths import Math
 from pyLibrary.queries.containers import STRUCT
-from pyLibrary.maths import Math
 from pyLibrary.queries.domains import is_keyword
 from pyLibrary.queries.expression_compiler import compile_expression
 from pyLibrary.times.dates import Date
@@ -83,7 +82,7 @@ def jx_expression(expr):
             op, term = item
             class_ = operators.get(op)
             if class_:
-                clauses = {k: jx_expression(v) for k, v in expr.items() if k != op}
+                clauses = class_.preprocess(op, expr)
                 break
         else:
             raise Log.error("{{operator|quote}} is not a known operator", operator=op)
@@ -151,6 +150,10 @@ class Expression(object):
     @property
     def name(self):
         return self.__class_.__name__
+
+    @classmethod
+    def preprocess(self, op, clauses):
+        return {k: jx_expression(v) for k, v in clauses.items() if k != op}
 
     def to_ruby(self, not_null=False, boolean=False):
         """
@@ -257,7 +260,10 @@ class Variable(Expression):
                 Log.error("do not know what {{var}} of `rows` is", var=path[1])
 
         for p in path[:-1]:
-            agg = agg+".get("+convert.value2quote(p)+", EMPTY_DICT)"
+            if not_null:
+                agg = agg+".get("+convert.value2quote(p)+")"
+            else:
+                agg = agg+".get("+convert.value2quote(p)+", EMPTY_DICT)"
         return agg+".get("+convert.value2quote(path[-1])+")"
 
     def to_sql(self, schema, not_null=False, boolean=False):
@@ -267,12 +273,14 @@ class Variable(Expression):
             return wrap([{"name": ".", "sql": {"n": "NULL"}, "nested_path": ROOT_PATH}])
 
         acc = Dict()
-        nested_path = ROOT_PATH
         for c in cols:
-            nested_path = c.nested_path
-            acc[json_type_to_sql_type[c.type]] = c.es_index + "." + convert.string2quote(c.es_column)
+            nested_path = c.nested_path[0]
+            acc[literal_field(nested_path)][literal_field(c.name)][json_type_to_sql_type[c.type]] = c.es_index + "." + convert.string2quote(c.es_column)
 
-        return wrap([{"name": ".", "sql": acc, "nested_path": nested_path}])
+        return wrap([
+            {"name": ".", "sql": types, "nested_path": nested_path}
+            for nested_path, pairs in acc.items() for cname, types in pairs.items()
+        ])
 
     def __call__(self, row, rownum=None, rows=None):
         path = split_field(self.var)
@@ -368,12 +376,17 @@ class RowsOp(Expression):
     def __init__(self, op, term):
         Expression.__init__(self, op, term)
         self.var, self.offset = term
-        if isinstance(self.var, Variable) and not any(self.var.var.startswith(p) for p in ["row.", "rows.", "rownum"]):  # VARIABLES ARE INTERPRETED LITERALLY
-            self.var = Literal("literal", self.var.var)
+        if isinstance(self.var, Variable):
+            if isinstance(self.var, Variable) and not any(self.var.var.startswith(p) for p in ["row.", "rows.", "rownum"]):  # VARIABLES ARE INTERPRETED LITERALLY
+                self.var = Literal("literal", self.var.var)
+            else:
+                Log.error("can not handle")
+        else:
+            Log.error("can not handle")
 
     def to_python(self, not_null=False, boolean=False):
-        path = split_field(self.var.to_python(not_null=True))
-        agg = "rows[rownum+" + unicode(self.offset) + "]"
+        agg = "rows[rownum+" + self.offset.to_python() + "]"
+        path = split_field(convert.json2value(self.var.json))
         if not path:
             return agg
 
@@ -444,7 +457,10 @@ class Literal(Expression):
 
     def __init__(self, op, term):
         Expression.__init__(self, "", None)
-        self.json = convert.value2json(term)
+        if term == "":
+            self.json = '""'
+        else:
+            self.json = convert.value2json(term)
 
     def __nonzero__(self):
         return True
@@ -527,7 +543,6 @@ class Literal(Expression):
 
     def __str__(self):
         return str(self.json)
-
 
 class NullOp(Literal):
     """
@@ -698,7 +713,7 @@ class DateOp(Literal):
         Literal.__init__(self, op, Date(term.date).unix)
 
     def to_python(self, not_null=False, boolean=False):
-        return "Date("+convert.string2quote(self.value)+")"
+        return "Date("+convert.string2quote(self.value)+").unix"
 
     def to_sql(self, schema, not_null=False, boolean=False):
         return {"n": sql_quote(self.value.unix)}
@@ -781,12 +796,15 @@ class LeavesOp(Expression):
         term = self.term.var
         path = split_field(term)
         return [
-            (literal_field(join_field(split_field(c.name)[:len(path)])), term.to_sql())
+            {
+                "name": literal_field(join_field(split_field(c.name)[:len(path)])),
+                "sql": Variable(c.name).to_sql(schema)[0].sql
+            }
             for n, cols in schema.items()
             if startswith_field(n, term)
             for c in cols
             if c.type not in STRUCT
-            ]
+        ]
 
     def to_esfilter(self):
         Log.error("not supported")
@@ -1419,21 +1437,19 @@ class NumberOp(Expression):
         return "float(" + value + ") if (" + test + ") else None"
 
     def to_sql(self, schema, not_null=False, boolean=False):
-        test = self.term.missing().to_sql(boolean=True).b
-        value = self.term.to_sql(not_null=True)
+        value = self.term.to_sql(schema, not_null=True)
         acc = []
-        for t, v in value:
-            if t == "b":
-                acc.append("CASE WHEN (" + test + ") THEN NULL WHEN (" + value.b + ") THEN 1 ELSE 0 END")
-            elif t == "s":
-                acc.append("CASE WHEN (" + test + ") THEN NULL ELSE CAST(" + value.s + " as FLOAT) END")
-            elif t == "n":
-                acc.append(value.n)
+        for c in value:
+            for t, v in c.sql.items():
+                if t == "s":
+                    acc.append("CAST(" + v + " as FLOAT)")
+                else:
+                    acc.append(v)
 
         if not acc:
-            return {}
+            return [{"name":".", "sql":{}}]
         else:
-            return {"n": "COALESCE(" + ",".join(acc) + ")"}
+            return [{"name":".", "sql":{"n": "COALESCE(" + ",".join(acc) + ")"}}]
 
     def to_dict(self):
         return {"number": self.term.to_dict()}
@@ -1570,9 +1586,26 @@ class MultiOp(Expression):
             acc = op.join("(" + t.to_ruby(not_null=True) + ")" for t in self.terms)
             return "((" + null_test + ") ? (" + self.default.to_ruby() + ") : (" + acc + "))"
 
-
     def to_python(self, not_null=False, boolean=False):
         return MultiOp.operators[self.op][0].join("(" + t.to_python() + ")" for t in self.terms)
+
+    def to_sql(self, schema, not_null=False, boolean=False):
+        terms = [t.to_sql(schema) for t in self.terms]
+
+        acc = "CASE "
+        op, total = MultiOp.operators[self.op]
+        total = [total]
+        for t in terms:
+            if len(t) > 1:
+                return wrap([{"name": ".", "sql": {}}])
+            sql = t[0].sql.n
+            if not sql:
+                return wrap([{"name": ".", "sql": {}}])
+            acc += "WHEN " + sql + " IS NULL THEN NULL "
+            total.append(sql)
+        acc += "ELSE " + op.join(total) + " END"
+
+        return wrap([{"name": ".", "sql": {"n": acc}}])
 
     def to_dict(self):
         return {self.op: [t.to_dict() for t in self.terms], "default": self.default, "nulls": self.nulls}
@@ -1689,6 +1722,8 @@ class CoalesceOp(Expression):
         self.terms = terms
 
     def to_ruby(self, not_null=False, boolean=False):
+        if not self.terms:
+            return "null"
         acc = self.terms[-1].to_ruby()
         for v in reversed(self.terms[:-1]):
             r = v.to_ruby()
@@ -1760,15 +1795,20 @@ class MissingOp(Expression):
 
     def to_sql(self, schema, not_null=False, boolean=False):
         field = self.field.to_sql(schema)
+
+        if len(field)>1:
+            return wrap([{"name": ".", "sql": {"b": "0"}}])
+
         acc = []
-        for t, v in field.items():
-            if t in ["b", "s", "n"]:
-                acc.append("(" + v + " IS NULL)")
+        for c in field:
+            for t, v in c.sql.items():
+                if t in ["b", "s", "n"]:
+                    acc.append("(" + v + " IS NULL)")
 
         if not acc:
-            return "1"
+            return wrap([{"name": ".", "sql": {"b": "1"}}])
         else:
-            return " OR ".join(acc)
+            return wrap([{"name": ".", "sql": {"b": " AND ".join(acc)}}])
 
     def to_esfilter(self):
         if isinstance(self.field, Variable):
@@ -1878,6 +1918,54 @@ class PrefixOp(Expression):
 
     def map(self, map_):
         return PrefixOp("prefix", [self.field.map(map_), self.prefix.map(map_)])
+
+
+class ConcatOp(Expression):
+    has_simple_form = True
+
+    def __init__(self, op, term, **clauses):
+        Expression.__init__(self, op, term)
+        if isinstance(term, Mapping):
+            self.terms = term.items()[0]
+        else:
+            self.terms = term
+        self.separator = clauses.get("separator", Literal(None, ""))
+        self.default = clauses.get("default", NullOp())
+        if not isinstance(self.separator, Literal):
+            Log.error("Expecting a literal separator")
+
+    @classmethod
+    def preprocess(self, op, clauses):
+        return {k: Literal(None, v) for k, v in clauses.items() if k in ["default", "separator"]}
+
+    def to_ruby(self, not_null=False, boolean=False):
+        if len(self.terms) == 0:
+            return self.default.to_ruby()
+
+        acc = []
+        for t in self.terms:
+            acc.append("((" + t.missing().to_ruby(boolean=True) + ") ? \"\" : (" + self.separator.json+"+"+t.to_ruby(not_null=True) + "))")
+        expr_ = "("+"+".join(acc)+").substring("+unicode(len(convert.json2value(self.separator.json)))+")"
+
+        return "("+self.missing().to_ruby()+") ? ("+self.default.to_ruby()+") : ("+expr_+")"
+
+    def to_dict(self):
+        if isinstance(self.value, Variable) and isinstance(self.length, Literal):
+            output = {"concat": {self.terms[0].var: convert.json2value(self.terms[2].json)}}
+        else:
+            output = {"concat": [t.to_dict() for t in self.terms]}
+        if self.separator.json != '""':
+            output["separator"] = convert.json2value(self.terms[2].json)
+        return output
+
+    def vars(self):
+        return set.union(*(t.vars() for t in self.terms))
+
+    def map(self, map_):
+        return ConcatOp("concat", [t.map(map_) for t in self.terms], separator=self.separator)
+
+    def missing(self):
+        return AndOp("and", [t.missing() for t in self.terms])
 
 
 class LeftOp(Expression):
@@ -2432,6 +2520,7 @@ operators = {
     "and": AndOp,
     "case": CaseOp,
     "coalesce": CoalesceOp,
+    "concat": ConcatOp,
     "contains": ContainsOp,
     "count": CountOp,
     "date": DateOp,

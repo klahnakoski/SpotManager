@@ -7,16 +7,16 @@
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-from __future__ import unicode_literals
-from __future__ import division
 from __future__ import absolute_import
+from __future__ import division
+from __future__ import unicode_literals
 
 from datetime import timedelta
-from time import clock
+from time import time
 
-from pyLibrary.dot import coalesce, Dict
-from pyLibrary.dot import wrap
 from pyLibrary.debugs.logs import Log
+from pyLibrary.dot import coalesce
+from pyLibrary.dot import wrap
 from pyLibrary.times.durations import Duration
 
 
@@ -37,17 +37,19 @@ class Timer(object):
         self.param = wrap(coalesce(param, {}))
         self.debug = debug
         self.silent = silent
+        self.start = 0
+        self.end = 0
         self.interval = None
 
     def __enter__(self):
         if self.debug:
             if not self.silent:
                 Log.note("Timer start: " + self.template, stack_depth=1, **self.param)
-        self.start = clock()
+        self.start = time()
         return self
 
     def __exit__(self, type, value, traceback):
-        self.end = clock()
+        self.end = time()
         self.interval = self.end - self.start
 
         if self.debug:
@@ -58,4 +60,7 @@ class Timer(object):
 
     @property
     def duration(self):
+        if not self.end:
+            return Duration(clock() - self.start)
+
         return Duration(self.interval)

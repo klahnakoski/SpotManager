@@ -35,8 +35,7 @@ from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import DAY, HOUR, WEEK, MINUTE, SECOND, Duration
 from pyLibrary.times.timer import Timer
 
-ENABLE_SIDE_EFFECTS = False
-
+ENABLE_SIDE_EFFECTS = True
 DEBUG_PRICING = True
 TIME_FROM_RUNNING_TO_LOGIN = 7 * MINUTE
 ERROR_ON_CALL_TO_SETUP = "Problem with setup()"
@@ -62,12 +61,17 @@ class SpotManager(object):
         self.net_new_spot_requests = UniqueIndex(("id",))  # SPOT REQUESTS FOR THIS SESSION
         self.watcher = None
         self.active = None
+
+        self.settings.uptime.bid_percentile = coalesce(self.settings.uptime.bid_percentile, self.settings.bid_percentile)
+        self.settings.uptime.history = coalesce(Date(self.settings.uptime.history), DAY)
+        self.settings.uptime.duration = coalesce(Duration(self.settings.uptime.duration), Date("5minute"))
+        self.settings.max_percent_per_type = coalesce(self.settings.max_percent_per_type, 1)
+
         if ENABLE_SIDE_EFFECTS and instance_manager and instance_manager.setup_required():
             self._start_life_cycle_watcher()
         if not disable_prices:
             self.pricing()
 
-        self.settings.max_percent_per_type=coalesce(self.settings.max_percent_per_type, 1)
 
     def update_spot_requests(self, utility_required):
         spot_requests = self._get_managed_spot_requests()
@@ -536,6 +540,7 @@ class SpotManager(object):
 
             prices = self._get_spot_prices_from_aws()
 
+            now = Date.now()
             expressions.ALLOW_SCRIPTING = True
 
             with Timer("processing pricing data"):
@@ -543,34 +548,42 @@ class SpotManager(object):
                     "from": {
                         # AWS PRICING ONLY SENDS timestamp OF CHANGES, MATCH WITH NEXT INSTANCE
                         "from": prices,
-                        "window": {
-                            "name": "expire",
-                            "value": {"coalesce": [{"rows": {"timestamp": 1}}, {"date": "eod"}]},
-                            "edges": ["availability_zone", "instance_type"],
-                            "sort": "timestamp"
-                        }
+                        "window": [
+                            {
+                                "name": "expire",
+                                "value": {"coalesce": [{"rows": {"timestamp": 1}}, {"date": "eod"}]},
+                                "edges": ["availability_zone", "instance_type"],
+                                "sort": "timestamp"
+                            },
+                            { # MAKE THIS PRICE EFFECTIVE INTO THE PAST, THIS HELPS SPREAD PRICE SPIKES OVER TIME
+                                "name": "effective",
+                                "value": {"sub": {"timestamp": self.settings.uptime.duration.seconds}}
+                            }
+                        ]
                     },
                     "edges": [
                         "availability_zone",
                         "instance_type",
                         {
                             "name": "time",
-                            "range": {"min": "timestamp", "max": "expire", "mode": "inclusive"},
+                            "range": {"min": "effective", "max": "expire", "mode": "inclusive"},
                             "allowNulls": False,
-                            "domain": {"type": "time", "min": Date.now().floor(HOUR) - DAY, "max": Date.now().floor(HOUR), "interval": "hour"}
+                            "domain": {"type": "time", "min": now.floor(HOUR) - self.settings.uptime.history, "max": Date.now().floor(HOUR)+HOUR, "interval": "hour"}
                         }
                     ],
                     "select": [
                         {"value": "price", "aggregate": "max"},
                         {"aggregate": "count"}
                     ],
-                    "where": {"gt": {"expire": Date.now().floor(HOUR) - DAY}},
-                    "window": {
-                        "name": "current_price",
-                        "value": "rows.last.price",
-                        "edges": ["availability_zone", "instance_type"],
-                        "sort": "time"
-                    }
+                    "where": {"gt": {"expire": now.floor(HOUR) - self.settings.uptime.history}},
+                    "window": [
+                        {
+                            "name": "current_price",
+                            "value": "rows.last.price",
+                            "edges": ["availability_zone", "instance_type"],
+                            "sort": "time"
+                        }
+                    ]
                 }).data
 
                 bid80 = jx.run({
@@ -588,7 +601,7 @@ class SpotManager(object):
                         }
                     ],
                     "select": [
-                        {"name": "price_80", "value": "price", "aggregate": "percentile", "percentile": self.settings.bid_percentile},
+                        {"name": "price_80", "value": "price", "aggregate": "percentile", "percentile": self.settings.uptime.bid_percentile},
                         {"name": "max_price", "value": "price", "aggregate": "max"},
                         {"aggregate": "count"},
                         {"value": "current_price", "aggregate": "one"},
@@ -661,7 +674,7 @@ class SpotManager(object):
                                 "price": p.price,
                                 "product_description": p.product_description,
                                 "region": p.region.name,
-                                "timestamp": Date(p.timestamp)
+                                "timestamp": Date(p.timestamp).unix
                             }))
 
                         if not next_token:
@@ -740,13 +753,13 @@ def main():
             instance_manager = new_instance(settings.instance)
             m = SpotManager(instance_manager, settings=settings)
 
-            # Log.warning("Disabled updating spot requests")
-            m.update_spot_requests(instance_manager.required_utility())
+            if ENABLE_SIDE_EFFECTS:
+                m.update_spot_requests(instance_manager.required_utility())
 
             if m.watcher:
                 m.watcher.join()
     except Exception, e:
-        Log.warning("Problem with spot manager", e)
+        Log.warning("Problem with spot manager", cause=e)
     finally:
         Log.stop()
         MAIN_THREAD.stop()

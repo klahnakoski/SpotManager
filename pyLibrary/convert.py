@@ -29,7 +29,7 @@ from tempfile import TemporaryFile
 
 from pyLibrary import strings
 from pyLibrary.collections.multiset import Multiset
-from pyLibrary.debugs.exceptions import Except
+from pyLibrary.debugs.exceptions import Except, suppress_exception
 from pyLibrary.debugs.logs import Log
 from pyLibrary.dot import wrap, wrap_leaves, unwrap, unwraplist, split_field, join_field
 from pyLibrary.env.big_data import FileString, safe_size
@@ -42,6 +42,8 @@ from pyLibrary.times.dates import Date
 DUE TO MY POOR MEMORY, THIS IS A LIST OF ALL CONVERSION ROUTINES
 IN <from_type> "2" <to_type> FORMAT
 """
+
+
 def value2json(obj, pretty=False, sort_keys=False):
     try:
         json = json_encoder(obj, pretty=pretty)
@@ -51,11 +53,9 @@ def value2json(obj, pretty=False, sort_keys=False):
         return json
     except Exception, e:
         e = Except.wrap(e)
-        try:
+        with suppress_exception:
             json = pypy_json_encode(obj)
             return json
-        except Exception:
-            pass
 
         Log.error("Can not encode into JSON: {{value}}", value=repr(obj), cause=e)
 
@@ -113,7 +113,10 @@ def json2value(json_string, params={}, flexible=False, leaves=False):
             # LOOKUP REFERENCES
             json_string = expand_template(json_string, params)
 
-        value = wrap(json_decoder(unicode(json_string)))
+        try:
+            value = wrap(json_decoder(unicode(json_string)))
+        except Exception, e:
+            Log.error("can not decode\n{{content}}", content=json_string, cause=e)
 
         if leaves:
             value = wrap_leaves(value)
@@ -122,9 +125,17 @@ def json2value(json_string, params={}, flexible=False, leaves=False):
 
     except Exception, e:
         e = Except.wrap(e)
-        if "Expecting '" in e and "' delimiter: line" in e:
-            line_index = int(strings.between(e.message, " line ", " column ")) - 1
-            column = int(strings.between(e.message, " column ", " ")) - 1
+
+        if not json_string.strip():
+            Log.error("JSON string is only whitespace")
+
+        c = e
+        while "Expecting '" in c.cause and "' delimiter: line" in c.cause:
+            c = c.cause
+
+        if "Expecting '" in c and "' delimiter: line" in c:
+            line_index = int(strings.between(c.message, " line ", " column ")) - 1
+            column = int(strings.between(c.message, " column ", " ")) - 1
             line = json_string.split("\n")[line_index].replace("\t", " ")
             if column > 20:
                 sample = "..." + line[column - 20:]
@@ -148,11 +159,11 @@ def json2value(json_string, params={}, flexible=False, leaves=False):
 
 
 def string2datetime(value, format=None):
-    return Date(value, format).value
+    return unix2datetime(Date(value, format).unix)
 
 
 def str2datetime(value, format=None):
-    return string2datetime(value, format)
+    return unix2datetime(Date(value, format).unix)
 
 
 def datetime2string(value, format="%Y-%m-%d %H:%M:%S"):
@@ -267,7 +278,7 @@ def list2table(rows, column_names=None):
             columns |= set(r.keys())
         keys = list(columns)
 
-    output = [[unwraplist(r[k]) for k in keys] for r in rows]
+    output = [[unwraplist(r.get(k)) for k in keys] for r in rows]
 
     return wrap({
         "meta": {"format": "table"},
@@ -299,7 +310,7 @@ def list2cube(rows, column_names=None):
 
     for r in rows:
         for k in keys:
-            data[k].append(r[k])
+            data[k].append(unwraplist(r[k]))
 
     return output
 
@@ -419,10 +430,9 @@ def unicode2latin1(value):
 
 
 def quote2string(value):
-    try:
+    with suppress_exception:
         return ast.literal_eval(value)
-    except Exception:
-        pass
+
 
 # RETURN PYTHON CODE FOR THE SAME
 
@@ -468,7 +478,10 @@ def bytes2hex(value, separator=" "):
 
 
 def base642bytearray(value):
-    return bytearray(base64.b64decode(value))
+    if value == None:
+        return bytearray(b"")
+    else:
+        return bytearray(base64.b64decode(value))
 
 
 def base642bytes(value):
@@ -476,6 +489,8 @@ def base642bytes(value):
 
 
 def bytes2base64(value):
+    if isinstance(value, bytearray):
+        value=str(value)
     return base64.b64encode(value).decode("utf8")
 
 

@@ -6,7 +6,11 @@
 	"max_percent_per_type": 0.70,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES.   DEFAULT = 1.0 (100%, NO LIMITS)
 	"price_file": "resources/aws/prices.json",
 	"run_interval": "10minute",
-	"bid_percentile": 0.8,      //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
+	"uptime":{
+		"history": "day",       //HOW MUCH HISTORY TO USE
+		"duration": "5minute",    //HOW LONG WE WOULD LIKE OUR MACHINE TO TO STAY UP
+		"bid_percentile": 0.50   //THE PROBABILITY WE ACHIEVE OUR UPTIME
+	},
 	"availability_zone": "us-west-2c",
 	"product":"Linux/UNIX",
 	"aws": {

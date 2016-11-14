@@ -1,0 +1,22 @@
+{
+	"class":"examples.etl.ETL",
+	"minimum_utility": 2,
+	"connect": {
+		//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
+		"user": "ubuntu",
+		"key_filename": "~/.ssh/aws-pulse-logger.pem",
+		"disable_known_hosts": true,
+		"host_string": "",
+		"port": 22,
+		"password": ""
+	},
+	"work_queue": {
+		"name": "active-data-etl",
+		"$ref": "file://~/private.json#aws_credentials"
+	},
+	"instance":{
+		"id":"test instance",
+		"ip_address": "35.160.107.4"
+	},
+	"utility": 1
+}

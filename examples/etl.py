@@ -15,6 +15,9 @@ from fabric.contrib import files as fabric_files
 from fabric.operations import run, sudo, put
 from fabric.state import env
 
+from pyLibrary.debugs import constants
+from pyLibrary.debugs import startup
+
 from pyLibrary import aws
 from pyLibrary.debugs.logs import Log
 from pyLibrary.env.files import File
@@ -132,3 +135,17 @@ class ETL(InstanceManager):
         env.host_string = instance.ip_address
         env.abort_exception = Log.error
 
+
+def main():
+    try:
+        settings = startup.read_settings()
+        constants.set(settings.constants)
+        Log.start(settings.debug)
+        ETL(settings).setup(settings.instance, settings.utility)
+    except Exception, e:
+        Log.warning("Problem with setup of ETL", cause=e)
+    finally:
+        Log.stop()
+
+if __name__ == "__main__":
+    main()

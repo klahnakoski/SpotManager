@@ -121,10 +121,10 @@ class ETL(InstanceManager):
         sudo("supervisorctl update")
 
     def _add_private_file(self):
-        run('rm -f /home/ubuntu/private.json')
-        put('~/private_active_data_etl.json', '/home/ubuntu/private.json')
+        run('rm -f /home/ubuntu/codecoverage.json')
+        put('~/private_active_data_etl.json', '/home/ubuntu/codecoverage.json')
         with cd("/home/ubuntu"):
-            run("chmod o-r private.json")
+            run("chmod o-r codecoverage.json")
 
     def _config_fabric(self, instance):
         if not instance.ip_address:

@@ -50,7 +50,8 @@ class SpotManager(object):
         aws_args = dict(
             region_name=settings.aws.region,
             aws_access_key_id=unwrap(settings.aws.aws_access_key_id),
-            aws_secret_access_key=unwrap(settings.aws.aws_secret_access_key))
+            aws_secret_access_key=unwrap(settings.aws.aws_secret_access_key)
+        )
         self.ec2_conn = boto.ec2.connect_to_region(**aws_args)
         self.vpc_conn = boto.vpc.connect_to_region(**aws_args)
         self.price_locker = Lock()
@@ -71,7 +72,6 @@ class SpotManager(object):
             self._start_life_cycle_watcher()
         if not disable_prices:
             self.pricing()
-
 
     def update_spot_requests(self, utility_required):
         spot_requests = self._get_managed_spot_requests()

@@ -15,6 +15,9 @@ from fabric.contrib import files as fabric_files
 from fabric.operations import run, sudo, put
 from fabric.state import env
 
+from pyLibrary.debugs import constants
+from pyLibrary.debugs import startup
+
 from pyLibrary import aws
 from pyLibrary.debugs.logs import Log
 from pyLibrary.env.files import File
@@ -68,7 +71,7 @@ class ETL(InstanceManager):
         sudo("dpkg --configure -a")
         sudo("apt-get update")
         sudo("apt-get clean")
-        sudo("apt-get install -y python2.7")
+        sudo("apt-get install -y python2.7 lcov")
 
         if not fabric_files.exists("/usr/local/bin/pip"):
             run("mkdir -p /home/ubuntu/temp")
@@ -77,7 +80,7 @@ class ETL(InstanceManager):
                 # INSTALL FROM CLEAN DIRECTORY
                 run("wget https://bootstrap.pypa.io/get-pip.py")
                 sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
-                sudo("python get-pip.py")
+                sudo("python2.7 get-pip.py")
 
         if not fabric_files.exists("/home/ubuntu/ActiveData-ETL/README.md"):
             with cd("/home/ubuntu"):
@@ -90,6 +93,7 @@ class ETL(InstanceManager):
         with cd("/home/ubuntu/ActiveData-ETL"):
             run("git checkout etl")
             # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
+            sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
             sudo("pip install BeautifulSoup")
             sudo("pip install MozillaPulse")
             sudo("pip install boto")
@@ -101,7 +105,7 @@ class ETL(InstanceManager):
         # INSTALL supervsor
         sudo("apt-get install -y supervisor")
         with fabric_settings(warn_only=True):
-            run("service supervisor start")
+            sudo("service supervisor start")
 
         # READ LOCAL CONFIG FILE, ALTER IT FOR THIS MACHINE RESOURCES, AND PUSH TO REMOTE
         conf_file = File("./examples/config/etl_supervisor.conf")
@@ -132,3 +136,17 @@ class ETL(InstanceManager):
         env.host_string = instance.ip_address
         env.abort_exception = Log.error
 
+
+def main():
+    try:
+        settings = startup.read_settings()
+        constants.set(settings.constants)
+        Log.start(settings.debug)
+        ETL(settings).setup(settings.instance, settings.utility)
+    except Exception, e:
+        Log.warning("Problem with setup of ETL", cause=e)
+    finally:
+        Log.stop()
+
+if __name__ == "__main__":
+    main()

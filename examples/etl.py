@@ -71,7 +71,7 @@ class ETL(InstanceManager):
         sudo("dpkg --configure -a")
         sudo("apt-get update")
         sudo("apt-get clean")
-        sudo("apt-get install -y python2.7")
+        sudo("apt-get install -y python2.7 lcov")
 
         if not fabric_files.exists("/usr/local/bin/pip"):
             run("mkdir -p /home/ubuntu/temp")
@@ -91,7 +91,7 @@ class ETL(InstanceManager):
 
 
         with cd("/home/ubuntu/ActiveData-ETL"):
-            run("git checkout etl")
+            run("git checkout codecoverage")
             # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
             sudo("pip install BeautifulSoup")
             sudo("pip install MozillaPulse")

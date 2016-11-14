@@ -91,7 +91,7 @@ class ETL(InstanceManager):
 
 
         with cd("/home/ubuntu/ActiveData-ETL"):
-            run("git checkout codecoverage")
+            run("git checkout etl")
             # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
             sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
             sudo("pip install BeautifulSoup")
@@ -122,10 +122,10 @@ class ETL(InstanceManager):
         sudo("supervisorctl update")
 
     def _add_private_file(self):
-        run('rm -f /home/ubuntu/codecoverage.json')
-        put('~/private_active_data_etl.json', '/home/ubuntu/codecoverage.json')
+        run('rm -f /home/ubuntu/private.json')
+        put('~/private_active_data_etl.json', '/home/ubuntu/private.json')
         with cd("/home/ubuntu"):
-            run("chmod o-r codecoverage.json")
+            run("chmod o-r private.json")
 
     def _config_fabric(self, instance):
         if not instance.ip_address:

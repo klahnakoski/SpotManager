@@ -80,7 +80,7 @@ class ETL(InstanceManager):
                 # INSTALL FROM CLEAN DIRECTORY
                 run("wget https://bootstrap.pypa.io/get-pip.py")
                 sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
-                sudo("python get-pip.py")
+                sudo("python2.7 get-pip.py")
 
         if not fabric_files.exists("/home/ubuntu/ActiveData-ETL/README.md"):
             with cd("/home/ubuntu"):

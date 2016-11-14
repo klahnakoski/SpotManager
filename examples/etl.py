@@ -93,6 +93,7 @@ class ETL(InstanceManager):
         with cd("/home/ubuntu/ActiveData-ETL"):
             run("git checkout codecoverage")
             # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
+            sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
             sudo("pip install BeautifulSoup")
             sudo("pip install MozillaPulse")
             sudo("pip install boto")
@@ -104,7 +105,7 @@ class ETL(InstanceManager):
         # INSTALL supervsor
         sudo("apt-get install -y supervisor")
         with fabric_settings(warn_only=True):
-            run("service supervisor start")
+            sudo("service supervisor start")
 
         # READ LOCAL CONFIG FILE, ALTER IT FOR THIS MACHINE RESOURCES, AND PUSH TO REMOTE
         conf_file = File("./examples/config/etl_supervisor.conf")

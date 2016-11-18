@@ -1,15 +1,15 @@
 {
 	"budget": 1.00,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.02,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
-	"max_new_utility": 20,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
-	"max_requests_per_type": 50,
+	"max_new_utility": 50,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
+	"max_requests_per_type": 10,
 	"max_percent_per_type": 0.70,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES.   DEFAULT = 1.0 (100%, NO LIMITS)
 	"price_file": "resources/aws/prices.json",
 	"run_interval": "10minute",
 	"uptime":{
 		"history": "day",       //HOW MUCH HISTORY TO USE
 		"duration": "5minute",    //HOW LONG WE WOULD LIKE OUR MACHINE TO TO STAY UP
-		"bid_percentile": 0.50   //THE PROBABILITY WE ACHIEVE OUR UPTIME
+		"bid_percentile": 0.70   //THE PROBABILITY WE ACHIEVE OUR UPTIME
 	},
 	"availability_zone": "us-west-2c",
 	"product":"Linux/UNIX",

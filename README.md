@@ -126,7 +126,8 @@ do not get terminated for the `duration`.  If your workload is quick to setup,
 then you can set it to zero (`0`).
 * **bid_percentile** - With a `history`'s worth of max pricing, the question 
 remains which price to pick: The `bid_percentile` is used to make that 
-selection: Use `0.50` (median) to make aggressively low bids.  Use higher 
+selection: Use `0.50` (median) to make aggressively low bids: Most of the bids
+will fail, and there will be long hours when nothing new spins up. Use higher 
 numbers to increase the chance of uptime.  It is never wise to set this to 
 `1.00` because there is often some fool willing to bid more than on-demand.  
 

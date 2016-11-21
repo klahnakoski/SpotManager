@@ -24,7 +24,8 @@ from pyLibrary.env.files import File
 from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings
 from pyLibrary.strings import between
-from pyLibrary.thread.threads import Lock
+from pyLibrary.thread.threads import Lock, Thread
+from pyLibrary.times.durations import Duration
 from spot.instance_manager import InstanceManager
 
 
@@ -48,18 +49,23 @@ class ETL(InstanceManager):
 
     def setup(self, instance, utility):
         with self.locker:
-            cpu_count = int(round(utility))
 
-            with hide('output'):
-                Log.note("setup {{instance}}", instance=instance.id)
-                self._config_fabric(instance)
-                Log.note("setup etl on {{instance}}", instance=instance.id)
-                self._setup_etl_code()
-                Log.note("add config file on {{instance}}", instance=instance.id)
-                self._add_private_file()
-                Log.note("setup supervisor on {{instance}}", instance=instance.id)
-                self._setup_etl_supervisor(cpu_count)
-                Log.note("setup done {{instance}}", instance=instance.id)
+            def worker(please_stop):
+                cpu_count = int(round(utility))
+
+                with hide('output'):
+                    Log.note("setup {{instance}}", instance=instance.id)
+                    self._config_fabric(instance)
+                    Log.note("setup etl on {{instance}}", instance=instance.id)
+                    self._setup_etl_code()
+                    Log.note("add config file on {{instance}}", instance=instance.id)
+                    self._add_private_file()
+                    Log.note("setup supervisor on {{instance}}", instance=instance.id)
+                    self._setup_etl_supervisor(cpu_count)
+                    Log.note("setup done {{instance}}", instance=instance.id)
+            worker_thread = Thread.run("etl setup", worker)
+            Thread.sleep(timeout=Duration(self.settings.run_interval), please_stop=worker_thread.stopped)
+            worker_thread.kill()
 
     def teardown(self, instance):
         with self.locker:
@@ -68,11 +74,16 @@ class ETL(InstanceManager):
             sudo("supervisorctl stop all")
 
     def _setup_etl_code(self):
+        Log.note("1")
         sudo("dpkg --configure -a")
+        Log.note("2")
         sudo("apt-get update")
+        Log.note("3")
         sudo("apt-get clean")
+        Log.note("4")
         sudo("apt-get install -y python2.7 lcov")
 
+        Log.note("5")
         if not fabric_files.exists("/usr/local/bin/pip"):
             run("mkdir -p /home/ubuntu/temp")
 
@@ -82,6 +93,7 @@ class ETL(InstanceManager):
                 sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
                 sudo("python2.7 get-pip.py")
 
+        Log.note("6")
         if not fabric_files.exists("/home/ubuntu/ActiveData-ETL/README.md"):
             with cd("/home/ubuntu"):
                 sudo("apt-get -yf install git-core")
@@ -90,6 +102,7 @@ class ETL(InstanceManager):
                 run("mkdir -p /home/ubuntu/ActiveData-ETL/results/logs")
 
 
+        Log.note("7")
         with cd("/home/ubuntu/ActiveData-ETL"):
             run("git checkout etl")
             # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
@@ -99,6 +112,7 @@ class ETL(InstanceManager):
             sudo("pip install boto")
             sudo("pip install requests")
             sudo("pip install taskcluster")
+            Log.note("8")
             sudo("apt-get -y install python-psycopg2")
 
     def _setup_etl_supervisor(self, cpu_count):

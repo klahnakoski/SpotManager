@@ -9,6 +9,7 @@
 from __future__ import unicode_literals
 from __future__ import division
 
+import sys
 from fabric.api import settings as fabric_settings
 from fabric.context_managers import cd, hide
 from fabric.contrib import files as fabric_files
@@ -65,7 +66,9 @@ class ETL(InstanceManager):
                     Log.note("setup done {{instance}}", instance=instance.id)
             worker_thread = Thread.run("etl setup", worker)
             Thread.sleep(timeout=Duration(self.settings.run_interval), please_stop=worker_thread.stopped)
-            worker_thread.kill()
+            if not worker_thread.stopped:
+                Log.fatal("critical failure")
+                sys.exit()
 
     def teardown(self, instance):
         with self.locker:

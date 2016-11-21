@@ -471,13 +471,6 @@ class Thread(object):
         if DEBUG:
             _Log.note("Thread {{name|quote}} got request to stop", name=self.name)
 
-    def kill(self):
-        # SOME COMMANDS WILL SIMPLY NOT RETURN
-        try:
-            self.thread.kill()
-        except Exception, e:
-            _Log.error("Can not kill thread {{name|quote}}", thread=self.name, cause=e)
-
     def add_child(self, child):
         self.children.append(child)
 

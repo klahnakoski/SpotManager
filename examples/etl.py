@@ -26,6 +26,7 @@ from pyLibrary.maths import Math
 from pyLibrary.meta import use_settings
 from pyLibrary.strings import between
 from pyLibrary.thread.threads import Lock, Thread
+from pyLibrary.times.dates import Date
 from pyLibrary.times.durations import Duration
 from spot.instance_manager import InstanceManager
 
@@ -64,11 +65,10 @@ class ETL(InstanceManager):
                     Log.note("setup supervisor on {{instance}}", instance=instance.id)
                     self._setup_etl_supervisor(cpu_count)
                     Log.note("setup done {{instance}}", instance=instance.id)
-            worker_thread = Thread.run("etl setup", worker)
+            worker_thread = Thread.run("etl setup atarted at "+unicode(Date.now().format()), worker)
             Thread.sleep(timeout=Duration(self.settings.run_interval), please_stop=worker_thread.stopped)
             if not worker_thread.stopped:
-                Log.fatal("critical failure")
-                sys.exit()
+                Log.error("critical failure in thread {{name|quote}}", name=worker_thread.name)
             worker_thread.join()
 
     def teardown(self, instance):

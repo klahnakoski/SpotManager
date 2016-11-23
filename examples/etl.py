@@ -79,7 +79,12 @@ class ETL(InstanceManager):
 
     def _setup_etl_code(self):
         Log.note("1")
-        sudo("dpkg --configure -a")
+        try:
+            sudo("dpkg --configure -a")
+        except Exception, e:
+            Log.warning("not expected", cause=e)
+        finally:
+            Log.note("dpkg --configure -a IS DONE")
         Log.note("2")
         sudo("apt-get update")
         Log.note("3")

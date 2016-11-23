@@ -69,6 +69,7 @@ class ETL(InstanceManager):
             if not worker_thread.stopped:
                 Log.fatal("critical failure")
                 sys.exit()
+            worker_thread.join()
 
     def teardown(self, instance):
         with self.locker:

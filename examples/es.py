@@ -255,7 +255,7 @@ class ESSpot(InstanceManager):
     def _start_supervisor(self):
         put("./examples/config/es_supervisor.conf", "/etc/supervisord.conf", use_sudo=True)
 
-        #START DAEMON (OR THROW ERROR IF RUNNING ALREADY)
+        # START DAEMON (OR THROW ERROR IF RUNNING ALREADY)
         with fabric_settings(warn_only=True):
             sudo("supervisord -c /etc/supervisord.conf")
 

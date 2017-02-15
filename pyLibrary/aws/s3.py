@@ -14,20 +14,20 @@ from __future__ import unicode_literals
 import StringIO
 import gzip
 import zipfile
-from io import BytesIO
 from tempfile import TemporaryFile
 
 import boto
 from boto.s3.connection import Location
 
+from mo_dots import wrap, Null, coalesce, unwrap
+from mo_kwargs import override
+from mo_logs import Log
+from mo_times.dates import Date
+from mo_times.timer import Timer
 from pyLibrary import convert
-from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import wrap, Null, coalesce, unwrap
-from pyLibrary.env.big_data import safe_size, MAX_STRING_SIZE, GzipLines, LazyLines, ibytes2ilines, scompressed2ibytes
-from pyLibrary.meta import use_settings
-from pyLibrary.times.dates import Date
-from pyLibrary.times.timer import Timer
+from pyLibrary.env.big_data import safe_size, MAX_STRING_SIZE, LazyLines, ibytes2ilines, scompressed2ibytes
 
+TOO_MANY_KEYS = 1000 * 1000 * 1000
 READ_ERROR = "S3 read error"
 MAX_FILE_SIZE = 100 * 1024 * 1024
 VALID_KEY = r"\d+([.:]\d+)*"
@@ -47,6 +47,9 @@ class File(object):
     def write(self, value):
         self.bucket.write(self.key, value)
 
+    def write_lines(self, lines):
+        self.bucket.write_lines(self.key, lines)
+
     @property
     def meta(self):
         return self.bucket.meta(self.key)
@@ -56,18 +59,18 @@ class File(object):
 
 
 class Connection(object):
-    @use_settings
+    @override
     def __init__(
         self,
         aws_access_key_id=None,  # CREDENTIAL
         aws_secret_access_key=None,  # CREDENTIAL
         region=None,  # NAME OF AWS REGION, REQUIRED FOR SOME BUCKETS
-        settings=None
+        kwargs=None
     ):
-        self.settings = settings
+        self.settings = kwargs
 
         try:
-            if not settings.region:
+            if not kwargs.region:
                 self.connection = boto.connect_s3(
                     aws_access_key_id=unwrap(self.settings.aws_access_key_id),
                     aws_secret_access_key=unwrap(self.settings.aws_secret_access_key)
@@ -106,7 +109,7 @@ class Bucket(object):
     ALL KEYS ARE DIGITS, SEPARATED BY DOT (.) COLON (:)
     """
 
-    @use_settings
+    @override
     def __init__(
         self,
         bucket,  # NAME OF THE BUCKET
@@ -115,15 +118,15 @@ class Bucket(object):
         region=None,  # NAME OF AWS REGION, REQUIRED FOR SOME BUCKETS
         public=False,
         debug=False,
-        settings=None
+        kwargs=None
     ):
-        self.settings = settings
+        self.settings = kwargs
         self.connection = None
         self.bucket = None
-        self.key_format = _scrub_key(settings.key_format)
+        self.key_format = _scrub_key(kwargs.key_format)
 
         try:
-            self.connection = Connection(settings).connection
+            self.connection = Connection(kwargs).connection
             self.bucket = self.connection.get_bucket(self.settings.bucket, validate=False)
         except Exception, e:
             Log.error("Problem connecting to {{bucket}}", bucket=self.settings.bucket, cause=e)
@@ -162,6 +165,12 @@ class Bucket(object):
         self.bucket.delete_keys(keys)
 
     def get_meta(self, key, conforming=True):
+        """
+        RETURN METADATA ON FILE IN BUCKET
+        :param key:  KEY, OR PREFIX OF KEY
+        :param conforming: TEST IF THE KEY CONFORMS TO REQUIRED PATTERN
+        :return: METADATA, IF UNIQUE, ELSE ERROR
+        """
         try:
             metas = list(self.bucket.list(prefix=key))
             metas = wrap([m for m in metas if m.name.find(".json") != -1])
@@ -220,32 +229,20 @@ class Bucket(object):
         """
         RETURN THE METADATA DESCRIPTORS FOR EACH KEY
         """
-
+        limit = coalesce(limit, TOO_MANY_KEYS)
         keys = self.bucket.list(prefix=prefix, delimiter=delimiter)
-        if limit:
-            output = []
-            for i, k in enumerate(keys):
-                output.append({
-                    "key": strip_extension(k.key),
-                    "etag": convert.quote2string(k.etag),
-                    "expiry_date": Date(k.expiry_date),
-                    "last_modified": Date(k.last_modified)
-                })
-                if i >= limit:
-                    break
-            return wrap(output)
-
-        output = [
-            {
+        prefix_len = len(prefix)
+        output = []
+        for i, k in enumerate(k for k in keys if len(k.key) == prefix_len or k.key[prefix_len] in [".", ":"]):
+            output.append({
                 "key": strip_extension(k.key),
                 "etag": convert.quote2string(k.etag),
                 "expiry_date": Date(k.expiry_date),
                 "last_modified": Date(k.last_modified)
-            }
-            for k in keys
-        ]
+            })
+            if i >= limit:
+                break
         return wrap(output)
-
 
     def read(self, key):
         source = self.get_meta(key)

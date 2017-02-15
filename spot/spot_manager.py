@@ -462,7 +462,7 @@ class SpotManager(object):
                 elif pending:
                     Log.note("waiting for spot requests: {{pending}}", pending=[p.id for p in pending])
 
-                Thread.sleep(seconds=10, please_stop=please_stop)
+                (Till(seconds=10) | please_stop).wait()
 
             Log.note("life cycle watcher has stopped")
 

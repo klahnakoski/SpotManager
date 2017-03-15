@@ -48,6 +48,8 @@ class ETL(InstanceManager):
 
     def setup(self, instance, utility):
         with self.locker:
+            if not self.settings.setup_timeout:
+                Log.error("expecting instance.setup_timeout to prevent setup from locking")
 
             def worker(please_stop):
                 cpu_count = int(round(utility))
@@ -67,7 +69,7 @@ class ETL(InstanceManager):
                     self._setup_etl_supervisor(cpu_count)
                     Log.note("setup done {{instance}}", instance=instance.id)
             worker_thread = Thread.run("etl setup atarted at "+unicode(Date.now().format()), worker)
-            (Till(timeout=Duration(self.settings.run_interval).seconds) | worker_thread.stopped).wait()
+            (Till(timeout=Duration(self.settings.setup_timeout).seconds) | worker_thread.stopped).wait()
             if not worker_thread.stopped:
                 Log.error("critical failure in thread {{name|quote}}", name=worker_thread.name)
             worker_thread.join()
@@ -85,8 +87,8 @@ class ETL(InstanceManager):
             Log.warning("not expected", cause=e)
         finally:
             Log.note("dpkg --configure -a IS DONE")
-        sudo("apt-get update")
         sudo("apt-get clean")
+        sudo("apt-get update")
 
     def _setup_grcov(self):
         sudo("apt-get install -y gcc")

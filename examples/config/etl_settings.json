@@ -16,9 +16,6 @@
 	"aws": {
 		"$ref": "//~/private.json#aws_credentials"
 	},
-	"grcov": {
-		"platform": "linux-x86_64"
-	},
 	"utility":[
 		{"instance_type": "m3.medium", "utility": 1},
 		{"instance_type": "m3.large", "utility": 2},
@@ -89,6 +86,10 @@
 	},
 	"instance":{
 		"class":"examples.etl.ETL",
+		"setup_timeout": "10minute",
+		"grcov": {
+			"platform": "linux-x86_64"
+		},
 		"minimum_utility": 2,
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT

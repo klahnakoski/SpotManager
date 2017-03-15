@@ -6,8 +6,8 @@
 #
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import unicode_literals
 from __future__ import division
+from __future__ import unicode_literals
 
 from fabric.api import settings as fabric_settings
 from fabric.context_managers import cd, hide
@@ -15,13 +15,13 @@ from fabric.contrib import files as fabric_files
 from fabric.operations import sudo, run, put, get
 from fabric.state import env
 
-from pyLibrary.debugs.logs import Log
-from pyLibrary.env.files import File
-from pyLibrary.maths import Math
-from pyLibrary.maths.randoms import Random
-from pyLibrary.meta import use_settings
-from pyLibrary.strings import expand_template
-from pyLibrary.thread.threads import Lock
+from mo_files import File
+from mo_kwargs import override
+from mo_logs import Log
+from mo_logs.strings import expand_template
+from mo_math import Math
+from mo_math.randoms import Random
+from mo_threads import Lock
 from spot.instance_manager import InstanceManager
 
 
@@ -29,9 +29,9 @@ class ESSpot(InstanceManager):
     """
     THIS CLASS MUST HAVE AN IMPLEMENTATION FOR the SpotManager TO USE
     """
-    @use_settings
-    def __init__(self, settings):
-        self.settings = settings
+    @override
+    def __init__(self, kwargs):
+        self.settings = kwargs
         self.conn = None
         self.instance = None
         self.locker = Lock()

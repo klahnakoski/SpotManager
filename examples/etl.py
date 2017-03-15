@@ -6,43 +6,40 @@
 #
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import unicode_literals
 from __future__ import division
+from __future__ import unicode_literals
 
-import sys
 from fabric.api import settings as fabric_settings
 from fabric.context_managers import cd, hide
 from fabric.contrib import files as fabric_files
 from fabric.operations import run, sudo, put
 from fabric.state import env
 
-from pyLibrary.debugs import constants
-from pyLibrary.debugs import startup
-
+from mo_files import File
+from mo_kwargs import override
+from mo_logs import Log, constants, startup
+from mo_logs.strings import between, expand_template
+from mo_math import Math
+from mo_threads import Lock, Thread, Till
+from mo_times import Date
+from mo_times import Duration
 from pyLibrary import aws
-from pyLibrary.debugs.logs import Log
-from pyLibrary.env.files import File
-from pyLibrary.maths import Math
-from pyLibrary.meta import use_settings
-from pyLibrary.strings import between
-from pyLibrary.thread.threads import Lock, Thread
-from pyLibrary.times.dates import Date
-from pyLibrary.times.durations import Duration
+from pyLibrary.env import http
 from spot.instance_manager import InstanceManager
 
 
 class ETL(InstanceManager):
-    @use_settings
+    @override
     def __init__(
         self,
         work_queue,  # SETTINGS FOR AWS QUEUE
         connect,  # SETTINGS FOR Fabric `env` TO CONNECT TO INSTANCE
         minimum_utility,
-        settings=None
+        kwargs=None
     ):
-        InstanceManager.__init__(self, settings)
+        InstanceManager.__init__(self, kwargs)
         self.locker = Lock()
-        self.settings = settings
+        self.settings = kwargs
 
     def required_utility(self):
         queue = aws.Queue(self.settings.work_queue)
@@ -58,15 +55,19 @@ class ETL(InstanceManager):
                 with hide('output'):
                     Log.note("setup {{instance}}", instance=instance.id)
                     self._config_fabric(instance)
+                    Log.note("update packages on {{instance}}", instance=instance.id)
+                    self._update_ubuntu_packages()
                     Log.note("setup etl on {{instance}}", instance=instance.id)
                     self._setup_etl_code()
+                    Log.note("setup grcov on {{instance}}", instance=instance.id)
+                    self._setup_grcov()
                     Log.note("add config file on {{instance}}", instance=instance.id)
                     self._add_private_file()
                     Log.note("setup supervisor on {{instance}}", instance=instance.id)
                     self._setup_etl_supervisor(cpu_count)
                     Log.note("setup done {{instance}}", instance=instance.id)
             worker_thread = Thread.run("etl setup atarted at "+unicode(Date.now().format()), worker)
-            Thread.sleep(timeout=Duration(self.settings.run_interval), please_stop=worker_thread.stopped)
+            (Till(timeout=Duration(self.settings.run_interval).seconds) | worker_thread.stopped).wait()
             if not worker_thread.stopped:
                 Log.error("critical failure in thread {{name|quote}}", name=worker_thread.name)
             worker_thread.join()
@@ -77,20 +78,30 @@ class ETL(InstanceManager):
             self._config_fabric(instance)
             sudo("supervisorctl stop all")
 
-    def _setup_etl_code(self):
-        Log.note("1")
+    def _update_ubuntu_packages(self):
         try:
             sudo("dpkg --configure -a")
         except Exception, e:
             Log.warning("not expected", cause=e)
         finally:
             Log.note("dpkg --configure -a IS DONE")
-        Log.note("2")
         sudo("apt-get update")
-        Log.note("3")
         sudo("apt-get clean")
-        Log.note("4")
-        sudo("apt-get install -y python2.7 lcov")
+
+    def _setup_grcov(self):
+        sudo("apt-get install -y gcc")
+
+        response = http.get_json("https://api.github.com/repos/marco-c/grcov/releases/latest")
+        with cd("~/ActiveData-ETL"):
+            for asset in response.assets:
+                if self.settings.grcov.platform in asset.browser_download_url:
+                    run("wget "+asset.browser_download_url)
+                    run(expand_template("tar xf grcov-{{platform}}.tar.bz2", self.settings.grcov))
+                    run(expand_template("rm grcov-{{platform}}.tar.bz2", self.settings.grcov))
+
+
+    def _setup_etl_code(self):
+        sudo("apt-get install -y python2.7")
 
         Log.note("5")
         if not fabric_files.exists("/usr/local/bin/pip"):

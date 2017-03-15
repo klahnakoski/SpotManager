@@ -6,34 +6,36 @@
 #
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import unicode_literals
 from __future__ import division
-from copy import deepcopy, copy
+from __future__ import unicode_literals
+
+from copy import copy
 
 import boto
-import boto.vpc
 import boto.ec2
+import boto.vpc
 from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
 from boto.ec2.spotpricehistory import SpotPriceHistory
 from boto.utils import ISO8601
+from mo_logs.startup import SingleInstance
 
+from mo_collections import UniqueIndex
+from mo_dots import unwrap, coalesce, wrap, listwrap, FlatList, Data
+from mo_dots.objects import datawrap
+from mo_files import File
+from mo_kwargs import override
+from mo_logs import Log, startup, Except, constants
+from mo_math import Math, MAX
+from mo_math import SUM
+from mo_threads import Lock, Thread, Till
+from mo_threads import Signal
+from mo_threads.threads import MAIN_THREAD
+from mo_times import MINUTE, Date, Duration, Timer
+from mo_times.durations import DAY, WEEK, SECOND, HOUR
 from pyLibrary import convert
-from pyLibrary.collections import SUM, MAX
-from pyLibrary.debugs import startup, constants
-from pyLibrary.debugs.logs import Log, Except
-from pyLibrary.debugs.startup import SingleInstance
-from pyLibrary.dot import unwrap, coalesce, DictList, wrap, listwrap, Dict
-from pyLibrary.dot.objects import dictwrap
-from pyLibrary.env.files import File
-from pyLibrary.maths import Math
-from pyLibrary.meta import use_settings, new_instance, cache
+from pyLibrary.meta import cache, new_instance
 from pyLibrary.queries import jx, expressions
-from pyLibrary.queries.unique_index import UniqueIndex
-from pyLibrary.thread.threads import Lock, Thread, MAIN_THREAD, Signal
-from pyLibrary.times.dates import Date
-from pyLibrary.times.durations import DAY, HOUR, WEEK, MINUTE, SECOND, Duration
-from pyLibrary.times.timer import Timer
 
 ENABLE_SIDE_EFFECTS = True
 DEBUG_PRICING = True
@@ -43,14 +45,14 @@ DELAY_BEFORE_SETUP = 1 * MINUTE  # PROBLEM WITH CONNECTING ONLY HAPPENS WITH BIG
 
 
 class SpotManager(object):
-    @use_settings
-    def __init__(self, instance_manager, disable_prices=False, settings=None):
-        self.settings = settings
+    @override
+    def __init__(self, instance_manager, disable_prices=False, kwargs=None):
+        self.settings = kwargs
         self.instance_manager = instance_manager
         aws_args = dict(
-            region_name=settings.aws.region,
-            aws_access_key_id=unwrap(settings.aws.aws_access_key_id),
-            aws_secret_access_key=unwrap(settings.aws.aws_secret_access_key)
+            region_name=kwargs.aws.region,
+            aws_access_key_id=unwrap(kwargs.aws.aws_access_key_id),
+            aws_secret_access_key=unwrap(kwargs.aws.aws_secret_access_key)
         )
         self.ec2_conn = boto.ec2.connect_to_region(**aws_args)
         self.vpc_conn = boto.vpc.connect_to_region(**aws_args)
@@ -135,7 +137,7 @@ class SpotManager(object):
             )
 
         # Give EC2 a chance to notice the new requests before tagging them.
-        Thread.sleep(3)
+        Till(timeout=3).wait()
         with self.net_new_locker:
             for req in self.net_new_spot_requests:
                 req.add_tag("Name", self.settings.ec2.instance.name)
@@ -234,7 +236,7 @@ class SpotManager(object):
                         price=bid_per_machine,
                         availability_zone_group=p.availability_zone,
                         instance_type=p.type.instance_type,
-                        settings=copy(self.settings.ec2.request)
+                        kwargs=copy(self.settings.ec2.request)
                     )
                     Log.note(
                         "Request {{num}} instance {{type}} in {{zone}} with utility {{utility}} at ${{price}}/hour",
@@ -270,7 +272,7 @@ class SpotManager(object):
         remove_list = []
         for acceptable_error in range(0, 8):
             remaining_utility = -net_new_utility
-            remove_list = DictList()
+            remove_list = FlatList()
             for s in instances:
                 utility = coalesce(s.markup.type.utility, 0)
                 if utility <= remaining_utility + acceptable_error:
@@ -360,7 +362,7 @@ class SpotManager(object):
 
     @cache(duration=5 * SECOND)
     def _get_managed_spot_requests(self):
-        output = wrap([dictwrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
+        output = wrap([datawrap(r) for r in self.ec2_conn.get_all_spot_instance_requests() if not r.tags.get("Name") or r.tags.get("Name").startswith(self.settings.ec2.instance.name)])
         return output
 
     def _get_managed_instances(self):
@@ -372,12 +374,12 @@ class SpotManager(object):
             for instance in res.instances:
                 if instance.tags.get('Name', '').startswith(self.settings.ec2.instance.name) and instance._state.name == "running":
                     instance.request = requests[instance.id]
-                    output.append(dictwrap(instance))
+                    output.append(datawrap(instance))
         return wrap(output)
 
     def _start_life_cycle_watcher(self):
         def life_cycle_watcher(please_stop):
-            failed_attempts=Dict()
+            failed_attempts=Data()
 
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
@@ -460,7 +462,7 @@ class SpotManager(object):
                 elif pending:
                     Log.note("waiting for spot requests: {{pending}}", pending=[p.id for p in pending])
 
-                Thread.sleep(seconds=10, please_stop=please_stop)
+                (Till(seconds=10) | please_stop).wait()
 
             Log.note("life cycle watcher has stopped")
 
@@ -479,43 +481,43 @@ class SpotManager(object):
             # Otherwise, use all available zones.
             return zones_with_interfaces
 
-    @use_settings
-    def _request_spot_instances(self, price, availability_zone_group, instance_type, settings):
-        settings.settings = None
+    @override
+    def _request_spot_instances(self, price, availability_zone_group, instance_type, kwargs):
+        kwargs.settings = None
 
         # m3 INSTANCES ARE NOT ALLOWED PLACEMENT GROUP
         if instance_type.startswith("m3."):
-            settings.placement_group = None
+            kwargs.placement_group = None
 
-        settings.network_interfaces = NetworkInterfaceCollection(*(
+        kwargs.network_interfaces = NetworkInterfaceCollection(*(
             NetworkInterfaceSpecification(**i)
-            for i in listwrap(settings.network_interfaces)
+            for i in listwrap(kwargs.network_interfaces)
             if self.vpc_conn.get_all_subnets(subnet_ids=i.subnet_id, filters={"availabilityZone": availability_zone_group})
         ))
 
-        if len(settings.network_interfaces) == 0:
-            Log.error("No network interface specifications found for {{availability_zone}}!", availability_zone=settings.availability_zone_group)
+        if len(kwargs.network_interfaces) == 0:
+            Log.error("No network interface specifications found for {{availability_zone}}!", availability_zone=kwargs.availability_zone_group)
 
         block_device_map = BlockDeviceMapping()
 
         # GENERIC BLOCK DEVICE MAPPING
-        for dev, dev_settings in settings.block_device_map.items():
+        for dev, dev_settings in kwargs.block_device_map.items():
             block_device_map[dev] = BlockDeviceType(**dev_settings)
 
-        settings.block_device_map = block_device_map
+        kwargs.block_device_map = block_device_map
 
         # INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping
         num_ephemeral_volumes = ephemeral_storage[instance_type]["num"]
         for i in range(num_ephemeral_volumes):
             letter = convert.ascii2char(98 + i)  # START AT "b"
-            settings.block_device_map["/dev/sd" + letter] = BlockDeviceType(
+            kwargs.block_device_map["/dev/sd" + letter] = BlockDeviceType(
                 ephemeral_name='ephemeral' + unicode(i),
                 delete_on_termination=True
             )
 
-        if settings.expiration:
-            settings.valid_until = (Date.now() + Duration(settings.expiration)).format(ISO8601)
-            settings.expiration = None
+        if kwargs.expiration:
+            kwargs.valid_until = (Date.now() + Duration(kwargs.expiration)).format(ISO8601)
+            kwargs.expiration = None
 
         # ATTACH NEW EBS VOLUMES
         for i, drive in enumerate(self.settings.utility[instance_type].drives):
@@ -525,12 +527,12 @@ class SpotManager(object):
             d.path = None  # path AND device PROPERTY IS NOT ALLOWED IN THE BlockDeviceType
             d.device = None
             if d.size:
-                settings.block_device_map[device] = BlockDeviceType(
+                kwargs.block_device_map[device] = BlockDeviceType(
                     delete_on_termination=True,
                     **d
                 )
 
-        output = list(self.ec2_conn.request_spot_instances(**settings))
+        output = list(self.ec2_conn.request_spot_instances(**kwargs))
         return output
 
     def pricing(self):
@@ -628,7 +630,7 @@ class SpotManager(object):
                 content = File(self.settings.price_file).read()
                 cache = convert.json2value(content, flexible=False, leaves=False)
             except Exception, e:
-                cache = DictList()
+                cache = FlatList()
 
         most_recents = jx.run({
             "from": cache,
@@ -751,7 +753,7 @@ def main():
 
             settings.utility = UniqueIndex(["instance_type"], data=settings.utility)
             instance_manager = new_instance(settings.instance)
-            m = SpotManager(instance_manager, settings=settings)
+            m = SpotManager(instance_manager, kwargs=settings)
 
             if ENABLE_SIDE_EFFECTS:
                 m.update_spot_requests(instance_manager.required_utility())

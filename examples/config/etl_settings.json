@@ -16,6 +16,9 @@
 	"aws": {
 		"$ref": "//~/private.json#aws_credentials"
 	},
+	"grcov": {
+		"platform": "linux-x86_64"
+	},
 	"utility":[
 		{"instance_type": "m3.medium", "utility": 1},
 		{"instance_type": "m3.large", "utility": 2},

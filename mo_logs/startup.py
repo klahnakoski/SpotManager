@@ -87,7 +87,12 @@ class SingleInstance:
     If is there another instance already running it will exist the application with the message
     "Another instance is already running, quitting.", returning -1 error code.
 
-    me = SingleInstance()
+    with SingleInstance():
+        <your code here>
+
+    settings = startup.read_settings()
+    with SingleInstance(settings.args.filename):
+        <your code here>
 
     This option is very useful if you have scripts executed by crontab at small amounts of time.
 
@@ -108,7 +113,7 @@ class SingleInstance:
                 if os.path.exists(self.lockfile):
                     os.unlink(self.lockfile)
                 self.fd = os.open(self.lockfile, os.O_CREAT | os.O_EXCL | os.O_RDWR)
-            except Exception, e:
+            except Exception as e:
                 Log.alarm("Another instance is already running, quitting.")
                 sys.exit(-1)
         else: # non Windows

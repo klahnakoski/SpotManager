@@ -14,21 +14,21 @@ from __future__ import unicode_literals
 
 import re
 import sqlite3
-from collections import Mapping
-
 import sys
+from collections import Mapping
 
 from mo_dots import Data, coalesce
 from mo_files import File
 from mo_logs import Log
-from mo_logs.exceptions import Except, extract_stack, ERROR, _extract_traceback
+from mo_logs.exceptions import Except, extract_stack, ERROR
 from mo_math.stats import percentile
 from mo_threads import Queue, Signal, Thread
+from mo_times import Date
 from mo_times.timer import Timer
 from pyLibrary import convert
 from pyLibrary.sql import DB, SQL
 
-DEBUG = True
+DEBUG = False
 DEBUG_INSERT = False
 
 _load_extension_warning_sent = False
@@ -46,7 +46,7 @@ def _upgrade():
         if python_dll.read_bytes() != sqlite_dll.read_bytes():
             backup = sqlite_dll.backup()
             File.copy(python_dll, sqlite_dll)
-    except Exception, e:
+    except Exception as e:
         Log.warning("could not upgrade python's sqlite", cause=e)
 
 
@@ -61,7 +61,7 @@ class Sqlite(DB):
     def __init__(self, filename=None, db=None):
         """
         :param db:  Optional, wrap a sqlite db in a thread
-        :return: Multithread save database
+        :return: Multithread-safe database
         """
         if not _upgraded:
             _upgrade()
@@ -97,6 +97,9 @@ class Sqlite(DB):
         :param command: COMMAND FOR SQLITE
         :return: None
         """
+        if DEBUG:  # EXECUTE IMMEDIATELY FOR BETTER STACK TRACE
+            return self.query(command)
+
         if self.get_trace:
             trace = extract_stack(1)
         else:
@@ -138,18 +141,14 @@ class Sqlite(DB):
                 full_path = file.abspath
                 self.db.enable_load_extension(True)
                 self.db.execute("SELECT load_extension(" + self.quote_value(full_path) + ")")
-            except Exception, e:
+            except Exception as e:
                 if not _load_extension_warning_sent:
                     _load_extension_warning_sent = True
                     Log.warning("Could not load {{file}}}, doing without. (no SQRT for you!)", file=full_path, cause=e)
 
         try:
             while not please_stop:
-                if DEBUG:
-                    Log.note("begin pop")
                 command, result, signal, trace = self.queue.pop(till=please_stop)
-                if DEBUG:
-                    Log.note("done pop")
 
                 if DEBUG_INSERT and command.strip().lower().startswith("insert"):
                     Log.note("Running command\n{{command|indent}}", command=command)
@@ -166,7 +165,7 @@ class Sqlite(DB):
                             if DEBUG and result.data:
                                 text = convert.table2csv(list(result.data))
                                 Log.note("Result:\n{{data}}", data=text)
-                        except Exception, e:
+                        except Exception as e:
                             e = Except.wrap(e)
                             result.exception = Except(ERROR, "Problem with\n{{command|indent}}", command=command, cause=e)
                         finally:
@@ -175,7 +174,7 @@ class Sqlite(DB):
                         try:
                             self.db.execute(command)
                             self.db.commit()
-                        except Exception, e:
+                        except Exception as e:
                             e = Except.wrap(e)
                             e.cause = Except(
                                 type=ERROR,
@@ -184,8 +183,9 @@ class Sqlite(DB):
                             )
                             Log.warning("Failure to execute", cause=e)
 
-        except Exception, e:
-            Log.error("Problem with sql thread", e)
+        except Exception as e:
+            if not please_stop:
+                Log.error("Problem with sql thread", e)
         finally:
             if DEBUG:
                 Log.note("Database is closed")
@@ -203,6 +203,8 @@ class Sqlite(DB):
             return "."
         elif isinstance(value, basestring):
             return "'" + value.replace("'", "''") + "'"
+        elif isinstance(value, Date):
+            return unicode(value.unix)
         elif value == None:
             return "NULL"
         elif value is True:

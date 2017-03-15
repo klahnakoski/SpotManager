@@ -87,8 +87,8 @@ class ETL(InstanceManager):
             Log.warning("not expected", cause=e)
         finally:
             Log.note("dpkg --configure -a IS DONE")
-        sudo("apt-get clean")
         sudo("apt-get update")
+        sudo("apt-get clean")
 
     def _setup_grcov(self):
         sudo("apt-get install -y gcc")

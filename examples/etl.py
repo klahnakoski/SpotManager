@@ -81,7 +81,7 @@ class ETL(InstanceManager):
     def _update_ubuntu_packages(self):
         try:
             sudo("dpkg --configure -a")
-        except Exception, e:
+        except Exception as e:
             Log.warning("not expected", cause=e)
         finally:
             Log.note("dpkg --configure -a IS DONE")
@@ -177,7 +177,7 @@ def main():
         constants.set(settings.constants)
         Log.start(settings.debug)
         ETL(settings).setup(settings.instance, settings.utility)
-    except Exception, e:
+    except Exception as e:
         Log.warning("Problem with setup of ETL", cause=e)
     finally:
         Log.stop()

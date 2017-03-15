@@ -749,7 +749,7 @@ class DateOp(Literal):
         Literal.__init__(self, op, Date(term.date).unix)
 
     def to_python(self, not_null=False, boolean=False):
-        return "Date("+quote(self.value)+").unix"
+        return unicode(Date(self.value).unix)
 
     def to_sql(self, schema, not_null=False, boolean=False):
         return wrap([{"name": ".", "sql": {"n": sql_quote(json2value(self.json))}}])

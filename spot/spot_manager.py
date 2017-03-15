@@ -251,7 +251,7 @@ class SpotManager(object):
                     with self.net_new_locker:
                         for ii in new_requests:
                             self.net_new_spot_requests.add(ii)
-                except Exception, e:
+                except Exception as e:
                     Log.warning(
                         "Request instance {{type}} failed because {{reason}}",
                         type=p.type.instance_type,
@@ -290,7 +290,7 @@ class SpotManager(object):
         for i in remove_list:
             try:
                 self.instance_manager.teardown(i)
-            except Exception, e:
+            except Exception as e:
                 Log.warning("Teardown of {{id}} failed", id=i.id, cause=e)
 
         remove_spot_requests = remove_list.spot_instance_request_id
@@ -309,7 +309,7 @@ class SpotManager(object):
         for r in instances:
             try:
                 r.markup = self.price_lookup[r.instance_type, r.placement]
-            except Exception, e:
+            except Exception as e:
                 r.markup = self.price_lookup[r.instance_type, r.placement]
                 Log.error("No pricing!!!", e)
         instances = jx.sort(instances, [
@@ -348,7 +348,7 @@ class SpotManager(object):
         for i in remove_list:
             try:
                 self.instance_manager.teardown(i)
-            except Exception, e:
+            except Exception as e:
                 Log.warning("Teardown of {{id}} failed", id=i.id, cause=e)
 
         remove_spot_requests.extend(remove_list.spot_instance_request_id)
@@ -404,14 +404,14 @@ class SpotManager(object):
                         i.markup = p
                         try:
                             self.instance_manager.setup(i, coalesce(p.utility, 0))
-                        except Exception, e:
+                        except Exception as e:
                             e = Except.wrap(e)
                             failed_attempts[r.id] += [e]
                             Log.error(ERROR_ON_CALL_TO_SETUP, e)
                         i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
                         with self.net_new_locker:
                             self.net_new_spot_requests.remove(r.id)
-                    except Exception, e:
+                    except Exception as e:
                         if not time_to_stop_trying.get(i.id):
                             time_to_stop_trying[i.id] = Date.now() + TIME_FROM_RUNNING_TO_LOGIN
                         if Date.now() > time_to_stop_trying[i.id]:
@@ -483,7 +483,7 @@ class SpotManager(object):
 
     @override
     def _request_spot_instances(self, price, availability_zone_group, instance_type, kwargs):
-        kwargs.settings = None
+        kwargs.kwargs = None
 
         # m3 INSTANCES ARE NOT ALLOWED PLACEMENT GROUP
         if instance_type.startswith("m3."):
@@ -629,7 +629,7 @@ class SpotManager(object):
             try:
                 content = File(self.settings.price_file).read()
                 cache = convert.json2value(content, flexible=False, leaves=False)
-            except Exception, e:
+            except Exception as e:
                 cache = FlatList()
 
         most_recents = jx.run({
@@ -683,7 +683,7 @@ class SpotManager(object):
                             break
 
         with Timer("Save prices to file"):
-            new_prices = jx.filter(prices, {"gte": {"timestamp": {"date": "today-2week"}}})
+            new_prices = jx.filter(prices, {"gte": {"timestamp": {"date": "today-day"}}})
             def stream():  # IT'S A LOT OF PRICES, STREAM THEM TO FILE
                 prefix = "[\n"
                 for p in new_prices:
@@ -760,7 +760,7 @@ def main():
 
             if m.watcher:
                 m.watcher.join()
-    except Exception, e:
+    except Exception as e:
         Log.warning("Problem with spot manager", cause=e)
     finally:
         Log.stop()

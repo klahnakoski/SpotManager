@@ -18,12 +18,13 @@ from fabric.state import env
 from mo_files import File
 from mo_kwargs import override
 from mo_logs import Log, constants, startup
-from mo_logs.strings import between
+from mo_logs.strings import between, expand_template
 from mo_math import Math
 from mo_threads import Lock, Thread, Till
 from mo_times import Date
 from mo_times import Duration
 from pyLibrary import aws
+from pyLibrary.env import http
 from spot.instance_manager import InstanceManager
 
 
@@ -54,8 +55,12 @@ class ETL(InstanceManager):
                 with hide('output'):
                     Log.note("setup {{instance}}", instance=instance.id)
                     self._config_fabric(instance)
+                    Log.note("update packages on {{instance}}", instance=instance.id)
+                    self._update_ubuntu_packages()
                     Log.note("setup etl on {{instance}}", instance=instance.id)
                     self._setup_etl_code()
+                    Log.note("setup grcov on {{instance}}", instance=instance.id)
+                    self._setup_grcov()
                     Log.note("add config file on {{instance}}", instance=instance.id)
                     self._add_private_file()
                     Log.note("setup supervisor on {{instance}}", instance=instance.id)
@@ -73,20 +78,30 @@ class ETL(InstanceManager):
             self._config_fabric(instance)
             sudo("supervisorctl stop all")
 
-    def _setup_etl_code(self):
-        Log.note("1")
+    def _update_ubuntu_packages(self):
         try:
             sudo("dpkg --configure -a")
         except Exception, e:
             Log.warning("not expected", cause=e)
         finally:
             Log.note("dpkg --configure -a IS DONE")
-        Log.note("2")
         sudo("apt-get update")
-        Log.note("3")
         sudo("apt-get clean")
-        Log.note("4")
-        sudo("apt-get install -y python2.7 lcov")
+
+    def _setup_grcov(self):
+        sudo("apt-get install -y gcc")
+
+        response = http.get_json("https://api.github.com/repos/marco-c/grcov/releases/latest")
+        with cd("~/ActiveData-ETL"):
+            for asset in response.assets:
+                if self.settings.grcov.platform in asset.browser_download_url:
+                    run("wget "+asset.browser_download_url)
+                    run(expand_template("tar xf grcov-{{platform}}.tar.bz2", self.settings.grcov))
+                    run(expand_template("rm grcov-{{platform}}.tar.bz2", self.settings.grcov))
+
+
+    def _setup_etl_code(self):
+        sudo("apt-get install -y python2.7")
 
         Log.note("5")
         if not fabric_files.exists("/usr/local/bin/pip"):

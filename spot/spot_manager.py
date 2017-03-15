@@ -683,7 +683,7 @@ class SpotManager(object):
                             break
 
         with Timer("Save prices to file"):
-            new_prices = jx.filter(prices, {"gte": {"timestamp": {"date": "today-day"}}})
+            new_prices = jx.filter(prices, {"gte": {"timestamp": {"date": "today-2week"}}})
             def stream():  # IT'S A LOT OF PRICES, STREAM THEM TO FILE
                 prefix = "[\n"
                 for p in new_prices:

@@ -106,7 +106,7 @@
 		}
 	},
 	"constants":{
-//		"pyLibrary.queries.expressions.ALLOW_SCRIPTING": true
+		"pyLibrary.env.http.default_headers":{"Referer": "https://github.com/klahnakoski/SpotManager"}
 	},
 	"debug": {
 		"trace": true,

@@ -30,14 +30,15 @@ class ESSpot(InstanceManager):
     THIS CLASS MUST HAVE AN IMPLEMENTATION FOR the SpotManager TO USE
     """
     @override
-    def __init__(self, kwargs):
+    def __init__(self, minimum_utility, kwargs=None):
         self.settings = kwargs
+        self.minimum_utility = minimum_utility
         self.conn = None
         self.instance = None
         self.locker = Lock()
 
     def required_utility(self):
-        return self.settings.minimum_utility
+        return self.minimum_utility
 
     def setup(
         self,

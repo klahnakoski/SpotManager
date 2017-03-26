@@ -307,17 +307,19 @@ def _get_attr(obj, path):
         # TRY FILESYSTEM
         File = get_module("mo_files").File
         possible_error = None
-        if File.new_instance(File(obj.__file__).parent, attr_name).set_extension("py").exists:
+        python_file = File.new_instance(File(obj.__file__).parent, attr_name).set_extension("py")
+        python_module = File.new_instance(File(obj.__file__).parent, attr_name, "__init__.py")
+        if python_file.exists or python_module.exists:
             try:
                 # THIS CASE IS WHEN THE __init__.py DOES NOT IMPORT THE SUBDIR FILE
                 # WE CAN STILL PUT THE PATH TO THE FILE IN THE from CLAUSE
                 if len(path)==1:
                     # GET MODULE OBJECT
-                    output = __import__(obj.__name__ + "." + attr_name, globals(), locals(), [path[0]], 0)
+                    output = __import__(obj.__name__ + b"." + attr_name.decode('utf8'), globals(), locals(), [attr_name.decode('utf8')], 0)
                     return output
                 else:
                     # GET VARIABLE IN MODULE
-                    output = __import__(obj.__name__ + "." + attr_name, globals(), locals(), [path[1]], 0)
+                    output = __import__(obj.__name__ + b"." + attr_name.decode('utf8'), globals(), locals(), [path[1].decode('utf8')], 0)
                     return _get_attr(output, path[1:])
             except Exception as e:
                 Except = get_module("mo_logs.exceptions.Except")

@@ -119,7 +119,7 @@
 				"class": "logging.handlers.RotatingFileHandler",
 				"filename": "examples/logs/examples_etl.log",
 				"maxBytes": 10000000,
-				"backupCount": 100,
+				"backupCount": 10,
 				"encoding": "utf8"
 			},
 			{

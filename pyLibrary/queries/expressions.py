@@ -15,16 +15,19 @@ import itertools
 from collections import Mapping
 from decimal import Decimal
 
-from mo_dots import coalesce, wrap, set_default, literal_field, Null, split_field, startswith_field, Data, join_field, unwraplist, ROOT_PATH, relative_field
-from mo_json import quote, json2value
+from mo_dots import coalesce, wrap, set_default, literal_field, Null, split_field, startswith_field
+from mo_dots import Data, join_field, unwraplist, ROOT_PATH, relative_field, unwrap
+from mo_json import json2value
 from mo_logs import Log
 from mo_logs.exceptions import suppress_exception
 from mo_math import Math, OR, MAX
 from mo_times.dates import Date
+
 from pyLibrary import convert
 from pyLibrary.queries.containers import STRUCT, OBJECT
 from pyLibrary.queries.domains import is_keyword
 from pyLibrary.queries.expression_compiler import compile_expression
+from pyLibrary.sql.sqlite import quote_column
 
 ALLOW_SCRIPTING = False
 TRUE_FILTER = True
@@ -266,7 +269,7 @@ class Variable(Expression):
         return agg+".get("+convert.value2quote(path[-1])+")"
 
     def to_sql(self, schema, not_null=False, boolean=False):
-        cols = [c for c in schema.columns if startswith_field(schema.get_column_name(c), self.var)]
+        cols = [c for cname, cs in schema.items() if startswith_field(cname, self.var) for c in cs]
         if not cols:
             # DOES NOT EXIST
             return wrap([{"name": ".", "sql": {"0": "NULL"}, "nested_path": ROOT_PATH}])
@@ -274,13 +277,13 @@ class Variable(Expression):
         for col in cols:
             if col.type == OBJECT:
                 prefix = self.var + "."
-                for cn, cs in schema.columns.items():
+                for cn, cs in schema.items():
                     if cn.startswith(prefix):
                         for child_col in cs:
-                            acc[literal_field(child_col.nested_path[0])][literal_field(schema.get_column_name(child_col))][json_type_to_sql_type[child_col.type]] = schema.quote_column(child_col.es_column).sql
+                            acc[literal_field(child_col.nested_path[0])][literal_field(schema.get_column_name(child_col))][json_type_to_sql_type[child_col.type]] = quote_column(child_col.es_column).sql
             else:
                 nested_path = col.nested_path[0]
-                acc[literal_field(nested_path)][literal_field(schema.get_column_name(col))][json_type_to_sql_type[col.type]] = schema.quote_column(col.es_column).sql
+                acc[literal_field(nested_path)][literal_field(schema.get_column_name(col))][json_type_to_sql_type[col.type]] = quote_column(col.es_column).sql
 
         return wrap([
             {"name": relative_field(cname, self.var), "sql": types, "nested_path": nested_path}
@@ -537,7 +540,7 @@ class Literal(Expression):
         return _convert(convert.json_decoder(self.json))
 
     def to_python(self, not_null=False, boolean=False):
-        return self.json
+        return repr(unwrap(json2value(self.json)))
 
     def to_sql(self, schema, not_null=False, boolean=False):
         value = json2value(self.json)
@@ -833,10 +836,10 @@ class LeavesOp(Expression):
         prefix_length = len(split_field(term))
         return wrap([
             {
-                "name": literal_field(join_field(split_field(schema.get_column_name(c))[prefix_length:])),
+                "name": join_field(split_field(schema.get_column_name(c))[prefix_length:]),
                 "sql": Variable(schema.get_column_name(c)).to_sql(schema)[0].sql
             }
-            for n, cols in schema.columns.items()
+            for n, cols in schema.items()
             if startswith_field(n, term)
             for c in cols
             if c.type not in STRUCT

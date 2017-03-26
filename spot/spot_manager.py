@@ -18,7 +18,6 @@ from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
 from boto.ec2.spotpricehistory import SpotPriceHistory
 from boto.utils import ISO8601
-from mo_logs.startup import SingleInstance
 
 from mo_collections import UniqueIndex
 from mo_dots import unwrap, coalesce, wrap, listwrap, FlatList, Data
@@ -26,6 +25,7 @@ from mo_dots.objects import datawrap
 from mo_files import File
 from mo_kwargs import override
 from mo_logs import Log, startup, Except, constants
+from mo_logs.startup import SingleInstance
 from mo_math import Math, MAX
 from mo_math import SUM
 from mo_threads import Lock, Thread, Till
@@ -683,7 +683,7 @@ class SpotManager(object):
                             break
 
         with Timer("Save prices to file"):
-            new_prices = jx.filter(prices, {"gte": {"timestamp": {"date": "today-2week"}}})
+            new_prices = jx.filter(prices, {"gte": {"timestamp": {"date": "today-2day"}}})
             def stream():  # IT'S A LOT OF PRICES, STREAM THEM TO FILE
                 prefix = "[\n"
                 for p in new_prices:
@@ -739,10 +739,10 @@ RUNNING_STATUS_CODES = {
 def main():
     try:
         settings = startup.read_settings()
-        constants.set(settings.constants)
-        settings.run_interval = Duration(settings.run_interval)
         Log.start(settings.debug)
         with SingleInstance(flavor_id=settings.args.filename):
+            constants.set(settings.constants)
+            settings.run_interval = Duration(settings.run_interval)
             for u in settings.utility:
                 u.discount = coalesce(u.discount, 0)
                 # MARKUP drives WITH EXPECTED device MAPPING

@@ -273,9 +273,9 @@ def set_attr(obj, path, value):
     except Exception as e:
         Log = get_logger()
         if PATH_NOT_FOUND in e:
-            Log.warning(PATH_NOT_FOUND + ": {{path}}",  path= path)
+            Log.warning(PATH_NOT_FOUND + ": {{path}}", path=path, cause=e)
         else:
-            Log.error("Problem setting value", e)
+            Log.error("Problem setting value", cause=e)
 
 
 def get_attr(obj, path):
@@ -356,7 +356,7 @@ def _get_attr(obj, path):
 def _set_attr(obj, path, value):
     obj = _get_attr(obj, path[:-1])
     if obj is None:  # DELIBERATE, WE DO NOT WHAT TO CATCH Null HERE (THEY CAN BE SET)
-        get_logger().error(PATH_NOT_FOUND)
+        get_logger().error(PATH_NOT_FOUND+" Tried to get attribute of None")
 
     attr_name = path[-1]
 
@@ -380,7 +380,7 @@ def _set_attr(obj, path, value):
             obj[attr_name] = new_value
             return old_value
         except Exception, f:
-            get_logger().error(PATH_NOT_FOUND)
+            get_logger().error(PATH_NOT_FOUND, cause=e)
 
 
 def lower_match(value, candidates):

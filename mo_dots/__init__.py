@@ -476,7 +476,10 @@ def unwrap(v):
         return None
     elif _type is DataObject:
         d = _get(v, "_obj")
-        return d
+        if isinstance(d, Mapping):
+            return d
+        else:
+            return v
     elif _type is GeneratorType:
         return (unwrap(vv) for vv in v)
     else:

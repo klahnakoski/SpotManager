@@ -46,13 +46,17 @@ class ETL(InstanceManager):
         pending = len(queue)
         return max(self.settings.minimum_utility, Math.ceiling(pending / 30))
 
-    def setup(self, instance, utility):
+    def setup(
+        self,
+        instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
+        utility     # THE utility OBJECT FOUND IN CONFIG
+    ):
         with self.locker:
             if not self.settings.setup_timeout:
                 Log.error("expecting instance.setup_timeout to prevent setup from locking")
 
             def worker(please_stop):
-                cpu_count = int(round(utility))
+                cpu_count = int(round(utility.cpu))
 
                 with hide('output'):
                     Log.note("setup {{instance}}", instance=instance.id)

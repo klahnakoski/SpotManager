@@ -1,9 +1,9 @@
 {
-	"budget": 4.00,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
-	"max_utility_price": 0.01,  //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
+	"budget": 5.00,             //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"max_utility_price": 0.02,  //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 120,     //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"max_requests_per_type": 2,    //LIMIT THE NUMBER OF NET-NEW REQUESTS BY TYPE
-	"max_percent_per_type": 0.30,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES (USED TO MITIGATE LOOSING ALL INSTANCES AT ONCE)
+	"max_percent_per_type": 0.50,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES (USED TO MITIGATE LOOSING ALL INSTANCES AT ONCE)
 	"uptime":{
 		"history": "week",       //HOW MUCH HISTORY TO USE
 		"duration": "day",    //HOW LONG WE WOULD LIKE OUR MACHINE TO TO STAY UP
@@ -56,8 +56,8 @@
 		{"path":"/data8", "device":"/dev/sdi"}
 	],
 	"utility":[
-		// ONE POINT PER 1 GIG OF MEMORY. OR 100GIG OF DRIVESPACE, OR 60, WHICHEVER IS LESS
-		// IF OVER 1Tb OF DRIVE SPACE INCLUDED (SAVE $0.035/Tb/hour)
+		// ONE POINT PER 1 GIG OF MEMORY. OR 100 GIG OF DRIVESPACE, OR 60 POINTS, WHICHEVER IS LESS
+		// EBS IS WAY TO SLOW FOR ELASTICSEARCH
 		{"instance_type": "c1.medium", "storage": 350, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 5, "num_drives": 1, "memory": 1.7, "cpu": 2, "utility": 1.7},
 		{"instance_type": "c1.xlarge", "storage": 1680, "drives": {"$ref": "#4_ephemeral_drives"}, "discount": 0, "ecu": 20, "num_drives": 4, "memory": 7, "cpu": 8, "utility": 7},
 		{"instance_type": "c3.2xlarge", "storage": 160, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 28, "num_drives": 2, "memory": 15, "cpu": 8, "utility": 3.2},
@@ -66,7 +66,7 @@
 		{"instance_type": "c3.large", "storage": 32, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 7, "num_drives": 2, "memory": 3.75, "cpu": 2, "utility": 0.64},
 		{"instance_type": "c3.xlarge", "storage": 80, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 14, "num_drives": 2, "memory": 7.5, "cpu": 4, "utility": 1.6},
 		{"instance_type": "cc2.8xlarge", "storage": 3360, "drives": {"$ref": "#4_ephemeral_drives"}, "discount": 0, "ecu": 88, "num_drives": 4, "memory": 60.5, "cpu": 32, "utility": 60},
-		{"instance_type": "cg1.4xlarge", "storage": 1680, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 33.5, "num_drives": 2, "memory": 22.5, "cpu": 16, "utility": 22.5},
+//		{"instance_type": "cg1.4xlarge", "storage": 1680, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 33.5, "num_drives": 2, "memory": 22.5, "cpu": 16, "utility": 22.5},
 		{"instance_type": "cr1.8xlarge", "storage": 240, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 88, "num_drives": 2, "memory": 244, "cpu": 32, "utility": 4.8},
 		{"instance_type": "d2.2xlarge", "storage": 12000, "drives": {"$ref": "#6_ephemeral_drives"}, "discount": 0, "ecu": 28, "num_drives": 6, "memory": 61, "cpu": 8, "utility": 60},
 		{"instance_type": "d2.4xlarge", "storage": 24000, "drives": {"$ref": "#8_ephemeral_drives"}, "discount": 0, "ecu": 56, "num_drives": 12, "memory": 122, "cpu": 16, "utility": 60},
@@ -75,24 +75,24 @@
 		{"instance_type": "g2.2xlarge", "storage": 60, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 26, "num_drives": 1, "memory": 15, "cpu": 8, "utility": 1.2},
 		{"instance_type": "g2.8xlarge", "storage": 240, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 104, "num_drives": 2, "memory": 60, "cpu": 32, "utility": 4.8},
 		{"instance_type": "hi1.4xlarge", "storage": 2048, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 35, "num_drives": 2, "memory": 60.5, "cpu": 16, "utility": 40.96},
-		{"instance_type": "hs1.8xlarge", "storage": 48000, "drives": {"$ref": "#8_ephemeral_drives"}, "discount": 0, "ecu": 35, "num_drives": 24, "memory": 117, "cpu": 16, "utility": 60},
+//		{"instance_type": "hs1.8xlarge", "storage": 48000, "drives": {"$ref": "#8_ephemeral_drives"}, "discount": 0, "ecu": 35, "num_drives": 24, "memory": 117, "cpu": 16, "utility": 60},
 		{"instance_type": "i2.2xlarge", "storage": 1600, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 27, "num_drives": 2, "memory": 61, "cpu": 8, "utility": 32.0},
 		{"instance_type": "i2.4xlarge", "storage": 3200, "drives": {"$ref": "#4_ephemeral_drives"}, "discount": 0, "ecu": 53, "num_drives": 4, "memory": 122, "cpu": 16, "utility": 60},
 		{"instance_type": "i2.8xlarge", "storage": 6400, "drives": {"$ref": "#8_ephemeral_drives"}, "discount": 0, "ecu": 104, "num_drives": 8, "memory": 244, "cpu": 32, "utility": 60},
 		{"instance_type": "i2.xlarge", "storage": 800, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 14, "num_drives": 1, "memory": 30.5, "cpu": 4, "utility": 16.0},
-		{"instance_type": "i3.16xlarge", "storage": 15200, "drives": {"$ref": "#8_ephemeral_drives"}, "discount": 0, "ecu": 200, "num_drives": 8, "memory": 488, "cpu": 64, "utility": 60},
-		{"instance_type": "i3.2xlarge", "storage": 1900, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 27, "num_drives": 1, "memory": 61, "cpu": 8, "utility": 38.0},
-		{"instance_type": "i3.4xlarge", "storage": 3800, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 53, "num_drives": 2, "memory": 122, "cpu": 16, "utility": 60},
-		{"instance_type": "i3.8xlarge", "storage": 7600, "drives": {"$ref": "#4_ephemeral_drives"}, "discount": 0, "ecu": 99, "num_drives": 4, "memory": 244, "cpu": 32, "utility": 60},
-		{"instance_type": "i3.large", "storage": 475, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 7, "num_drives": 1, "memory": 15.25, "cpu": 2, "utility": 9.5},
-		{"instance_type": "i3.xlarge", "storage": 950, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 13, "num_drives": 1, "memory": 30.5, "cpu": 4, "utility": 19.0},
-		{"instance_type": "m1.large", "storage": 840, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 4, "num_drives": 2, "memory": 7.5, "cpu": 2, "utility": 7.5},
-		{"instance_type": "m1.medium", "storage": 410, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 2, "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 3.75},
-		{"instance_type": "m1.small", "storage": 160, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 1, "num_drives": 1, "memory": 1.7, "cpu": 1, "utility": 1.7},
-		{"instance_type": "m1.xlarge", "storage": 1680, "drives": {"$ref": "#4_ephemeral_drives"}, "discount": 0, "ecu": 8, "num_drives": 4, "memory": 15, "cpu": 4, "utility": 15},
-		{"instance_type": "m2.2xlarge", "storage": 850, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 13, "num_drives": 1, "memory": 34.2, "cpu": 4, "utility": 17.0},
-		{"instance_type": "m2.4xlarge", "storage": 1680, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 26, "num_drives": 2, "memory": 68.4, "cpu": 8, "utility": 33.6},
-		{"instance_type": "m2.xlarge", "storage": 420, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 6.5, "num_drives": 1, "memory": 17.1, "cpu": 2, "utility": 8.4},
+//		{"instance_type": "i3.16xlarge", "storage": 15200, "drives": {"$ref": "#8_ephemeral_drives"}, "discount": 0, "ecu": 200, "num_drives": 8, "memory": 488, "cpu": 64, "utility": 60},
+//		{"instance_type": "i3.2xlarge", "storage": 1900, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 27, "num_drives": 1, "memory": 61, "cpu": 8, "utility": 38.0},
+//		{"instance_type": "i3.4xlarge", "storage": 3800, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 53, "num_drives": 2, "memory": 122, "cpu": 16, "utility": 60},
+//		{"instance_type": "i3.8xlarge", "storage": 7600, "drives": {"$ref": "#4_ephemeral_drives"}, "discount": 0, "ecu": 99, "num_drives": 4, "memory": 244, "cpu": 32, "utility": 60},
+//		{"instance_type": "i3.large", "storage": 475, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 7, "num_drives": 1, "memory": 15.25, "cpu": 2, "utility": 9.5},
+//		{"instance_type": "i3.xlarge", "storage": 950, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 13, "num_drives": 1, "memory": 30.5, "cpu": 4, "utility": 19.0},
+//		{"instance_type": "m1.large", "storage": 840, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 4, "num_drives": 2, "memory": 7.5, "cpu": 2, "utility": 7.5},
+//		{"instance_type": "m1.medium", "storage": 410, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 2, "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 3.75},
+//		{"instance_type": "m1.small", "storage": 160, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 1, "num_drives": 1, "memory": 1.7, "cpu": 1, "utility": 1.7},
+//		{"instance_type": "m1.xlarge", "storage": 1680, "drives": {"$ref": "#4_ephemeral_drives"}, "discount": 0, "ecu": 8, "num_drives": 4, "memory": 15, "cpu": 4, "utility": 15},
+//		{"instance_type": "m2.2xlarge", "storage": 850, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 13, "num_drives": 1, "memory": 34.2, "cpu": 4, "utility": 17.0},
+//		{"instance_type": "m2.4xlarge", "storage": 1680, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 26, "num_drives": 2, "memory": 68.4, "cpu": 8, "utility": 33.6},
+//		{"instance_type": "m2.xlarge", "storage": 420, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 6.5, "num_drives": 1, "memory": 17.1, "cpu": 2, "utility": 8.4},
 		{"instance_type": "m3.2xlarge", "storage": 160, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 26, "num_drives": 2, "memory": 30, "cpu": 8, "utility": 3.2},
 		{"instance_type": "m3.large", "storage": 32, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 6.5, "num_drives": 1, "memory": 7.5, "cpu": 2, "utility": 0.64},
 		{"instance_type": "m3.medium", "storage": 4, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 3, "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 0.08},

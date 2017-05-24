@@ -1,7 +1,8 @@
 {
 	"instance":{
-		"id":"test instance",
-		"ip_address": "54.68.7.248"
+		"id":"ekyle test machine",
+		"ip_address": "54.70.174.133",
+		"setup_timeout": "5minute"
 	},
 	"class":"examples.etl.ETL",
 	"minimum_utility": 2,
@@ -22,7 +23,7 @@
 		"name": "active-data-etl",
 		"$ref": "file://~/private.json#aws_credentials"
 	},
-	"utility": 1,
+	"utility": {"cpu": 1, "utility":1},
 	"constants":{
 		"pyLibrary.env.http.default_headers.referer":"https://wiki.mozilla.org/Auto-tools/Projects/ActiveData"
 	}

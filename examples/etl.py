@@ -52,7 +52,7 @@ class ETL(InstanceManager):
         utility     # THE utility OBJECT FOUND IN CONFIG
     ):
         with self.locker:
-            if not self.settings.setup_timeout:
+            if not self.settings.instance.setup_timeout:
                 Log.error("expecting instance.setup_timeout to prevent setup from locking")
 
             def worker(please_stop):
@@ -73,7 +73,7 @@ class ETL(InstanceManager):
                     self._setup_etl_supervisor(cpu_count)
                     Log.note("setup done {{instance}}", instance=instance.id)
             worker_thread = Thread.run("etl setup atarted at "+unicode(Date.now().format()), worker)
-            (Till(timeout=Duration(self.settings.setup_timeout).seconds) | worker_thread.stopped).wait()
+            (Till(timeout=Duration(self.settings.instance.setup_timeout).seconds) | worker_thread.stopped).wait()
             if not worker_thread.stopped:
                 Log.error("critical failure in thread {{name|quote}}", name=worker_thread.name)
             worker_thread.join()

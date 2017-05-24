@@ -170,7 +170,7 @@ class SpotManager(object):
 
             if min_bid > max_acceptable_price:
                 Log.note(
-                    "Did not bid ${{bid}}/hour on {{type}}: Over remaining acceptable price of ${{remaining}}/hour",
+                    "Price of ${{price}}/hour on {{type}}: Over remaining acceptable price of ${{remaining}}/hour",
                     type=p.type.instance_type,
                     price=min_bid,
                     remaining=max_acceptable_price
@@ -403,7 +403,7 @@ class SpotManager(object):
                                 Log.error("Can not setup unknown {{instance_id}} of type {{type}}", instance_id=i.id, type=i.instance_type)
                         i.markup = p
                         try:
-                            self.instance_manager.setup(i, coalesce(p.utility, 0))
+                            self.instance_manager.setup(i, coalesce(p, 0))
                         except Exception as e:
                             e = Except.wrap(e)
                             failed_attempts[r.id] += [e]
@@ -434,8 +434,8 @@ class SpotManager(object):
                     last_get = Date.now()
 
                 pending = wrap([r for r in spot_requests if r.status.code in PENDING_STATUS_CODES])
-                give_up = wrap([r for r in spot_requests if r.status.code in PROBABLY_NOT_FOR_A_WHILE])
-                ignore = wrap([r for r in spot_requests if r.status.code in MIGHT_HAPPEN]) # MIGHT HAPPEN, BUT NO NEED TO WAIT FOR IT
+                give_up = wrap([r for r in spot_requests if r.status.code in PROBABLY_NOT_FOR_A_WHILE | TERMINATED_STATUS_CODES])
+                ignore = wrap([r for r in spot_requests if r.status.code in MIGHT_HAPPEN])  # MIGHT HAPPEN, BUT NO NEED TO WAIT FOR IT
 
                 if self.done_spot_requests:
                     with self.net_new_locker:

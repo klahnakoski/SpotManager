@@ -108,11 +108,14 @@ class ESSpot(InstanceManager):
         if not fabric_files.exists("/usr/local/elasticsearch"):
             with cd("/home/ec2-user/"):
                 run("mkdir -p temp")
-
+            JRE = "jre-8u131-linux-x64.rpm"
+            LOCAL_JRE = "resources/" + JRE
+            if not File(LOCAL_JRE).exists:
+                Log.error("Expecting {{file}} on manager to spread to ES instances", file=LOCAL_JRE)
             with cd("/home/ec2-user/temp"):
-                run('rm -f jdk-8u5-linux-x64.rpm')
-                run('wget -c --no-cookies --no-check-certificate --header "Cookie: s_cc=true; s_nr=1425654197863; s_sq=%5B%5BB%5D%5D; oraclelicense=accept-securebackup-cookie; gpw_e24=http%3A%2F%2Fwww.oracle.com%2Ftechnetwork%2Fjava%2Fjavase%2Fdownloads%2Fjre8-downloads-2133155.html" "http://download.oracle.com/otn-pub/java/jdk/8u40-b25/jre-8u40-linux-x64.rpm" --output-document="jdk-8u5-linux-x64.rpm"')
-                sudo("rpm -i jdk-8u5-linux-x64.rpm")
+                run('rm -f '+JRE)
+                put("resources/"+JRE, JRE)
+                sudo("rpm -i "+JRE)
                 sudo("alternatives --install /usr/bin/java java /usr/java/default/bin/java 20000")
                 run("export JAVA_HOME=/usr/java/default")
 

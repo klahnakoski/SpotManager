@@ -57,8 +57,13 @@ class ETL(InstanceManager):
                 with hide('output'):
                     Log.note("setup {{instance}}", instance=instance.id)
                     self._config_fabric(instance)
-                    Log.note("update packages on {{instance}}", instance=instance.id)
-                    self._update_ubuntu_packages()
+                    Log.note("update packages on {{instance}} ip={{ip}}", instance=instance.id, ip=instance.ip_address)
+                    try:
+                        self._update_ubuntu_packages()
+                    except Exception as e:
+                        Log.warning("problem with setup of {{instance}} type {{type}}: TEARDOWN", instance=instance.id, type=instance.type, cause=e)
+                        return
+
                     Log.note("setup etl on {{instance}}", instance=instance.id)
                     self._setup_etl_code()
                     Log.note("setup grcov on {{instance}}", instance=instance.id)
@@ -68,7 +73,7 @@ class ETL(InstanceManager):
                     Log.note("setup supervisor on {{instance}}", instance=instance.id)
                     self._setup_etl_supervisor(cpu_count)
                     Log.note("setup done {{instance}}", instance=instance.id)
-            worker_thread = Thread.run("etl setup atarted at "+unicode(Date.now().format()), worker)
+            worker_thread = Thread.run("etl setup started at "+unicode(Date.now().format()), worker)
             (Till(timeout=Duration(self.settings.setup_timeout).seconds) | worker_thread.stopped).wait()
             if not worker_thread.stopped:
                 Log.error("critical failure in thread {{name|quote}}", name=worker_thread.name)
@@ -81,12 +86,9 @@ class ETL(InstanceManager):
             sudo("supervisorctl stop all")
 
     def _update_ubuntu_packages(self):
-        try:
-            sudo("dpkg --configure -a")
-        except Exception as e:
-            Log.warning("not expected", cause=e)
-        finally:
-            Log.note("dpkg --configure -a IS DONE")
+        sudo("apt-get clean")
+        sudo("dpkg --configure -a")
+        sudo("apt-get clean")
         sudo("apt-get update")
         sudo("apt-get clean")
 

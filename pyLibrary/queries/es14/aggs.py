@@ -11,18 +11,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import unicode_literals
 
-from copy import copy
-
 from mo_dots import listwrap, Data, wrap, literal_field, set_default, coalesce, Null, split_field, FlatList, unwrap, \
     unwraplist
 from mo_logs import Log
 from mo_math import Math, MAX
 from mo_times.timer import Timer
-from pyLibrary.queries import es09
-from pyLibrary.queries.es14.decoders import DefaultDecoder, AggsDecoder
+from pyLibrary.queries import es09, jx
+from pyLibrary.queries.es14.decoders import DefaultDecoder, AggsDecoder, ObjectDecoder
 from pyLibrary.queries.es14.decoders import DimFieldListDecoder
 from pyLibrary.queries.es14.util import aggregates1_4, NON_STATISTICAL_AGGS
-from pyLibrary.queries.expressions import simplify_esfilter, split_expression_by_depth, AndOp, Variable, NullOp
+from pyLibrary.queries.expressions import simplify_esfilter, split_expression_by_depth, AndOp, Variable, NullOp, TupleOp
 from pyLibrary.queries.query import MAX_LIMIT
 
 
@@ -40,22 +38,13 @@ def get_decoders_by_depth(query):
     schema = query.frum.schema
     output = FlatList()
 
-    if query.sort:
-        # REORDER EDGES/GROUPBY TO MATCH THE SORT
-        if query.edges:
-            Log.error("can not use sort clause with edges: add sort clause to each edge")
-        ordered_edges = []
-        remaining_edges = copy(query.groupby)
-        for s in query.sort:
-            if not isinstance(s.value, Variable):
-                Log.error("can only sort by terms")
-            for e in remaining_edges:
-                if e.value.var == s.value.var:
-                    ordered_edges.append(e)
-                    remaining_edges.remove(e)
-                    break
-        ordered_edges.extend(remaining_edges)
-        query.groupby = wrap(list(reversed(ordered_edges)))
+    if query.edges:
+        if query.sort and query.format != "cube":
+            # REORDER EDGES/GROUPBY TO MATCH THE SORT
+            query.edges = sort_edges(query, "edges")
+    elif query.groupby:
+        if query.sort and query.format != "cube":
+            query.groupby = sort_edges(query, "groupby")
 
     for edge in wrap(coalesce(query.edges, query.groupby, [])):
         if edge.value != None and not isinstance(edge.value, NullOp):
@@ -65,7 +54,7 @@ def get_decoders_by_depth(query):
                 if not schema[v]:
                     Log.error("{{var}} does not exist in schema", var=v)
 
-            edge.value = edge.value.map({c.name: c.es_column for v in vars_ for c in schema.lookup[v]})
+            edge.value = edge.value.map({v: schema[v][0].es_column for v in vars_})
         elif edge.range:
             edge = edge.copy()
             min_ = edge.range.min
@@ -76,7 +65,7 @@ def get_decoders_by_depth(query):
                 if not schema[v]:
                     Log.error("{{var}} does not exist in schema", var=v)
 
-            map_ = {c.name: c.es_column for v in vars_ for c in schema[v]}
+            map_ = {v: schema[v][0].es_column for v in vars_}
             edge.range = {
                 "min": min_.map(map_),
                 "max": max_.map(map_)
@@ -112,9 +101,26 @@ def get_decoders_by_depth(query):
     return output
 
 
+def sort_edges(query, prop):
+    ordered_edges = []
+    remaining_edges = getattr(query, prop)
+    for s in query.sort:
+        if not isinstance(s.value, Variable):
+            Log.error("can only sort by terms")
+        for e in remaining_edges:
+            if e.value.var == s.value.var:
+                e.domain.sort = s.sort
+                ordered_edges.append(e)
+                remaining_edges.remove(e)
+                break
+    ordered_edges.extend(remaining_edges)
+    return ordered_edges
+
+
 def es_aggsop(es, frum, query):
     select = wrap([s.copy() for s in listwrap(query.select)])
-    es_column_map = {c.name: unwraplist(c.es_column) for c in frum.schema.columns}
+    # [0] is a cheat; each es_column should be a dict of columns keyed on type, like in sqlite
+    es_column_map = {v: frum.schema[v][0].es_column for v in query.vars()}
 
     es_query = Data()
     new_select = Data()  #MAP FROM canonical_name (USED FOR NAMES IN QUERY) TO SELECT MAPPING
@@ -218,7 +224,13 @@ def es_aggsop(es, frum, query):
         canonical_name = literal_field(s.name)
         abs_value = s.value.map(es_column_map)
 
-        if s.aggregate == "count":
+        if isinstance(abs_value, TupleOp):
+            if s.aggregate == "count":
+                # TUPLES ALWAYS EXIST, SO COUNTING THEM IS EASY
+                s.pull = "doc_count"
+            else:
+                Log.error("{{agg}} is not a supported aggregate over a tuple", agg=s.aggregate)
+        elif s.aggregate == "count":
             es_query.aggs[literal_field(canonical_name)].value_count.script = abs_value.to_ruby()
             s.pull = literal_field(canonical_name) + ".value"
         elif s.aggregate == "median":
@@ -279,7 +291,7 @@ def es_aggsop(es, frum, query):
     vars_ = query.where.vars()
 
     #<TERRIBLE SECTION> THIS IS WHERE WE WEAVE THE where CLAUSE WITH nested
-    split_where = split_expression_by_depth(query.where, schema=frum.schema, map_=es_column_map)
+    split_where = split_expression_by_depth(query.where, schema=frum.schema)
 
     if len(split_field(frum.name)) > 1:
         if any(split_where[2::]):
@@ -310,9 +322,10 @@ def es_aggsop(es, frum, query):
         if any(split_where[1::]):
             Log.error("Where clause is too deep")
 
-    for d in decoders[0]:
-        es_query = d.append_query(es_query, start)
-        start += d.num_columns
+    if decoders:
+        for d in jx.reverse(decoders[0]):
+            es_query = d.append_query(es_query, start)
+            start += d.num_columns
 
     if split_where[0]:
         #TODO: INCLUDE FILTERS ON EDGES
@@ -442,7 +455,7 @@ def aggs_iterator(aggs, decoders, coord=True):
 
 
 def count_dim(aggs, decoders):
-    if any(isinstance(d, (DefaultDecoder, DimFieldListDecoder)) for d in decoders):
+    if any(isinstance(d, (DefaultDecoder, DimFieldListDecoder, ObjectDecoder)) for d in decoders):
         # ENUMERATE THE DOMAINS, IF UNKNOWN AT QUERY TIME
         for row, coord, agg in aggs_iterator(aggs, decoders, coord=False):
             for d in decoders:

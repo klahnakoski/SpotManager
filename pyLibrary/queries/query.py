@@ -14,17 +14,19 @@ from __future__ import unicode_literals
 from collections import Mapping
 from copy import copy
 
-from mo_logs import Log
-from mo_math import AND, UNION
-from mo_math import Math
 from mo_dots import Data
 from mo_dots import coalesce, Null, set_default, unwraplist, literal_field
 from mo_dots import wrap, unwrap, listwrap
 from mo_dots.lists import FlatList
+from mo_logs import Log
+from mo_math import AND, UNION
+from mo_math import Math
+
+from jx_base.queries import is_variable_name
 from pyLibrary.queries import Schema, wrap_from
 from pyLibrary.queries.containers import Container, STRUCT
 from pyLibrary.queries.dimensions import Dimension
-from pyLibrary.queries.domains import Domain, is_keyword, SetDomain
+from pyLibrary.queries.domains import Domain, SetDomain
 from pyLibrary.queries.expressions import jx_expression, TrueOp, Expression, FalseOp, Variable, LeavesOp, ScriptOp, OffsetOp
 
 DEFAULT_LIMIT = 10
@@ -100,13 +102,15 @@ class QueryOp(Expression):
             output = set()
             if isinstance(e.value, basestring):
                 output.add(e.value)
+            if isinstance(e.value, Expression):
+                output |= e.value.vars()
             if e.domain.key:
                 output.add(e.domain.key)
             if e.domain.where:
-                output |= jx_expression(e.domain.where).vars()
+                output |= e.domain.where.vars()
             if e.range:
-                output |= jx_expression(e.range.min).vars()
-                output |= jx_expression(e.range.max).vars()
+                output |= e.range.min.vars()
+                output |= e.range.max.vars()
             if e.domain.partitions:
                 for p in e.domain.partitions:
                     if p.where:
@@ -409,6 +413,10 @@ def _normalize_select_no_context(select, schema=None):
             else:
                 output.name = coalesce(select.name, select.value, select.aggregate)
                 output.value = jx_expression(select.value)
+    elif isinstance(select.value, (int, float)):
+        if not output.name:
+            output.name = unicode(select.value)
+        output.value = jx_expression(select.value)
     else:
         output.value = jx_expression(select.value)
 
@@ -423,10 +431,16 @@ def _normalize_select_no_context(select, schema=None):
 
 
 def _normalize_edges(edges, schema=None):
-    return wrap([_normalize_edge(e, schema=schema) for e in listwrap(edges)])
+    return wrap([n for ie, e in enumerate(listwrap(edges)) for n in _normalize_edge(e, ie, schema=schema)])
 
 
-def _normalize_edge(edge, schema=None):
+def _normalize_edge(edge, dim_index, schema=None):
+    """
+    :param edge: Not normalized edge 
+    :param dim_index: Dimensions are ordered; this is this edge's index into that order
+    :param schema: for context
+    :return: a normalized edge
+    """
     if not _Column:
         _late_import()
 
@@ -441,31 +455,35 @@ def _normalize_edge(edge, schema=None):
             e = unwraplist(e)
             if e and not isinstance(e, (_Column, set, list)):
                 if isinstance(e, _Column):
-                    return Data(
+                    return [Data(
                         name=edge,
                         value=jx_expression(edge),
                         allowNulls=True,
+                        dim=dim_index,
                         domain=_normalize_domain(domain=e, schema=schema)
-                    )
+                    )]
                 elif isinstance(e.fields, list) and len(e.fields) == 1:
-                    return Data(
+                    return [Data(
                         name=e.name,
                         value=jx_expression(e.fields[0]),
                         allowNulls=True,
+                        dim=dim_index,
                         domain=e.getDomain()
-                    )
+                    )]
                 else:
-                    return Data(
+                    return [Data(
                         name=e.name,
                         allowNulls=True,
+                        dim=dim_index,
                         domain=e.getDomain()
-                    )
-        return Data(
+                    )]
+        return [Data(
             name=edge,
             value=jx_expression(edge),
             allowNulls=True,
+            dim=dim_index,
             domain=_normalize_domain(schema=schema)
-        )
+        )]
     else:
         edge = wrap(edge)
         if not edge.name and not isinstance(edge.value, basestring):
@@ -476,41 +494,75 @@ def _normalize_edge(edge, schema=None):
             domain = _normalize_domain(schema=schema)
             domain.dimension = Data(fields=edge.value)
 
-            return Data(
+            return [Data(
                 name=edge.name,
                 value=jx_expression(edge.value),
                 allowNulls=bool(coalesce(edge.allowNulls, True)),
+                dim=dim_index,
                 domain=domain
-            )
+            )]
 
         domain = _normalize_domain(edge.domain, schema=schema)
 
-        return Data(
+        return [Data(
             name=coalesce(edge.name, edge.value),
             value=jx_expression(edge.value),
             range=_normalize_range(edge.range),
             allowNulls=bool(coalesce(edge.allowNulls, True)),
+            dim=dim_index,
             domain=domain
-        )
+        )]
 
 
 def _normalize_groupby(groupby, schema=None):
     if groupby == None:
         return None
-    output = wrap([_normalize_group(e, schema=schema) for e in listwrap(groupby)])
+    output = wrap([n for ie, e in enumerate(listwrap(groupby)) for n in _normalize_group(e, ie, schema=schema) ])
     if any(o==None for o in output):
         Log.error("not expected")
     return output
 
 
-def _normalize_group(edge, schema=None):
+def _normalize_group(edge, dim_index, schema=None):
+    """
+    :param edge: Not normalized groupby 
+    :param dim_index: Dimensions are ordered; this is this groupby's index into that order
+    :param schema: for context
+    :return: a normalized groupby
+    """
     if isinstance(edge, basestring):
-        return wrap({
+        if edge.endswith(".*"):
+            prefix = edge[:-1]
+            if schema:
+                output = wrap([
+                    {
+                        "name": literal_field(k),
+                        "value": jx_expression(k),
+                        "allowNulls": True,
+                        "domain": {"type": "default"}
+                    }
+                    for k, cs in schema.items()
+                    if k.startswith(prefix)
+                    for c in cs
+                    if c.type not in STRUCT
+                ])
+                return output
+            else:
+                return wrap([{
+                    "name": edge[:-2],
+                    "value": jx_expression(edge[:-2]),
+                    "allowNulls": True,
+                    "dim":dim_index,
+                    "domain": {"type": "default"}
+                }])
+
+        return wrap([{
             "name": edge,
             "value": jx_expression(edge),
-            "allowNulls": False,
+            "allowNulls": True,
+            "dim":dim_index,
             "domain": {"type": "default"}
-        })
+        }])
     else:
         edge = wrap(edge)
         if (edge.domain and edge.domain.type != "default") or edge.allowNulls != None:
@@ -519,12 +571,13 @@ def _normalize_group(edge, schema=None):
         if not edge.name and not isinstance(edge.value, basestring):
             Log.error("You must name compound edges: {{edge}}",  edge= edge)
 
-        return wrap({
+        return wrap([{
             "name": coalesce(edge.name, edge.value),
             "value": jx_expression(edge.value),
             "allowNulls": True,
+            "dim":dim_index,
             "domain": {"type": "default"}
-        })
+        }])
 
 
 def _normalize_domain(domain=None, schema=None):
@@ -558,7 +611,7 @@ def _normalize_window(window, schema=None):
     return Data(
         name=coalesce(window.name, window.value),
         value=expr,
-        edges=[_normalize_edge(e, schema) for e in listwrap(window.edges)],
+        edges=[n for e in listwrap(window.edges) for n in _normalize_edge(e, schema)],
         sort=_normalize_sort(window.sort),
         aggregate=window.aggregate,
         range=_normalize_range(window.range),
@@ -603,7 +656,7 @@ def _map_term_using_schema(master, path, term, schema_edges):
                             output.append({"term": {es_field: local_value}})
                     continue
 
-                if len(dimension.fields) == 1 and is_keyword(dimension.fields[0]):
+                if len(dimension.fields) == 1 and is_variable_name(dimension.fields[0]):
                     # SIMPLE SINGLE-VALUED FIELD
                     if domain.getPartByKey(v) is domain.NULL:
                         output.append({"missing": {"field": dimension.fields[0]}})
@@ -611,7 +664,7 @@ def _map_term_using_schema(master, path, term, schema_edges):
                         output.append({"term": {dimension.fields[0]: v}})
                     continue
 
-                if AND(is_keyword(f) for f in dimension.fields):
+                if AND(is_variable_name(f) for f in dimension.fields):
                     # EXPECTING A TUPLE
                     if not isinstance(v, tuple):
                         Log.error("expecing {{name}}={{value}} to be a tuple",  name= k,  value= v)
@@ -622,7 +675,7 @@ def _map_term_using_schema(master, path, term, schema_edges):
                         else:
                             output.append({"term": {f: vv}})
                     continue
-            if len(dimension.fields) == 1 and is_keyword(dimension.fields[0]):
+            if len(dimension.fields) == 1 and is_variable_name(dimension.fields[0]):
                 if domain.getPartByKey(v) is domain.NULL:
                     output.append({"missing": {"field": dimension.fields[0]}})
                 else:
@@ -686,7 +739,7 @@ def _where_terms(master, where, schema):
                                     and_agg.append({"term": {es_field: vvv}})
                             or_agg.append({"and": and_agg})
                         output.append({"or": or_agg})
-                    elif isinstance(fields, list) and len(fields) == 1 and is_keyword(fields[0]):
+                    elif isinstance(fields, list) and len(fields) == 1 and is_variable_name(fields[0]):
                         output.append({"terms": {fields[0]: v}})
                     elif domain.partitions:
                         output.append({"or": [domain.getPartByKey(vv).esfilter for vv in v]})

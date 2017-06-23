@@ -10,19 +10,22 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
+
+import smtplib
+import sys
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import smtplib
-import sys
-from pyLibrary.debugs.logs import Log
-from pyLibrary.dot import listwrap
-from pyLibrary.dot import coalesce
-from pyLibrary.meta import use_settings
+
+from mo_logs import Log
+from mo_dots import listwrap
+from mo_dots import coalesce
+from mo_kwargs import override
 
 
 class Emailer:
-    @use_settings
+    @override
     def __init__(
         self,
         from_address,
@@ -33,9 +36,9 @@ class Emailer:
         subject="catchy title",
         port=465,
         use_ssl=1,
-        settings=None
+        kwargs=None
     ):
-        self.settings = settings
+        self.settings = kwargs
         self.server = None
 
     def __enter__(self):
@@ -55,7 +58,7 @@ class Emailer:
     def __exit__(self, type, value, traceback):
         try:
             self.server.quit()
-        except Exception, e:
+        except Exception as e:
             Log.warning("Problem with smtp server quit(), ignoring problem", e)
 
         self.server = None

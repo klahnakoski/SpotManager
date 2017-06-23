@@ -8,6 +8,7 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 
 import gzip
 from io import BytesIO
@@ -15,16 +16,16 @@ from tempfile import TemporaryFile
 import zipfile
 import zlib
 
-from pyLibrary.debugs.logs import Log
-from pyLibrary.maths import Math
+from mo_logs.exceptions import suppress_exception
+from mo_logs import Log
+from mo_math import Math
 
 # LIBRARY TO DEAL WITH BIG DATA ARRAYS AS ITERATORS OVER (IR)REGULAR SIZED
 # BLOCKS, OR AS ITERATORS OVER LINES
 
-
+DEBUG = False
 MIN_READ_SIZE = 8 * 1024
 MAX_STRING_SIZE = 1 * 1024 * 1024
-
 
 class FileString(object):
     """
@@ -36,7 +37,7 @@ class FileString(object):
 
     def decode(self, encoding):
         if encoding != "utf8":
-            Log.error("can not handle {{encoding}}", {"encoding": encoding})
+            Log.error("can not handle {{encoding}}",  encoding= encoding)
         self.encoding = encoding
         return self
 
@@ -54,9 +55,20 @@ class FileString(object):
         return file_length
 
     def __getslice__(self, i, j):
-        self.file.seek(i)
-        output = self.file.read(j - i).decode(self.encoding)
-        return output
+        j = Math.min(j, len(self))
+        if j - 1 > 2 ** 28:
+            Log.error("Slice of {{num}} bytes is too big", num=j - i)
+        try:
+            self.file.seek(i)
+            output = self.file.read(j - i).decode(self.encoding)
+            return output
+        except Exception as e:
+            Log.error(
+                "Can not read file slice at {{index}}, with encoding {{encoding}}",
+                index=i,
+                encoding=self.encoding,
+                cause=e
+            )
 
     def __add__(self, other):
         self.file.seek(0, 2)
@@ -82,6 +94,16 @@ class FileString(object):
     def __iter__(self):
         self.file.seek(0)
         return self.file
+
+    def __unicode__(self):
+        if self.encoding == "utf8":
+            temp = self.file.tell()
+            self.file.seek(0, 2)
+            file_length = self.file.tell()
+            self.file.seek(0)
+            output = self.file.read(file_length).decode(self.encoding)
+            self.file.seek(temp)
+            return output
 
 
 def safe_size(source):
@@ -112,11 +134,11 @@ def safe_size(source):
                     data.write(b)
                     b = source.read(MIN_READ_SIZE)
                 data.seek(0)
-                Log.note("Using file of size {{length}} instead of str()", {"length": total_bytes})
+                Log.note("Using file of size {{length}} instead of str()",  length= total_bytes)
 
                 return data
-            except Exception, e:
-                Log.error("Could not write file > {{num}} bytes", {"num": total_bytes}, e)
+            except Exception as e:
+                Log.error("Could not write file > {{num}} bytes",  num= total_bytes, cause=e)
         b = source.read(MIN_READ_SIZE)
 
     data = b"".join(bytes)
@@ -129,16 +151,25 @@ class LazyLines(object):
     SIMPLE LINE ITERATOR, BUT WITH A BIT OF CACHING TO LOOK LIKE AN ARRAY
     """
 
-    def __init__(self, source):
+    def __init__(self, source, encoding="utf8"):
         """
         ASSUME source IS A LINE ITERATOR OVER utf8 ENCODED BYTE STREAM
         """
         self.source = source
+        self.encoding = encoding
         self._iter = self.__iter__()
         self._last = None
         self._next = 0
 
     def __getslice__(self, i, j):
+        if i == self._next - 1:
+            def output():
+                yield self._last
+                for v in self._iter:
+                    self._next += 1
+                    yield v
+
+            return output()
         if i == self._next:
             return self._iter
         Log.error("Do not know how to slice this generator")
@@ -146,8 +177,7 @@ class LazyLines(object):
     def __iter__(self):
         def output():
             for v in self.source:
-                self._last = v.decode("utf8")
-                self._next += 1
+                self._last = v
                 yield self._last
 
         return output()
@@ -155,12 +185,13 @@ class LazyLines(object):
     def __getitem__(self, item):
         try:
             if item == self._next:
+                self._next += 1
                 return self._iter.next()
             elif item == self._next - 1:
                 return self._last
             else:
                 Log.error("can not index out-of-order too much")
-        except Exception, e:
+        except Exception as e:
             Log.error("Problem indexing", e)
 
 
@@ -170,17 +201,17 @@ class CompressedLines(LazyLines):
     WHILE PULLING OUT ONE LINE AT A TIME FOR PROCESSING
     """
 
-    def __init__(self, compressed):
+    def __init__(self, compressed, encoding="utf8"):
         """
         USED compressed BYTES TO DELIVER LINES OF TEXT
         LIKE LazyLines, BUT HAS POTENTIAL TO seek()
         """
         self.compressed = compressed
-        LazyLines.__init__(self, None)
+        LazyLines.__init__(self, None, encoding=encoding)
         self._iter = self.__iter__()
 
     def __iter__(self):
-        return LazyLines(ibytes2ilines(compressed_bytes2ibytes(self.compressed, MIN_READ_SIZE))).__iter__()
+        return LazyLines(ibytes2ilines(compressed_bytes2ibytes(self.compressed, MIN_READ_SIZE), encoding=self.encoding)).__iter__()
 
     def __getslice__(self, i, j):
         if i == self._next:
@@ -208,7 +239,7 @@ class CompressedLines(LazyLines):
                 return self._last
             else:
                 Log.error("can not index out-of-order too much")
-        except Exception, e:
+        except Exception as e:
             Log.error("Problem indexing", e)
 
 
@@ -224,7 +255,7 @@ class CompressedLines(LazyLines):
 
 def compressed_bytes2ibytes(compressed, size):
     """
-    CONVERT AN ARRAY TO A BYTE-BLOCK GENERATOR
+    CONVERT AN ARRAY OF BYTES TO A BYTE-BLOCK GENERATOR
     USEFUL IN THE CASE WHEN WE WANT TO LIMIT HOW MUCH WE FEED ANOTHER
     GENERATOR (LIKE A DECOMPRESSOR)
     """
@@ -235,44 +266,44 @@ def compressed_bytes2ibytes(compressed, size):
         try:
             block = compressed[i: i + size]
             yield decompressor.decompress(block)
-        except Exception, e:
+        except Exception as e:
             Log.error("Not expected", e)
 
-def ibytes2ilines(stream):
+
+def ibytes2ilines(generator, encoding="utf8", flexible=False, closer=None):
     """
     CONVERT A GENERATOR OF (ARBITRARY-SIZED) byte BLOCKS
     TO A LINE (CR-DELIMITED) GENERATOR
+
+    :param generator:
+    :param encoding: None TO DO NO DECODING
+    :param closer: OPTIONAL FUNCTION TO RUN WHEN DONE ITERATING
+    :return:
     """
-    _buffer = stream.next()
+    decode = get_decoder(encoding=encoding, flexible=flexible)
+    _buffer = generator.next()
     s = 0
     e = _buffer.find(b"\n")
     while True:
         while e == -1:
             try:
-                next_block = stream.next()
+                next_block = generator.next()
                 _buffer = _buffer[s:] + next_block
                 s = 0
                 e = _buffer.find(b"\n")
             except StopIteration:
                 _buffer = _buffer[s:]
-                del stream
-                yield _buffer
+                del generator
+                if closer:
+                    closer()
+                if _buffer:
+                    yield decode(_buffer)
                 return
 
-        yield _buffer[s:e]
+        yield decode(_buffer[s:e])
         s = e + 1
         e = _buffer.find(b"\n", s)
 
-def sbytes2ilines(stream):
-    """
-    CONVERT A STREAM OF (ARBITRARY-SIZED) byte BLOCKS
-    TO A LINE (CR-DELIMITED) GENERATOR
-    """
-    def read():
-        output = stream.read(MIN_READ_SIZE)
-        return output
-
-    return ibytes2ilines({"next": read})
 
 
 class GzipLines(CompressedLines):
@@ -280,12 +311,12 @@ class GzipLines(CompressedLines):
     SAME AS CompressedLines, BUT USING THE GzipFile FORMAT FOR COMPRESSED BYTES
     """
 
-    def __init__(self, compressed):
-        CompressedLines.__init__(self, compressed)
+    def __init__(self, compressed, encoding="utf8"):
+        CompressedLines.__init__(self, compressed, encoding=encoding)
 
     def __iter__(self):
         buff = BytesIO(self.compressed)
-        return LazyLines(gzip.GzipFile(fileobj=buff, mode='r')).__iter__()
+        return LazyLines(gzip.GzipFile(fileobj=buff, mode='r'), encoding=self.encoding).__iter__()
 
 
 class ZipfileLines(CompressedLines):
@@ -293,14 +324,106 @@ class ZipfileLines(CompressedLines):
     SAME AS CompressedLines, BUT USING THE ZipFile FORMAT FOR COMPRESSED BYTES
     """
 
-    def __init__(self, compressed):
-        CompressedLines.__init__(self, compressed)
+    def __init__(self, compressed, encoding="utf8"):
+        CompressedLines.__init__(self, compressed, encoding=encoding)
 
     def __iter__(self):
         buff = BytesIO(self.compressed)
         archive = zipfile.ZipFile(buff, mode='r')
         names = archive.namelist()
         if len(names) != 1:
-            Log.error("*.zip file has {{num}} files, expecting only one.", {"num": len(names)})
+            Log.error("*.zip file has {{num}} files, expecting only one.",  num= len(names))
         stream = archive.open(names[0], "r")
-        return LazyLines(sbytes2ilines(stream)).__iter__()
+        return LazyLines(sbytes2ilines(stream), encoding=self.encoding).__iter__()
+
+
+def icompressed2ibytes(source):
+    """
+    :param source: GENERATOR OF COMPRESSED BYTES
+    :return: GENERATOR OF BYTES
+    """
+    decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    last_bytes_count = 0  # Track the last byte count, so we do not show too many debug lines
+    bytes_count = 0
+    for bytes_ in source:
+        try:
+            data = decompressor.decompress(bytes_)
+        except Exception as e:
+            Log.error("problem", cause=e)
+        bytes_count += len(data)
+        if Math.floor(last_bytes_count, 1000000) != Math.floor(bytes_count, 1000000):
+            last_bytes_count = bytes_count
+            if DEBUG:
+                Log.note("bytes={{bytes}}", bytes=bytes_count)
+        yield data
+
+
+def scompressed2ibytes(stream):
+    """
+    :param stream:  SOMETHING WITH read() METHOD TO GET MORE BYTES
+    :return: GENERATOR OF UNCOMPRESSED BYTES
+    """
+    def more():
+        try:
+            while True:
+                bytes_ = stream.read(4096)
+                if not bytes_:
+                    return
+                yield bytes_
+        except Exception as e:
+            Log.error("Problem iterating through stream", cause=e)
+        finally:
+            with suppress_exception:
+                stream.close()
+
+    return icompressed2ibytes(more())
+
+
+def sbytes2ilines(stream, encoding="utf8", closer=None):
+    """
+    CONVERT A STREAM (with read() method) OF (ARBITRARY-SIZED) byte BLOCKS
+    TO A LINE (CR-DELIMITED) GENERATOR
+    """
+    def read():
+        try:
+            while True:
+                bytes_ = stream.read(4096)
+                if not bytes_:
+                    return
+                yield bytes_
+        except Exception as e:
+            Log.error("Problem iterating through stream", cause=e)
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                pass
+
+            if closer:
+                try:
+                    closer()
+                except Exception:
+                    pass
+
+    return ibytes2ilines(read(), encoding=encoding)
+
+
+def get_decoder(encoding, flexible=False):
+    """
+    RETURN FUNCTION TO PERFORM DECODE
+    :param encoding: STRING OF THE ENCODING
+    :param flexible: True IF YOU WISH TO TRY OUR BEST, AND KEEP GOING
+    :return: FUNCTION
+    """
+    if encoding == None:
+        def no_decode(v):
+            return v
+        return no_decode
+    elif flexible:
+        def do_decode1(v):
+            return v.decode(encoding, 'ignore')
+        return do_decode1
+    else:
+        def do_decode2(v):
+            return v.decode(encoding)
+        return do_decode2

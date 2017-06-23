@@ -8,19 +8,21 @@
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-from __future__ import unicode_literals
+from __future__ import absolute_import
 from __future__ import division
-from copy import copy
+from __future__ import unicode_literals
+
 import functools
+from copy import copy
 
-from pyLibrary.maths import stats
-from pyLibrary.collections import MIN, MAX
-from pyLibrary.debugs.logs import Log
-from pyLibrary.dot.lists import DictList
-from pyLibrary.maths import Math
-from pyLibrary.collections.multiset import Multiset
-from pyLibrary.maths.stats import ZeroMoment, ZeroMoment2Stats
-
+import mo_math
+from mo_collections.multiset import Multiset
+from mo_dots.lists import FlatList
+from mo_logs import Log
+from mo_math import MIN
+from mo_math import Math
+from mo_math import stats
+from mo_math.stats import ZeroMoment, ZeroMoment2Stats
 
 
 # A VARIETY OF SLIDING WINDOW FUNCTIONS
@@ -86,14 +88,14 @@ class One(AggregationFunction):
             self.value = value
             return
         if value != self.value:
-            Log.error("Expecting value to match: {{expecting}}, {{instead}}", {"expecting": self.value, "instead": value})
+            Log.error("Expecting value to match: {{expecting}}, {{instead}}",  expecting= self.value,  instead= value)
 
     def merge(self, agg):
         if self.value is None and agg.value is not None:
             self.value = agg.value
         elif self.value is not None:
             if self.value != agg.value:
-                Log.error("Expecting value to match: {{expecting}}, {{instead}}", {"expecting": self.value, "instead": agg.value})
+                Log.error("Expecting value to match: {{expecting}}, {{instead}}",  expecting= self.value,  instead= agg.value)
 
     def end(self):
         return self.value
@@ -129,7 +131,7 @@ class _Stats(WindowFunction):
     def __init__(self, middle=None, *args, **kwargs):
         object.__init__(self)
         self.middle = middle
-        self.samples = DictList()
+        self.samples = FlatList()
 
     def add(self, value):
         if value == None:
@@ -200,24 +202,40 @@ class Min(WindowFunction):
         return MIN(self.total)
 
 
+# class Max(WindowFunction):
+#     def __init__(self, **kwargs):
+#         object.__init__(self)
+#         self.total = Multiset()
+#
+#
+#     def add(self, value):
+#         if value == None:
+#             return
+#         self.total.add(value)
+#
+#     def sub(self, value):
+#         if value == None:
+#             return
+#         self.total.remove(value)
+#
+#     def end(self):
+#         return MAX(self.total.dic.keys())
+
+
 class Max(WindowFunction):
     def __init__(self, **kwargs):
         object.__init__(self)
-        self.total = Multiset()
+        self.max = None
 
 
     def add(self, value):
-        if value == None:
-            return
-        self.total.add(value)
+        self.max = mo_math.MAX([self.max, value])
 
     def sub(self, value):
-        if value == None:
-            return
-        self.total.remove(value)
+        Log.error("Not implemented")
 
     def end(self):
-        return MAX(*self.total)
+        return self.max
 
 
 class Count(WindowFunction):
@@ -281,7 +299,7 @@ class Percentile(WindowFunction):
         try:
             i = self.total.index(value)
             self.total = self.total[:i] + self.total[i+1:]
-        except Exception, e:
+        except Exception as e:
             Log.error("Problem with window function", e)
 
     def end(self):
@@ -303,9 +321,6 @@ class List(WindowFunction):
 
     def end(self):
         return copy(self.agg)
-
-
-
 
 
 name2accumulator = {

@@ -1,0 +1,30 @@
+{
+	"instance":{
+		"id":"ekyle test machine",
+		"ip_address": "54.70.174.133",
+		"setup_timeout": "5minute"
+	},
+	"class":"examples.etl.ETL",
+	"minimum_utility": 2,
+	"run_interval": "10minute",
+	"connect": {
+		//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
+		"user": "ubuntu",
+		"key_filename": "~/.ssh/aws-pulse-logger.pem",
+		"disable_known_hosts": true,
+		"host_string": "",
+		"port": 22,
+		"password": ""
+	},
+	"grcov": {
+		"platform": "linux-x86_64"
+	},
+	"work_queue": {
+		"name": "active-data-etl",
+		"$ref": "file://~/private.json#aws_credentials"
+	},
+	"utility": {"cpu": 1, "utility":1},
+	"constants":{
+		"pyLibrary.env.http.default_headers.referer":"https://wiki.mozilla.org/Auto-tools/Projects/ActiveData"
+	}
+}

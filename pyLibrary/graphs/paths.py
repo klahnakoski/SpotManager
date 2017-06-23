@@ -9,8 +9,9 @@
 
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 from collections import namedtuple, deque
-from pyLibrary.debugs.logs import Log
+from mo_logs import Log
 
 
 Step = namedtuple("Step", ["parent", "node"])
@@ -100,7 +101,7 @@ class Path(list):
             self._build_list()
         return self.list[-num:]
 
-    def leftBut(self, num):
+    def not_right(self, num):
         """
         WITH SLICES BEING FLAT, WE NEED A SIMPLE WAY TO SLICE FROM THE LEFT [:-num:]
         """
@@ -116,7 +117,7 @@ class Path(list):
 
     def last(self):
         """
-        RETURN LAST ELEMENT IN DictList [-1]
+        RETURN LAST ELEMENT IN FlatList [-1]
         """
         return self.last.node
 

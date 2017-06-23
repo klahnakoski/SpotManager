@@ -9,16 +9,17 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
+from __future__ import absolute_import
 
-from pyLibrary.collections.matrix import Matrix
-from pyLibrary.collections import AND
-from pyLibrary.queries import qb
+from mo_collections.matrix import Matrix
+from mo_math import AND
+from pyLibrary.queries import jx
 from pyLibrary.queries.es09.util import aggregates, build_es_query, compileEdges2Term
 from pyLibrary.queries import es09
-from pyLibrary.queries.cube import Cube
-from pyLibrary.dot import coalesce
-from pyLibrary.dot.lists import DictList
-from pyLibrary.dot import wrap, listwrap
+from pyLibrary.queries.containers.cube import Cube
+from mo_dots import coalesce
+from mo_dots.lists import FlatList
+from mo_dots import wrap, listwrap
 
 
 def is_terms(query):
@@ -63,11 +64,11 @@ def es_terms(es, mvel, query):
         for t in f.terms:
             term2Parts(t.term)
 
-    # NUMBER ALL EDGES FOR qb INDEXING
+    # NUMBER ALL EDGES FOR jx INDEXING
     for f, e in enumerate(query.edges):
         e.index = f
         if e.domain.type in ["uid", "default"]:
-            # e.domain.partitions = qb.sort(e.domain.partitions, "value")
+            # e.domain.partitions = jx.sort(e.domain.partitions, "value")
             for p, part in enumerate(e.domain.partitions):
                 part.dataIndex = p
             e.domain.NULL.dataIndex = len(e.domain.partitions)
@@ -86,7 +87,7 @@ def es_terms(es, mvel, query):
             for s in select:
                 try:
                     output[s.name][term_coord] = term[aggregates[s.aggregate]]
-                except Exception, e:
+                except Exception as e:
                     # USUALLY CAUSED BY output[s.name] NOT BEING BIG ENOUGH TO HANDLE NULL COUNTS
                     pass
     cube = Cube(query.select, query.edges, output)
@@ -125,9 +126,9 @@ def _es_terms2(es, mvel, query):
     values2 = set()
     for k, f in data.facets.items():
         values2.update(f.terms.term)
-    values2 = qb.sort(values2)
+    values2 = jx.sort(values2)
     term2index = {v: i for i, v in enumerate(values2)}
-    query.edges[1].domain.partitions = DictList([{"name": v, "value": v} for v in values2])
+    query.edges[1].domain.partitions = FlatList([{"name": v, "value": v} for v in values2])
 
     # MAKE CUBE
     output = {}

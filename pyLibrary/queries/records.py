@@ -9,7 +9,8 @@
 #
 from __future__ import unicode_literals
 from __future__ import division
-from pyLibrary.dot import listwrap
+from __future__ import absolute_import
+from mo_dots import listwrap
 
 
 class Record(object):

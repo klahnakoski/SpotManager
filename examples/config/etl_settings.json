@@ -1,0 +1,137 @@
+{
+	"budget": 1.00,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"max_utility_price": 0.02,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
+	"max_new_utility": 50,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
+	"max_requests_per_type": 10,
+	"max_percent_per_type": 0.70,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES.   DEFAULT = 1.0 (100%, NO LIMITS)
+	"price_file": "resources/aws/prices.json",
+	"run_interval": "10minute",
+	"uptime":{
+		"history": "day",       //HOW MUCH HISTORY TO USE
+		"duration": "5minute",    //HOW LONG WE WOULD LIKE OUR MACHINE TO TO STAY UP
+		"bid_percentile": 0.70   //THE PROBABILITY WE ACHIEVE OUR UPTIME
+	},
+	"availability_zone": "us-west-2c",
+	"product":"Linux/UNIX",
+	"aws": {
+		"$ref": "//~/private.json#aws_credentials"
+	},
+	"utility":[
+		{"instance_type": "m3.medium", "utility": 1},
+		{"instance_type": "m3.large", "utility": 2},
+		{"instance_type": "m3.xlarge", "utility": 4},
+		{"instance_type": "m3.2xlarge", "utility": 8},
+
+		{"instance_type": "c4.large", "utility": 2},
+		{"instance_type": "c4.xlarge", "utility": 4},
+		{"instance_type": "c4.2xlarge", "utility": 8},
+		{"instance_type": "c4.4xlarge", "utility": 16},
+		{"instance_type": "c4.8xlarge", "utility": 36},
+
+		{"instance_type": "c3.large", "utility": 2},
+		{"instance_type": "c3.xlarge", "utility": 4},
+		{"instance_type": "c3.2xlarge", "utility": 8},
+		{"instance_type": "c3.4xlarge", "utility": 16},
+		{"instance_type": "c3.8xlarge", "utility": 32},
+
+		{"instance_type": "r3.large", "utility": 2},
+		{"instance_type": "r3.xlarge", "utility": 4},
+		{"instance_type": "r3.2xlarge", "utility": 8},
+		{"instance_type": "r3.4xlarge", "utility": 16},
+		{"instance_type": "r3.8xlarge", "utility": 32},
+
+		{"instance_type": "d2.xlarge", "utility": 4},
+		{"instance_type": "d2.2xlarge", "utility": 8},
+		{"instance_type": "d2.4xlarge", "utility": 16},
+		{"instance_type": "d2.8xlarge", "utility": 36}
+	],
+	"ec2": {
+		"request": {
+			//SEE http://boto.readthedocs.org/en/latest/ref/ec2.html#boto.ec2.connection.EC2Connection.request_spot_instances
+			"price": 0.001,
+			"image_id": "ami-a9d276c9", // "ami-5189a661",
+			"count": 1,
+			"type": "one-time",
+			"valid_from": null,
+			"expiration": "hour",  //SPECIAL, USED TO FILL valid_until
+			"valid_until": null,
+			"launch_group": null,
+			"availability_zone_group": null,
+			"key_name": "aws-pulse-logger",
+			"security_groups": null,
+			"user_data": null,
+			"addressing_type": null,
+			"instance_type": null,
+			"placement": null,
+			"kernel_id": null,
+			"ramdisk_id": null,
+			"monitoring_enabled": false,
+			"subnet_id": null,
+			"placement_group": null,
+			"block_device_map": null,
+			"instance_profile_arn": null,
+			"instance_profile_name": "active-data",
+			"security_group_ids": null,
+			"ebs_optimized": false,
+			"network_interfaces": {
+				"subnet_id": "subnet-b7c137ee",
+				"groups": ["sg-bb542fde"],
+				"associate_public_ip_address": true
+			},
+			"dry_run": false
+		},
+		"instance": {
+			"name": "ActiveData ETL spot instance"
+		}
+	},
+	"instance":{
+		"class":"examples.etl.ETL",
+		"setup_timeout": "10minute",
+		"grcov": {
+			"platform": "linux-x86_64"
+		},
+		"minimum_utility": 2,
+		"connect": {
+			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
+			"user": "ubuntu",
+			"key_filename": "~/.ssh/aws-pulse-logger.pem",
+			"disable_known_hosts": true,
+			"host_string": "",
+			"port": 22,
+			"password": ""
+		},
+		"work_queue": {
+			"name": "active-data-etl",
+			"$ref": "file://~/private.json#aws_credentials"
+		}
+	},
+	"constants":{
+		"pyLibrary.env.http.default_headers":{"Referer": "https://github.com/klahnakoski/SpotManager"}
+	},
+	"debug": {
+		"trace": true,
+		"cprofile": {
+			"enabled": false,
+			"filename": "results/examples_spot_profile.tab"
+		},
+		"log": [
+			{
+				"class": "logging.handlers.RotatingFileHandler",
+				"filename": "examples/logs/examples_etl.log",
+				"maxBytes": 10000000,
+				"backupCount": 10,
+				"encoding": "utf8"
+			},
+			{
+				"log_type": "ses",
+				"from_address": "klahnakoski@mozilla.com",
+				"to_address": "klahnakoski@mozilla.com",
+				"subject": "[ALERT][Manager] Problem in ETL Spot",
+				"$ref": "file://~/private.json#aws_credentials"
+			},
+			{
+				"log_type": "console"
+			}
+		]
+	}
+}

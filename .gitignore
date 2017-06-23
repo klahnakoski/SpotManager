@@ -4,4 +4,11 @@
 *.pyc
 /results
 /resources/aws/prices.json
-/resources/supervisor/etl.conf.alt
+/examples/config/etl_supervisor.conf.alt
+/result
+/tests
+/out
+/examples/logs
+/resources
+/indexers.py
+/temp

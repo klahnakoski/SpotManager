@@ -16,24 +16,23 @@ import boto.ec2
 import boto.vpc
 from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
-from boto.ec2.spotpricehistory import SpotPriceHistory
 from boto.utils import ISO8601
-
 from mo_collections import UniqueIndex
 from mo_dots import unwrap, coalesce, wrap, listwrap, FlatList, Data
-from mo_dots.objects import datawrap
 from mo_files import File
 from mo_kwargs import override
 from mo_logs import Log, startup, Except, constants
-from mo_logs.startup import SingleInstance
 from mo_math import Math, MAX
 from mo_math import SUM
 from mo_threads import Lock, Thread, Till
 from mo_threads import Signal
-from mo_threads.threads import MAIN_THREAD
 from mo_times import MINUTE, Date, Duration, Timer
-from mo_times.durations import DAY, WEEK, SECOND, HOUR
 from pyLibrary import convert
+
+from mo_dots.objects import datawrap
+from mo_logs.startup import SingleInstance
+from mo_threads.threads import MAIN_THREAD
+from mo_times.durations import DAY, WEEK, SECOND, HOUR
 from pyLibrary.meta import cache, new_instance
 from pyLibrary.queries import jx, expressions
 
@@ -170,7 +169,7 @@ class SpotManager(object):
 
             if min_bid > max_acceptable_price:
                 Log.note(
-                    "Did not bid ${{bid}}/hour on {{type}}: Over remaining acceptable price of ${{remaining}}/hour",
+                    "Price of ${{price}}/hour on {{type}}: Over remaining acceptable price of ${{remaining}}/hour",
                     type=p.type.instance_type,
                     price=min_bid,
                     remaining=max_acceptable_price
@@ -403,7 +402,7 @@ class SpotManager(object):
                                 Log.error("Can not setup unknown {{instance_id}} of type {{type}}", instance_id=i.id, type=i.instance_type)
                         i.markup = p
                         try:
-                            self.instance_manager.setup(i, coalesce(p.utility, 0))
+                            self.instance_manager.setup(i, coalesce(p, 0))
                         except Exception as e:
                             e = Except.wrap(e)
                             failed_attempts[r.id] += [e]
@@ -434,8 +433,8 @@ class SpotManager(object):
                     last_get = Date.now()
 
                 pending = wrap([r for r in spot_requests if r.status.code in PENDING_STATUS_CODES])
-                give_up = wrap([r for r in spot_requests if r.status.code in PROBABLY_NOT_FOR_A_WHILE])
-                ignore = wrap([r for r in spot_requests if r.status.code in MIGHT_HAPPEN]) # MIGHT HAPPEN, BUT NO NEED TO WAIT FOR IT
+                give_up = wrap([r for r in spot_requests if r.status.code in PROBABLY_NOT_FOR_A_WHILE | TERMINATED_STATUS_CODES])
+                ignore = wrap([r for r in spot_requests if r.status.code in MIGHT_HAPPEN])  # MIGHT HAPPEN, BUT NO NEED TO WAIT FOR IT
 
                 if self.done_spot_requests:
                     with self.net_new_locker:
@@ -451,9 +450,9 @@ class SpotManager(object):
                         pending = UniqueIndex(("id",), data=pending)
                         pending = pending | self.net_new_spot_requests
 
-                if give_up:
-                    self.ec2_conn.cancel_spot_instance_requests(request_ids=give_up.id)
-                    Log.note("Cancelled spot requests {{spots}}, {{reasons}}", spots=give_up.id, reasons=give_up.status.code)
+                    if give_up:
+                        self.ec2_conn.cancel_spot_instance_requests(request_ids=give_up.id)
+                        Log.note("Cancelled spot requests {{spots}}, {{reasons}}", spots=give_up.id, reasons=give_up.status.code)
 
                 if not pending and not time_to_stop_trying and self.done_spot_requests:
                     Log.note("No more pending spot requests")
@@ -502,7 +501,10 @@ class SpotManager(object):
 
         # GENERIC BLOCK DEVICE MAPPING
         for dev, dev_settings in kwargs.block_device_map.items():
-            block_device_map[dev] = BlockDeviceType(**dev_settings)
+            block_device_map[dev] = BlockDeviceType(
+                delete_on_termination=True,
+                **dev_settings
+            )
 
         kwargs.block_device_map = block_device_map
 
@@ -769,51 +771,81 @@ def main():
 
 ephemeral_storage = {
     "c1.medium": {"num": 1, "size": 350},
-    "c1.xlarge": {"num": 4, "size": 420},
-    "c3.2xlarge": {"num": 2, "size": 80},
-    "c3.4xlarge": {"num": 2, "size": 160},
-    "c3.8xlarge": {"num": 2, "size": 320},
-    "c3.large": {"num": 2, "size": 16},
-    "c3.xlarge": {"num": 2, "size": 40},
+    "c1.xlarge": {"num": 4, "size": 1680},
+    "c3.2xlarge": {"num": 2, "size": 160},
+    "c3.4xlarge": {"num": 2, "size": 320},
+    "c3.8xlarge": {"num": 2, "size": 640},
+    "c3.large": {"num": 2, "size": 32},
+    "c3.xlarge": {"num": 2, "size": 80},
     "c4.2xlarge": {"num": 0, "size": 0},
     "c4.4xlarge": {"num": 0, "size": 0},
     "c4.8xlarge": {"num": 0, "size": 0},
     "c4.large": {"num": 0, "size": 0},
     "c4.xlarge": {"num": 0, "size": 0},
-    "cc2.8xlarge": {"num": 4, "size": 840},
-    "cg1.4xlarge": {"num": 2, "size": 840},
-    "cr1.8xlarge": {"num": 2, "size": 120},
-    "d2.2xlarge": {"num": 6, "size": 2000},
-    "d2.4xlarge": {"num": 12, "size": 2000},
-    "d2.8xlarge": {"num": 24, "size": 2000},
-    "d2.xlarge": {"num": 3, "size": 2000},
+    "cc2.8xlarge": {"num": 4, "size": 3360},
+    "cg1.4xlarge": {"num": 2, "size": 1680},
+    "cr1.8xlarge": {"num": 2, "size": 240},
+    "d2.2xlarge": {"num": 6, "size": 12000},
+    "d2.4xlarge": {"num": 12, "size": 24000},
+    "d2.8xlarge": {"num": 24, "size": 48000},
+    "d2.xlarge": {"num": 3, "size": 6000},
+    "f1.16xlarge": {"num": 0, "size": 0},
+    "f1.2xlarge": {"num": 0, "size": 0},
     "g2.2xlarge": {"num": 1, "size": 60},
-    "hi1.4xlarge": {"num": 2, "size": 1024},
-    "hs1.8xlarge": {"num": 24, "size": 2000},
-    "i2.2xlarge": {"num": 2, "size": 800},
-    "i2.4xlarge": {"num": 4, "size": 800},
-    "i2.8xlarge": {"num": 8, "size": 800},
+    "g2.8xlarge": {"num": 2, "size": 240},
+    "hi1.4xlarge": {"num": 2, "size": 2048},
+    "hs1.8xlarge": {"num": 24, "size": 48000},
+    "i2.2xlarge": {"num": 2, "size": 1600},
+    "i2.4xlarge": {"num": 4, "size": 3200},
+    "i2.8xlarge": {"num": 8, "size": 6400},
     "i2.xlarge": {"num": 1, "size": 800},
-    "m1.large": {"num": 2, "size": 420},
+    "i3.16xlarge": {"num": 8, "size": 15200},
+    "i3.2xlarge": {"num": 1, "size": 1900},
+    "i3.4xlarge": {"num": 2, "size": 3800},
+    "i3.8xlarge": {"num": 4, "size": 7600},
+    "i3.large": {"num": 1, "size": 475},
+    "i3.xlarge": {"num": 1, "size": 950},
+    "m1.large": {"num": 2, "size": 840},
     "m1.medium": {"num": 1, "size": 410},
     "m1.small": {"num": 1, "size": 160},
-    "m1.xlarge": {"num": 4, "size": 420},
+    "m1.xlarge": {"num": 4, "size": 1680},
     "m2.2xlarge": {"num": 1, "size": 850},
-    "m2.4xlarge": {"num": 2, "size": 840},
+    "m2.4xlarge": {"num": 2, "size": 1680},
     "m2.xlarge": {"num": 1, "size": 420},
-    "m3.2xlarge": {"num": 2, "size": 80},
+    "m3.2xlarge": {"num": 2, "size": 160},
     "m3.large": {"num": 1, "size": 32},
     "m3.medium": {"num": 1, "size": 4},
-    "m3.xlarge": {"num": 2, "size": 40},
+    "m3.xlarge": {"num": 2, "size": 80},
+    "m4.10xlarge": {"num": 0, "size": 0},
+    "m4.16xlarge": {"num": 0, "size": 0},
+    "m4.2xlarge": {"num": 0, "size": 0},
+    "m4.4xlarge": {"num": 0, "size": 0},
+    "m4.large": {"num": 0, "size": 0},
+    "m4.xlarge": {"num": 0, "size": 0},
+    "p2.16xlarge": {"num": 0, "size": 0},
+    "p2.8xlarge": {"num": 0, "size": 0},
+    "p2.xlarge": {"num": 0, "size": 0},
     "r3.2xlarge": {"num": 1, "size": 160},
     "r3.4xlarge": {"num": 1, "size": 320},
-    "r3.8xlarge": {"num": 2, "size": 320},
+    "r3.8xlarge": {"num": 2, "size": 640},
     "r3.large": {"num": 1, "size": 32},
     "r3.xlarge": {"num": 1, "size": 80},
+    "r4.16xlarge": {"num": 0, "size": 0},
+    "r4.2xlarge": {"num": 0, "size": 0},
+    "r4.4xlarge": {"num": 0, "size": 0},
+    "r4.8xlarge": {"num": 0, "size": 0},
+    "r4.large": {"num": 0, "size": 0},
+    "r4.xlarge": {"num": 0, "size": 0},
     "t1.micro": {"num": 0, "size": 0},
+    "t2.2xlarge": {"num": 0, "size": 0},
+    "t2.large": {"num": 0, "size": 0},
     "t2.medium": {"num": 0, "size": 0},
     "t2.micro": {"num": 0, "size": 0},
-    "t2.small": {"num": 0, "size": 0}
+    "t2.nano": {"num": 0, "size": 0},
+    "t2.small": {"num": 0, "size": 0},
+    "t2.xlarge": {"num": 0, "size": 0},
+    "x1.16xlarge": {"num": 1, "size": 1920},
+    "x1.32xlarge": {"num": 2, "size": 3840}
 }
 
 if __name__ == "__main__":

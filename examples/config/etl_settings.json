@@ -1,5 +1,5 @@
 {
-	"budget": 1.00,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"budget": 2.00,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.02,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 50,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"max_requests_per_type": 10,
@@ -17,39 +17,39 @@
 		"$ref": "//~/private.json#aws_credentials"
 	},
 	"utility":[
-		{"instance_type": "m3.medium", "utility": 1},
-		{"instance_type": "m3.large", "utility": 2},
-		{"instance_type": "m3.xlarge", "utility": 4},
-		{"instance_type": "m3.2xlarge", "utility": 8},
+		{"instance_type": "m3.medium", "ecu": 3, "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 1},
+		{"instance_type": "m3.large", "ecu": 6.5, "num_drives": 1, "memory": 7.5, "cpu": 2, "utility": 2},
+		{"instance_type": "m3.xlarge", "ecu": 13, "num_drives": 2, "memory": 15, "cpu": 4, "utility": 4},
+		{"instance_type": "m3.2xlarge", "ecu": 26, "num_drives": 2, "memory": 30, "cpu": 8, "utility": 8},
 
-		{"instance_type": "c4.large", "utility": 2},
-		{"instance_type": "c4.xlarge", "utility": 4},
-		{"instance_type": "c4.2xlarge", "utility": 8},
-		{"instance_type": "c4.4xlarge", "utility": 16},
-		{"instance_type": "c4.8xlarge", "utility": 36},
+		{"instance_type": "c4.large", "cpu": 2, "utility": 1},
+		{"instance_type": "c4.xlarge", "cpu": 4, "utility": 4},
+		{"instance_type": "c4.2xlarge", "cpu": 8, "utility": 8},
+		{"instance_type": "c4.4xlarge", "cpu": 16, "utility": 16},
+		{"instance_type": "c4.8xlarge", "cpu": 36, "utility": 36},
 
-		{"instance_type": "c3.large", "utility": 2},
-		{"instance_type": "c3.xlarge", "utility": 4},
-		{"instance_type": "c3.2xlarge", "utility": 8},
-		{"instance_type": "c3.4xlarge", "utility": 16},
-		{"instance_type": "c3.8xlarge", "utility": 32},
+		{"instance_type": "c3.large", "ecu": 7, "num_drives": 2, "memory": 3.75, "cpu": 2, "utility": 2},
+		{"instance_type": "c3.xlarge", "ecu": 14, "num_drives": 2, "memory": 7.5, "cpu": 4, "utility": 4},
+		{"instance_type": "c3.2xlarge", "ecu": 28, "num_drives": 2, "memory": 15, "cpu": 8, "utility": 8},
+		{"instance_type": "c3.4xlarge", "ecu": 55, "num_drives": 2, "memory": 30, "cpu": 16, "utility": 16},
+		{"instance_type": "c3.8xlarge", "ecu": 108, "num_drives": 2, "memory": 60, "cpu": 32, "utility": 32},
 
-		{"instance_type": "r3.large", "utility": 2},
-		{"instance_type": "r3.xlarge", "utility": 4},
-		{"instance_type": "r3.2xlarge", "utility": 8},
-		{"instance_type": "r3.4xlarge", "utility": 16},
-		{"instance_type": "r3.8xlarge", "utility": 32},
+		{"instance_type": "r3.large", "ecu": 6.5, "num_drives": 1, "memory": 15.25, "cpu": 2, "utility": 2},
+		{"instance_type": "r3.xlarge", "ecu": 13, "num_drives": 1, "memory": 30.5, "cpu": 4, "utility": 4},
+		{"instance_type": "r3.2xlarge", "ecu": 26, "num_drives": 1, "memory": 61, "cpu": 8, "utility": 8},
+		{"instance_type": "r3.4xlarge", "ecu": 52, "num_drives": 1, "memory": 122, "cpu": 16, "utility": 16},
+		{"instance_type": "r3.8xlarge", "ecu": 104, "num_drives": 2, "memory": 244, "cpu": 32, "utility": 32},
 
-		{"instance_type": "d2.xlarge", "utility": 4},
-		{"instance_type": "d2.2xlarge", "utility": 8},
-		{"instance_type": "d2.4xlarge", "utility": 16},
-		{"instance_type": "d2.8xlarge", "utility": 36}
+		{"instance_type": "d2.xlarge", "ecu": 14, "num_drives": 3, "memory": 30.5, "cpu": 4, "utility": 4},
+		{"instance_type": "d2.2xlarge", "ecu": 28, "num_drives": 6, "memory": 61, "cpu": 8, "utility": 8},
+		{"instance_type": "d2.4xlarge", "ecu": 56, "num_drives": 12, "memory": 122, "cpu": 16, "utility": 16},
+		{"instance_type": "d2.8xlarge", "ecu": 116, "num_drives": 24, "memory": 244, "cpu": 36, "utility": 36}
 	],
 	"ec2": {
 		"request": {
 			//SEE http://boto.readthedocs.org/en/latest/ref/ec2.html#boto.ec2.connection.EC2Connection.request_spot_instances
 			"price": 0.001,
-			"image_id": "ami-a9d276c9", // "ami-5189a661",
+			"image_id": "ami-835b4efa", //UBUNTU (old: ami-a9d276c9)
 			"count": 1,
 			"type": "one-time",
 			"valid_from": null,
@@ -68,7 +68,13 @@
 			"monitoring_enabled": false,
 			"subnet_id": null,
 			"placement_group": null,
-			"block_device_map": null,
+			"block_device_map": {
+				"/dev/sda1": {
+					"volume_id":"snap-039ffe051a6c30204",  // UBUNTU SNAPSHOT
+					"volume_type":"standard",
+					"size": 15
+				}
+			},
 			"instance_profile_arn": null,
 			"instance_profile_name": "active-data",
 			"security_group_ids": null,

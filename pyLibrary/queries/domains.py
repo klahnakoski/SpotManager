@@ -123,7 +123,7 @@ class DefaultDomain(Domain):
     DOMAIN IS A LIST OF OBJECTS, EACH WITH A value PROPERTY
     """
 
-    __slots__ = ["NULL", "partitions", "map", "limit"]
+    __slots__ = ["NULL", "partitions", "map", "limit", "sort"]
 
     def __init__(self, **desc):
         Domain.__init__(self, **desc)
@@ -133,6 +133,7 @@ class DefaultDomain(Domain):
         self.map = dict()
         self.map[None] = self.NULL
         self.limit = desc.get('limit')
+        self.sort = 1
 
     def compare(self, a, b):
         return value_compare(a.value, b.value)
@@ -707,24 +708,6 @@ def value_compare(a, b):
         return -1
     else:
         return 0
-
-
-keyword_pattern = re.compile(r"(\$|\w|\\\.)+(?:\.(\$|\w|\\\.)+)*")
-
-
-def is_keyword(value):
-    if value.__class__.__name__ == "Variable":
-        Log.warning("not expected")
-        return True
-
-    if not value or not isinstance(value, basestring):
-        return False  # _a._b
-    if value == ".":
-        return True
-    match = keyword_pattern.match(value)
-    if not match:
-        return False
-    return match.group(0) == value
 
 
 name_to_type = {

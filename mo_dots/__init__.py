@@ -69,7 +69,7 @@ def literal_field(field):
     RETURN SAME WITH DOTS (`.`) ESCAPED
     """
     try:
-        return field.replace(".", "\.")
+        return field.replace("\.", "\a").replace(".", "\.").replace("\a", "\.")
     except Exception as e:
         get_logger().error("bad literal", e)
 
@@ -96,7 +96,7 @@ def split_field(field):
     if field == "." or field==None:
         return []
     elif isinstance(field, unicode) and field.find(".") >= 0:
-        field = field.replace("\.", "\a")
+        field = field.replace("\\\\.", "\a").replace("\\.", "\a")
         return [k.replace("\a", ".") for k in field.split(".")]
     else:
         return [field]

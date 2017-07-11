@@ -46,13 +46,17 @@ class ETL(InstanceManager):
         pending = len(queue)
         return max(self.settings.minimum_utility, Math.ceiling(pending / 30))
 
-    def setup(self, instance, utility):
+    def setup(
+        self,
+        instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
+        utility     # THE utility OBJECT FOUND IN CONFIG
+    ):
         with self.locker:
             if not self.settings.setup_timeout:
                 Log.error("expecting instance.setup_timeout to prevent setup from locking")
 
             def worker(please_stop):
-                cpu_count = int(round(utility))
+                cpu_count = int(round(utility.cpu))
 
                 with hide('output'):
                     Log.note("setup {{instance}}", instance=instance.id)
@@ -61,9 +65,8 @@ class ETL(InstanceManager):
                     try:
                         self._update_ubuntu_packages()
                     except Exception as e:
-                        Log.warning("problem with setup of {{instance}} type {{type}}: TEARDOWN", instance=instance.id, type=instance.type, cause=e)
+                        Log.warning("Can not setup {{instance}}, type={{type}}", instance=instance.id, type=instance.type, cause=e)
                         return
-
                     Log.note("setup etl on {{instance}}", instance=instance.id)
                     self._setup_etl_code()
                     Log.note("setup grcov on {{instance}}", instance=instance.id)
@@ -90,7 +93,6 @@ class ETL(InstanceManager):
         sudo("dpkg --configure -a")
         sudo("apt-get clean")
         sudo("apt-get update")
-        sudo("apt-get clean")
 
     def _setup_grcov(self):
         sudo("apt-get install -y gcc")

@@ -43,11 +43,11 @@ class ESSpot(InstanceManager):
     def setup(
         self,
         instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
-        utility
+        utility     # THE utility OBJECT FOUND IN CONFIG
     ):
         with self.locker:
             self.instance = instance
-            gigabytes = Math.floor(utility, 15)
+            gigabytes = Math.floor(utility.memory)
             Log.note("setup {{instance}}", instance=instance.id)
             with hide('output'):
                 self._config_fabric(instance)

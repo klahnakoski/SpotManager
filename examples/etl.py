@@ -76,7 +76,7 @@ class ETL(InstanceManager):
                     Log.note("setup supervisor on {{instance}}", instance=instance.id)
                     self._setup_etl_supervisor(cpu_count)
                     Log.note("setup done {{instance}}", instance=instance.id)
-            worker_thread = Thread.run("etl setup atarted at "+unicode(Date.now().format()), worker)
+            worker_thread = Thread.run("etl setup started at "+unicode(Date.now().format()), worker)
             (Till(timeout=Duration(self.settings.setup_timeout).seconds) | worker_thread.stopped).wait()
             if not worker_thread.stopped:
                 Log.error("critical failure in thread {{name|quote}}", name=worker_thread.name)
@@ -89,6 +89,7 @@ class ETL(InstanceManager):
             sudo("supervisorctl stop all")
 
     def _update_ubuntu_packages(self):
+        sudo("apt-get clean")
         sudo("dpkg --configure -a")
         sudo("apt-get clean")
         sudo("apt-get update")

@@ -56,10 +56,10 @@
 		{"path":"/data8", "device":"/dev/sdi"}
 	],
 	"utility":[
-		// ONE POINT PER 1 GIG OF MEMORY. OR 100 GIG OF DRIVESPACE, OR 60 POINTS, WHICHEVER IS LESS
+		// ONE POINT PER 1 GIG OF MEMORY. OR 2 PER 100 GIG OF DRIVESPACE, OR 60 POINTS, WHICHEVER IS LESS
 		// EBS IS WAY TO SLOW FOR ELASTICSEARCH
-		{"instance_type": "c1.medium", "storage": 350, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 5, "num_drives": 1, "memory": 1.7, "cpu": 2, "utility": 1.7},
-		{"instance_type": "c1.xlarge", "storage": 1680, "drives": {"$ref": "#4_ephemeral_drives"}, "discount": 0, "ecu": 20, "num_drives": 4, "memory": 7, "cpu": 8, "utility": 7},
+//		{"instance_type": "c1.medium", "storage": 350, "drives": {"$ref": "#1_ephemeral_drives"}, "discount": 0, "ecu": 5, "num_drives": 1, "memory": 1.7, "cpu": 2, "utility": 1.7},
+//		{"instance_type": "c1.xlarge", "storage": 1680, "drives": {"$ref": "#4_ephemeral_drives"}, "discount": 0, "ecu": 20, "num_drives": 4, "memory": 7, "cpu": 8, "utility": 7},
 		{"instance_type": "c3.2xlarge", "storage": 160, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 28, "num_drives": 2, "memory": 15, "cpu": 8, "utility": 3.2},
 		{"instance_type": "c3.4xlarge", "storage": 320, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 55, "num_drives": 2, "memory": 30, "cpu": 16, "utility": 6.4},
 		{"instance_type": "c3.8xlarge", "storage": 640, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 108, "num_drives": 2, "memory": 60, "cpu": 32, "utility": 12.8},

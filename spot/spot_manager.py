@@ -16,24 +16,23 @@ import boto.ec2
 import boto.vpc
 from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
-from boto.ec2.spotpricehistory import SpotPriceHistory
 from boto.utils import ISO8601
-
 from mo_collections import UniqueIndex
 from mo_dots import unwrap, coalesce, wrap, listwrap, FlatList, Data
-from mo_dots.objects import datawrap
 from mo_files import File
 from mo_kwargs import override
 from mo_logs import Log, startup, Except, constants
-from mo_logs.startup import SingleInstance
 from mo_math import Math, MAX
 from mo_math import SUM
 from mo_threads import Lock, Thread, Till
 from mo_threads import Signal
-from mo_threads.threads import MAIN_THREAD
 from mo_times import MINUTE, Date, Duration, Timer
-from mo_times.durations import DAY, WEEK, SECOND, HOUR
 from pyLibrary import convert
+
+from mo_dots.objects import datawrap
+from mo_logs.startup import SingleInstance
+from mo_threads.threads import MAIN_THREAD
+from mo_times.durations import DAY, WEEK, SECOND, HOUR
 from pyLibrary.meta import cache, new_instance
 from pyLibrary.queries import jx, expressions
 
@@ -451,9 +450,9 @@ class SpotManager(object):
                         pending = UniqueIndex(("id",), data=pending)
                         pending = pending | self.net_new_spot_requests
 
-                if give_up:
-                    self.ec2_conn.cancel_spot_instance_requests(request_ids=give_up.id)
-                    Log.note("Cancelled spot requests {{spots}}, {{reasons}}", spots=give_up.id, reasons=give_up.status.code)
+                    if give_up:
+                        self.ec2_conn.cancel_spot_instance_requests(request_ids=give_up.id)
+                        Log.note("Cancelled spot requests {{spots}}, {{reasons}}", spots=give_up.id, reasons=give_up.status.code)
 
                 if not pending and not time_to_stop_trying and self.done_spot_requests:
                     Log.note("No more pending spot requests")
@@ -502,7 +501,10 @@ class SpotManager(object):
 
         # GENERIC BLOCK DEVICE MAPPING
         for dev, dev_settings in kwargs.block_device_map.items():
-            block_device_map[dev] = BlockDeviceType(**dev_settings)
+            block_device_map[dev] = BlockDeviceType(
+                delete_on_termination=True,
+                **dev_settings
+            )
 
         kwargs.block_device_map = block_device_map
 

@@ -65,7 +65,7 @@ class ETL(InstanceManager):
                     try:
                         self._update_ubuntu_packages()
                     except Exception as e:
-                        Log.warning("Can not setup {{instance}}, type={{type}}", instance=instance.id, type=instance.type, cause=e)
+                        Log.warning("Can not setup {{instance}}, type={{type}}", instance=instance.id, type=instance.instance_type, cause=e)
                         return
                     Log.note("setup etl on {{instance}}", instance=instance.id)
                     self._setup_etl_code()
@@ -138,6 +138,11 @@ class ETL(InstanceManager):
             sudo("pip install boto")
             sudo("pip install requests")
             sudo("pip install taskcluster")
+            sudo("apt-get install -y python-dev")  # REQUIRED FOR psutil
+            sudo("apt-get install -y build-essential")  # REQUIRED FOR psutil
+            sudo("pip install psutil")
+            sudo("pip install pympler")
+
             Log.note("8")
             sudo("apt-get -y install python-psycopg2")
 

@@ -51,9 +51,9 @@ class ESSpot(InstanceManager):
             Log.note("setup {{instance}}", instance=instance.id)
             with hide('output'):
                 self._config_fabric(instance)
-                self._install_es(gigabytes)
                 self._install_indexer()
                 self._install_supervisor()
+                self._install_es(gigabytes)
                 self._start_supervisor()
 
     def teardown(
@@ -212,6 +212,7 @@ class ESSpot(InstanceManager):
 
         with cd("/home/ec2-user/ActiveData-ETL/"):
             run("git checkout push-to-es")
+            sudo("yum -y install gcc")  # REQUIRED FOR psutil
             sudo("pip install -r requirements.txt")
 
         put("~/private_active_data_etl.json", "/home/ec2-user/private.json")

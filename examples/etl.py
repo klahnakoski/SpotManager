@@ -133,6 +133,7 @@ class ETL(InstanceManager):
             run("git checkout etl")
             # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
             sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
+            sudo("pip install future")
             sudo("pip install BeautifulSoup")
             sudo("pip install MozillaPulse")
             sudo("pip install boto")

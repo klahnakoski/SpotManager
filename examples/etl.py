@@ -143,6 +143,7 @@ class ETL(InstanceManager):
             sudo("apt-get install -y build-essential")  # REQUIRED FOR psutil
             sudo("pip install psutil")
             sudo("pip install pympler")
+            sudo("pip install -r requirements.txt")
 
             Log.note("8")
             sudo("apt-get -y install python-psycopg2")

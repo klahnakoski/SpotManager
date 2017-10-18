@@ -219,11 +219,16 @@ class ESSpot(InstanceManager):
 
     def _install_python(self):
         Log.note("Install Python at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
-        if not fabric_files.exists("/usr/bin/pip"):
-            sudo("yum -y install python27")
-            sudo("sudo easy_install pip")
-            sudo("ln -s /usr/local/bin/pip /usr/bin/pip")
+        if fabric_files.exists("/usr/bin/pip"):
+            with fabric_settings(warn_only=True):
+                pip_version = sudo("pip --version")
+        else:
+            pip_version = ""
 
+        if not pip_version.startswith("pip 9."):
+            sudo("yum -y install python27")
+            sudo("easy_install pip")
+            sudo("pip install --upgrade pip")
 
     def _install_supervisor(self):
         Log.note("Install Supervisor-plus-Cron at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)

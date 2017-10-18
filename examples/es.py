@@ -221,14 +221,9 @@ class ESSpot(InstanceManager):
         Log.note("Install Python at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
         if not fabric_files.exists("/usr/bin/pip"):
             sudo("yum -y install python27")
+            sudo("sudo easy_install pip")
+            sudo("ln -s /usr/local/bin/pip /usr/bin/pip")
 
-            run("rm -fr /home/ec2-user/temp")
-            run("mkdir  /home/ec2-user/temp")
-            with cd("/home/ec2-user/temp"):
-                run("wget https://bootstrap.pypa.io/get-pip.py")
-                sudo("python27 get-pip.py")
-
-                sudo("ln -s /usr/local/bin/pip /usr/bin/pip")
 
     def _install_supervisor(self):
         Log.note("Install Supervisor-plus-Cron at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)

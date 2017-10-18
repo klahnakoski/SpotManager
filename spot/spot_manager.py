@@ -559,7 +559,7 @@ class SpotManager(object):
                                 "edges": ["availability_zone", "instance_type"],
                                 "sort": "timestamp"
                             },
-                            { # MAKE THIS PRICE EFFECTIVE INTO THE PAST, THIS HELPS SPREAD PRICE SPIKES OVER TIME
+                            {  # MAKE THIS PRICE EFFECTIVE INTO THE PAST, THIS HELPS SPREAD PRICE SPIKES OVER TIME
                                 "name": "effective",
                                 "value": {"sub": {"timestamp": self.settings.uptime.duration.seconds}}
                             }

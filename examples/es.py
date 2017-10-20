@@ -230,7 +230,7 @@ class ESSpot(InstanceManager):
             sudo("easy_install pip")
             with fabric_settings(warn_only=True):
                 sudo("rm -f /usr/bin/pip")
-            sudo("ln -s /usr/bin/pip /usr/local/bin/pip")
+            sudo("ln -s /usr/local/bin/pip /usr/bin/pip")
             sudo("pip install --upgrade pip")
 
     def _install_supervisor(self):

@@ -228,6 +228,9 @@ class ESSpot(InstanceManager):
         if not pip_version.startswith("pip 9."):
             sudo("yum -y install python27")
             sudo("easy_install pip")
+            with fabric_settings(warn_only=True):
+                sudo("rm -f /usr/bin/pip")
+            sudo("ln -s /usr/bin/pip /usr/local/bin/pip")
             sudo("pip install --upgrade pip")
 
     def _install_supervisor(self):

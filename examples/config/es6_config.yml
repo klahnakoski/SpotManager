@@ -1,0 +1,35 @@
+node.name: spot_{{id}}
+node.master: false
+node.data: true
+node.ingest: true
+node.attr.zone: spot
+
+cluster.name: active-data
+
+cluster.routing.allocation.awareness.attributes: zone
+cluster.routing.allocation.enable: none
+cluster.routing.allocation.cluster_concurrent_rebalance: 1
+cluster.routing.allocation.node_concurrent_recoveries: 1
+
+
+script.painless.regex.enabled: true
+script.max_compilations_rate: 10000/1m
+
+bootstrap.memory_lock: true
+path.data: /data1
+path.logs: /data1/logs
+
+discovery:
+    ec2:
+        endpoint: us-west-2
+        protocol: https
+
+discovery.zen.minimum_master_nodes: 1
+
+
+http.compression: true
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+http.max_content_length: 1000mb
+
+network.host : _site_

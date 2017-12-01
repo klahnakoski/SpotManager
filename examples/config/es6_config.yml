@@ -4,7 +4,7 @@ node.data: true
 node.ingest: true
 node.attr.zone: spot
 
-cluster.name: active-data
+cluster.name: ActiveData-es6
 
 cluster.routing.allocation.awareness.attributes: zone
 cluster.routing.allocation.enable: none
@@ -23,9 +23,10 @@ discovery:
     ec2:
         endpoint: us-west-2
         protocol: https
+        groups: sg-c69186bb
 
 discovery.zen.minimum_master_nodes: 1
-
+discovery.zen.ping.unicast.hosts: 172.31.1.240
 
 http.compression: true
 http.cors.enabled: true

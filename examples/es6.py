@@ -21,10 +21,8 @@ from mo_kwargs import override
 from mo_logs import Log
 from mo_logs.strings import expand_template
 from mo_math import Math
-from mo_math.randoms import Random
 from mo_threads import Lock
 from spot.instance_manager import InstanceManager
-
 
 JRE = "jre-8u131-linux-x64.rpm"
 LOCAL_JRE = "resources/" + JRE
@@ -96,7 +94,7 @@ class ES6Spot(InstanceManager):
     def _install_es(self, gigabytes, es_version="6.0.0"):
         volumes = self.instance.markup.drives
 
-        if not fabric_files.exists("/usr/local/elasticsearch"):
+        if not fabric_files.exists("/usr/local/elasticsearch/config/elasticsearch.yml"):
             with cd("/home/ec2-user/"):
                 run("mkdir -p temp")
 
@@ -118,7 +116,7 @@ class ES6Spot(InstanceManager):
             with cd('/usr/local/elasticsearch/'):
                 # BE SURE TO MATCH THE PLUGLIN WITH ES VERSION
                 # https://github.com/elasticsearch/elasticsearch-cloud-aws
-                sudo('sudo bin/elasticsearch-plugin install discovery-ec2')
+                sudo('sudo bin/elasticsearch-plugin install -b discovery-ec2')
 
             # REMOVE THESE FILES, WE WILL REPLACE THEM WITH THE CORRECT VERSIONS AT THE END
             sudo("rm -f /usr/local/elasticsearch/config/elasticsearch.yml")
@@ -133,6 +131,7 @@ class ES6Spot(InstanceManager):
                 sudo('yes | sudo mkfs -t ext4 '+k.device)
                 sudo('mkdir '+k.path)
                 sudo('sudo mount '+k.device+' '+k.path)
+                sudo('chown -R ec2-user:ec2-user '+k.path)
 
                 #ADD TO /etc/fstab SO AROUND AFTER REBOOT
                 sudo("sed -i '$ a\\"+k.device+"   "+k.path+"       ext4    defaults,nofail  0   2' /etc/fstab")
@@ -158,38 +157,36 @@ class ES6Spot(InstanceManager):
         sudo("sysctl -p")
 
         # INCREASE FILE HANDLE PERMISSIONS
-        sudo("sed -i '$ a\\ec2-user soft nofile 50000' /etc/security/limits.conf")
-        sudo("sed -i '$ a\\ec2-user hard nofile 100000' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\ec2-user soft nofile 65536' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\ec2-user hard nofile 65536' /etc/security/limits.conf")
         sudo("sed -i '$ a\\ec2-user soft memlock unlimited' /etc/security/limits.conf")
         sudo("sed -i '$ a\\ec2-user hard memlock unlimited' /etc/security/limits.conf")
-        sudo("sed -i '$ a\\root soft nofile 50000' /etc/security/limits.conf")
-        sudo("sed -i '$ a\\root hard nofile 100000' /etc/security/limits.conf")
-        sudo("sed -i '$ a\\root soft memlock unlimited' /etc/security/limits.conf")
-        sudo("sed -i '$ a\\root hard memlock unlimited' /etc/security/limits.conf")
 
         # EFFECTIVE LOGIN TO LOAD CHANGES TO FILE HANDLES
         # sudo("sudo -i -u ec2-user")
 
         if not fabric_files.exists("/data1/logs"):
-            sudo('mkdir /data1/logs')
-            sudo('mkdir /data1/heapdump')
+            run('mkdir /data1/logs')
+            run('mkdir /data1/heapdump')
 
         # COPY CONFIG FILES TO ES DIR
         if not fabric_files.exists("/usr/local/elasticsearch/config/elasticsearch.yml"):
             put("./examples/config/es6_log4j2.properties", '/usr/local/elasticsearch/config/log4j2.properties', use_sudo=True)
 
             jvm = File("./examples/config/es6_jvm.options").read().replace('\r', '')
-            jvm = expand_template(jvm, {"memory": gigabytes})
+            jvm = expand_template(jvm, {"memory": int(gigabytes/2)})
             File("./results/temp/jvm.options").write(jvm)
             put("./results/temp/jvm.options", '/usr/local/elasticsearch/config/jvm.options', use_sudo=True)
 
             yml = File("./examples/config/es6_config.yml").read().replace("\r", "")
             yml = expand_template(yml, {
-                "id": Random.hex(length=8),
+                "id": self.instance.ip_address,
                 "data_paths": ",".join("/data" + text_type(i + 1) for i, _ in enumerate(volumes))
             })
             File("./results/temp/elasticsearch.yml").write(yml)
             put("./results/temp/elasticsearch.yml", '/usr/local/elasticsearch/config/elasticsearch.yml', use_sudo=True)
+
+        sudo("chown -R ec2-user:ec2-user /usr/local/elasticsearch")
 
     def _install_indexer(self):
         Log.note("Install indexer at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)

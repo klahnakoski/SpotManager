@@ -248,7 +248,7 @@ class ES6Spot(InstanceManager):
                 Log.error("problem with install of {{lib}}", lib=lib_name)
 
     def _start_supervisor(self):
-        put("./examples/config/es_supervisor.conf", "/etc/supervisord.conf", use_sudo=True)
+        put("./examples/config/es6_supervisor.conf", "/etc/supervisord.conf", use_sudo=True)
 
         # START DAEMON (OR THROW ERROR IF RUNNING ALREADY)
         with fabric_settings(warn_only=True):

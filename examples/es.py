@@ -140,7 +140,7 @@ class ESSpot(InstanceManager):
         for i, k in enumerate(volumes):
             if not fabric_files.exists(k.path):
                 with fabric_settings(warn_only=True):
-                    sudo('sudo mount '+k.device)
+                    sudo('sudo umount '+k.device)
 
                 sudo('yes | sudo mkfs -t ext4 '+k.device)
                 sudo('mkdir '+k.path)

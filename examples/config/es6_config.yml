@@ -33,4 +33,4 @@ http.cors.enabled: true
 http.cors.allow-origin: "*"
 http.max_content_length: 1000mb
 
-network.host : _site_
+network.host : _site_, _local_

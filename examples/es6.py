@@ -55,8 +55,8 @@ class ES6Spot(InstanceManager):
             with hide('output'):
                 self._config_fabric(instance)
                 self._install_indexer()
-                self._install_supervisor()
                 self._install_es(gigabytes)
+                self._install_supervisor()
                 self._start_supervisor()
 
     def teardown(
@@ -157,13 +157,16 @@ class ES6Spot(InstanceManager):
         sudo("sysctl -p")
 
         # INCREASE FILE HANDLE PERMISSIONS
-        sudo("sed -i '$ a\\ec2-user soft nofile 65536' /etc/security/limits.conf")
-        sudo("sed -i '$ a\\ec2-user hard nofile 65536' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\root soft nofile 100000' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\root hard nofile 100000' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\root soft memlock unlimited' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\root hard memlock unlimited' /etc/security/limits.conf")
+
+        sudo("sed -i '$ a\\ec2-user soft nofile 100000' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\ec2-user hard nofile 100000' /etc/security/limits.conf")
         sudo("sed -i '$ a\\ec2-user soft memlock unlimited' /etc/security/limits.conf")
         sudo("sed -i '$ a\\ec2-user hard memlock unlimited' /etc/security/limits.conf")
 
-        # EFFECTIVE LOGIN TO LOAD CHANGES TO FILE HANDLES
-        # sudo("sudo -i -u ec2-user")
 
         if not fabric_files.exists("/data1/logs"):
             run('mkdir /data1/logs')
@@ -244,7 +247,7 @@ class ES6Spot(InstanceManager):
         """
         with fabric_settings(warn_only=True):
             result = sudo("yum "+install+" -y "+lib_name)
-            if result.return_code != 0 and result.find("already installed and latest version")==-1:
+            if result.return_code != 0 and result.find("already installed and latest version") == -1:
                 Log.error("problem with install of {{lib}}", lib=lib_name)
 
     def _start_supervisor(self):
@@ -256,3 +259,9 @@ class ES6Spot(InstanceManager):
 
         sudo("supervisorctl reread")
         sudo("supervisorctl update")
+
+        # SUPERVISOR ONLY USES THE NEW ec2-user LIMITS IF IT IS ENTIRELY SHUTDOWN, THEN RESTARTED
+        # result = run("ps -o pid -C supervisord")
+        # for pid in result.split('\n')[1:]:
+        #     sudo("kill -SIGINT "+pid)
+        #     sudo("supervisord -c /etc/supervisord.conf")

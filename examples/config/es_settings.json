@@ -31,11 +31,6 @@
 		{"path":"/data2", "device":"/dev/sdc"},
 		{"path":"/data3", "device":"/dev/sdd"}
 	],
-	"3_ephemeral_drives_start_at_c":[
-		{"path":"/data1", "device":"/dev/sdc"},
-		{"path":"/data2", "device":"/dev/sdd"},
-		{"path":"/data3", "device":"/dev/sde"}
-	],
 	"4_ephemeral_drives":[
 		{"path":"/data1", "device":"/dev/sdb"},
 		{"path":"/data2", "device":"/dev/sdc"},

@@ -24,6 +24,8 @@ from mo_math.randoms import Random
 from mo_threads import Lock
 from spot.instance_manager import InstanceManager
 
+JRE = "jre-8u131-linux-x64.rpm"
+LOCAL_JRE = "resources/" + JRE
 
 class ESSpot(InstanceManager):
     """
@@ -52,8 +54,8 @@ class ESSpot(InstanceManager):
             with hide('output'):
                 self._config_fabric(instance)
                 self._install_indexer()
-                self._install_supervisor()
                 self._install_es(gigabytes)
+                self._install_supervisor()
                 self._start_supervisor()
 
     def teardown(
@@ -108,8 +110,7 @@ class ESSpot(InstanceManager):
         if not fabric_files.exists("/usr/local/elasticsearch"):
             with cd("/home/ec2-user/"):
                 run("mkdir -p temp")
-            JRE = "jre-8u131-linux-x64.rpm"
-            LOCAL_JRE = "resources/" + JRE
+
             if not File(LOCAL_JRE).exists:
                 Log.error("Expecting {{file}} on manager to spread to ES instances", file=LOCAL_JRE)
             with cd("/home/ec2-user/temp"):
@@ -149,10 +150,10 @@ class ESSpot(InstanceManager):
                 #ADD TO /etc/fstab SO AROUND AFTER REBOOT
                 sudo("sed -i '$ a\\"+k.device+"   "+k.path+"       ext4    defaults,nofail  0   2' /etc/fstab")
 
-        #TEST IT IS WORKING
+        # TEST IT IS WORKING
         sudo('mount -a')
 
-        #INCREASE THE FILE HANDLE LIMITS
+        # INCREASE THE FILE HANDLE LIMITS
         with cd("/home/ec2-user/"):
             File("./results/temp/sysctl.conf").delete()
             get("/etc/sysctl.conf", "./results/temp/sysctl.conf", use_sudo=True)
@@ -168,12 +169,13 @@ class ESSpot(InstanceManager):
         sudo("sysctl -p")
 
         # INCREASE FILE HANDLE PERMISSIONS
-        sudo("sed -i '$ a\\ec2-user soft nofile 50000' /etc/security/limits.conf")
-        sudo("sed -i '$ a\\ec2-user hard nofile 100000' /etc/security/limits.conf")
-        sudo("sed -i '$ a\\ec2-user memlock unlimited' /etc/security/limits.conf")
         sudo("sed -i '$ a\\root soft nofile 50000' /etc/security/limits.conf")
         sudo("sed -i '$ a\\root hard nofile 100000' /etc/security/limits.conf")
         sudo("sed -i '$ a\\root memlock unlimited' /etc/security/limits.conf")
+
+        sudo("sed -i '$ a\\ec2-user soft nofile 50000' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\ec2-user hard nofile 100000' /etc/security/limits.conf")
+        sudo("sed -i '$ a\\ec2-user memlock unlimited' /etc/security/limits.conf")
 
         # EFFECTIVE LOGIN TO LOAD CHANGES TO FILE HANDLES
         # sudo("sudo -i -u ec2-user")

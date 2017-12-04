@@ -128,6 +128,9 @@ class ES6Spot(InstanceManager):
         # MOUNT AND FORMAT THE EBS VOLUMES (list with `lsblk`)
         for i, k in enumerate(volumes):
             if not fabric_files.exists(k.path):
+                with fabric_settings(warn_only=True):
+                    sudo('sudo umount '+k.device)
+
                 sudo('yes | sudo mkfs -t ext4 '+k.device)
                 sudo('mkdir '+k.path)
                 sudo('sudo mount '+k.device+' '+k.path)
@@ -259,9 +262,3 @@ class ES6Spot(InstanceManager):
 
         sudo("supervisorctl reread")
         sudo("supervisorctl update")
-
-        # SUPERVISOR ONLY USES THE NEW ec2-user LIMITS IF IT IS ENTIRELY SHUTDOWN, THEN RESTARTED
-        # result = run("ps -o pid -C supervisord")
-        # for pid in result.split('\n')[1:]:
-        #     sudo("kill -SIGINT "+pid)
-        #     sudo("supervisord -c /etc/supervisord.conf")

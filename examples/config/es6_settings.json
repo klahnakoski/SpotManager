@@ -175,7 +175,7 @@
 		"log": [
 			{
 				"class": "logging.handlers.RotatingFileHandler",
-				"filename": "examples/logs/examples_es.log",
+				"filename": "examples/logs/es6.log",
 				"maxBytes": 10000000,
 				"backupCount": 10,
 				"encoding": "utf8"
@@ -184,7 +184,7 @@
 				"log_type": "ses",
 				"from_address": "klahnakoski@mozilla.com",
 				"to_address": "klahnakoski@mozilla.com",
-				"subject": "[ALERT][Manager] Problem in ES Spot",
+				"subject": "[ALERT][Manager] Problem in ES6 Spot",
 				"$ref": "file://~/private.json#aws_credentials"
 			},
 			{

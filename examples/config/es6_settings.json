@@ -10,7 +10,7 @@
 		"bid_percentile": 0.95     //THE PROBABILITY WE ACHIEVE OUR UPTIME
 	},
 	"price_file": "resources/aws/prices.json",
-	"run_interval": "10minute",  //HOW LONG BEFORE NEXT RUN
+	"run_interval": "10minute",    //HOW LONG BEFORE NEXT RUN
 	"availability_zone": "us-west-2c",
 	"product":"Linux/UNIX (Amazon VPC)",
 	"aws": {
@@ -130,12 +130,12 @@
 			"placement_group": "es5",
 			"block_device_map": null,
 			"instance_profile_arn": null,
-			"instance_profile_name": "active-data",
+			"instance_profile_name": "ActiveData-ES-Node",
 			"security_group_ids": null,
 			"ebs_optimized": false,
 			"network_interfaces": {
 				"subnet_id": "subnet-137a7748",
-				"groups": ["sg-bb542fde"],
+				"groups": ["sg-c69186bb"],
 				"associate_public_ip_address": true
 			},
 			"dry_run": false

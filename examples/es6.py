@@ -112,6 +112,7 @@ class ES6Spot(InstanceManager):
             with cd("/home/ec2-user/"):
                 run('wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-'+es_version+'.tar.gz')
                 run('tar zxfv elasticsearch-'+es_version+'.tar.gz')
+                sudo("rm -fr /usr/local/elasticsearch", warn_only=True)
                 sudo('mkdir /usr/local/elasticsearch')
                 sudo('cp -R elasticsearch-'+es_version+'/* /usr/local/elasticsearch/')
 

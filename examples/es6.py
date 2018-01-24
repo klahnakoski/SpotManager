@@ -100,12 +100,14 @@ class ES6Spot(InstanceManager):
 
             if not File(LOCAL_JRE).exists:
                 Log.error("Expecting {{file}} on manager to spread to ES instances", file=LOCAL_JRE)
-            with cd("/home/ec2-user/temp"):
-                run('rm -f '+JRE)
-                put("resources/"+JRE, JRE)
-                sudo("rpm -i "+JRE)
-                sudo("alternatives --install /usr/bin/java java /usr/java/default/bin/java 20000")
-                run("export JAVA_HOME=/usr/java/default")
+            response = run("java -version", warn_only=True)
+            if "Java(TM) SE Runtime Environment" not in response:
+                with cd("/home/ec2-user/temp"):
+                    run('rm -f '+JRE)
+                    put("resources/"+JRE, JRE)
+                    sudo("rpm -i "+JRE)
+                    sudo("alternatives --install /usr/bin/java java /usr/java/default/bin/java 20000")
+                    run("export JAVA_HOME=/usr/java/default")
 
             with cd("/home/ec2-user/"):
                 run('wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-'+es_version+'.tar.gz')

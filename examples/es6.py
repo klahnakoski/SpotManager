@@ -91,7 +91,7 @@ class ES6Spot(InstanceManager):
         env.host_string = instance.ip_address
         env.abort_exception = Log.error
 
-    def _install_es(self, gigabytes, es_version="6.1.2"):
+    def _install_es(self, gigabytes, es_version="6.2.3"):
         volumes = self.instance.markup.drives
 
         if not fabric_files.exists("/usr/local/elasticsearch/config/elasticsearch.yml"):

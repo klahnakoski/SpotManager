@@ -1,5 +1,5 @@
 {
-	"budget": 2.00,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"budget": 1.00,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.02,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 50,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"max_requests_per_type": 10,
@@ -17,22 +17,43 @@
 		"$ref": "//~/private.json#aws_credentials"
 	},
 	"utility":[
-		{"instance_type": "m3.medium", "ecu": 3, "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 1},
-		{"instance_type": "m3.large", "ecu": 6.5, "num_drives": 1, "memory": 7.5, "cpu": 2, "utility": 2},
-		{"instance_type": "m3.xlarge", "ecu": 13, "num_drives": 2, "memory": 15, "cpu": 4, "utility": 4},
-		{"instance_type": "m3.2xlarge", "ecu": 26, "num_drives": 2, "memory": 30, "cpu": 8, "utility": 8},
-
 		{"instance_type": "c4.large", "cpu": 2, "utility": 1},
 		{"instance_type": "c4.xlarge", "cpu": 4, "utility": 4},
 		{"instance_type": "c4.2xlarge", "cpu": 8, "utility": 8},
 		{"instance_type": "c4.4xlarge", "cpu": 16, "utility": 16},
 		{"instance_type": "c4.8xlarge", "cpu": 36, "utility": 36},
 
-		{"instance_type": "c3.large", "ecu": 7, "num_drives": 2, "memory": 3.75, "cpu": 2, "utility": 2},
-		{"instance_type": "c3.xlarge", "ecu": 14, "num_drives": 2, "memory": 7.5, "cpu": 4, "utility": 4},
-		{"instance_type": "c3.2xlarge", "ecu": 28, "num_drives": 2, "memory": 15, "cpu": 8, "utility": 8},
-		{"instance_type": "c3.4xlarge", "ecu": 55, "num_drives": 2, "memory": 30, "cpu": 16, "utility": 16},
-		{"instance_type": "c3.8xlarge", "ecu": 108, "num_drives": 2, "memory": 60, "cpu": 32, "utility": 32},
+		{"instance_type": "c5.large", "cpu": 2, "utility": 1},
+		{"instance_type": "c5.xlarge", "cpu": 4, "utility": 4},
+		{"instance_type": "c5.2xlarge", "cpu": 8, "utility": 8},
+		{"instance_type": "c5.4xlarge", "cpu": 16, "utility": 16},
+		{"instance_type": "c5.9xlarge", "cpu": 36, "utility": 36},
+		{"instance_type": "c5.18xlarge", "cpu": 72, "utility": 72},
+
+		{"instance_type": "d2.xlarge", "ecu": 14, "num_drives": 3, "memory": 30.5, "cpu": 4, "utility": 4},
+		{"instance_type": "d2.2xlarge", "ecu": 28, "num_drives": 6, "memory": 61, "cpu": 8, "utility": 8},
+		{"instance_type": "d2.4xlarge", "ecu": 56, "num_drives": 12, "memory": 122, "cpu": 16, "utility": 16},
+		{"instance_type": "d2.8xlarge", "ecu": 116, "num_drives": 24, "memory": 244, "cpu": 36, "utility": 36},
+
+		{"instance_type": "h1.2xlarge", "num_drives": 3, "memory": 32, "cpu": 8, "utility": 8},
+		{"instance_type": "h1.4xlarge", "num_drives": 6, "memory": 64, "cpu": 16, "utility": 16},
+		{"instance_type": "h1.8xlarge", "num_drives": 12, "memory": 128, "cpu": 32, "utility": 32},
+		{"instance_type": "h1.16xlarge", "num_drives": 24, "memory": 256, "cpu": 64, "utility": 64},
+
+//		{"instance_type": "m1.small", "ecu": 3, "num_drives": 1, "memory": 1.7, "cpu": 1, "utility": 1},  # TOO SMALL
+		{"instance_type": "m1.medium", "ecu": 3, "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 1},
+		{"instance_type": "m1.large", "ecu": 6.5, "num_drives": 2, "memory": 7.5, "cpu": 2, "utility": 2},
+		{"instance_type": "m1.xlarge", "ecu": 13, "num_drives": 4, "memory": 15, "cpu": 4, "utility": 4},
+
+		{"instance_type": "m2.xlarge",  "num_drives": 1, "memory": 17.1, "cpu": 2, "utility": 2},
+		{"instance_type": "m2.2xlarge",  "num_drives": 1, "memory": 34, "cpu": 4, "utility": 4},
+		{"instance_type": "m2.4xlarge", "num_drives": 2, "memory": 68, "cpu": 8, "utility": 8},
+
+		{"instance_type": "m3.medium", "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 1},
+		{"instance_type": "m3.large", "num_drives": 1, "memory": 7.5, "cpu": 2, "utility": 2},
+		{"instance_type": "m3.xlarge", "num_drives": 2, "memory": 15, "cpu": 4, "utility": 4},
+		{"instance_type": "m3.2xlarge",  "num_drives": 2, "memory": 30, "cpu": 8, "utility": 8},
+
 
 		{"instance_type": "r3.large", "ecu": 6.5, "num_drives": 1, "memory": 15.25, "cpu": 2, "utility": 2},
 		{"instance_type": "r3.xlarge", "ecu": 13, "num_drives": 1, "memory": 30.5, "cpu": 4, "utility": 4},
@@ -40,10 +61,7 @@
 		{"instance_type": "r3.4xlarge", "ecu": 52, "num_drives": 1, "memory": 122, "cpu": 16, "utility": 16},
 		{"instance_type": "r3.8xlarge", "ecu": 104, "num_drives": 2, "memory": 244, "cpu": 32, "utility": 32},
 
-		{"instance_type": "d2.xlarge", "ecu": 14, "num_drives": 3, "memory": 30.5, "cpu": 4, "utility": 4},
-		{"instance_type": "d2.2xlarge", "ecu": 28, "num_drives": 6, "memory": 61, "cpu": 8, "utility": 8},
-		{"instance_type": "d2.4xlarge", "ecu": 56, "num_drives": 12, "memory": 122, "cpu": 16, "utility": 16},
-		{"instance_type": "d2.8xlarge", "ecu": 116, "num_drives": 24, "memory": 244, "cpu": 36, "utility": 36}
+
 	],
 	"ec2": {
 		"request": {

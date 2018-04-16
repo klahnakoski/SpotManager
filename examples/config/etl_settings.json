@@ -98,8 +98,8 @@
 			"security_group_ids": null,
 			"ebs_optimized": false,
 			"network_interfaces": {
-				"subnet_id": "subnet-b7c137ee",
-				"groups": ["sg-bb542fde"],
+				"subnet_id": "subnet-5750c90d",  // active-data-etl subnet-5750c90d
+				"groups": ["sg-a8c758d6"],   // ActiveData ETL
 				"associate_public_ip_address": true
 			},
 			"dry_run": false

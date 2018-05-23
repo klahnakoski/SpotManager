@@ -54,7 +54,7 @@ class ES6Spot(InstanceManager):
             Log.note("setup {{instance}}", instance=instance.id)
             with hide('output'):
                 self._config_fabric(instance)
-                self._install_indexer()
+                self._install_pypy_indexer()
                 self._install_es(gigabytes)
                 self._install_supervisor()
                 self._start_supervisor()
@@ -197,7 +197,7 @@ class ES6Spot(InstanceManager):
 
         sudo("chown -R ec2-user:ec2-user /usr/local/elasticsearch")
 
-    def _install_indexer(self):
+    def _install_python_indexer(self):
         Log.note("Install indexer at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
         self._install_python()
 
@@ -228,6 +228,39 @@ class ES6Spot(InstanceManager):
                 sudo("rm -f /usr/bin/pip")
             sudo("ln -s /usr/local/bin/pip /usr/bin/pip")
             sudo("pip install --upgrade pip")
+
+    def _install_pypy(self):
+        Log.note("Install pypy at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
+
+        if fabric_files.exists("~/pypy/bin/pip"):
+            return
+
+        with cd("/home/ec2-user/"):
+            run('wget https://bitbucket.org/squeaky/portable-pypy/downloads/pypy-6.0.0-linux_x86_64-portable.tar.bz2')
+            run('tar jxf pypy-6.0.0-linux_x86_64-portable.tar.bz2')
+            sudo("mv pypy-6.0.0-linux_x86_64-portable pypy")
+
+        run("rm -fr /home/ec2-user/temp", warn_only=True)
+        run("mkdir /home/ec2-user/temp")
+        with cd("/home/ec2-user/temp"):
+            run("wget https://bootstrap.pypa.io/get-pip.py")
+            run("~/pypy/bin/pypy get-pip.py")
+
+    def _install_pypy_indexer(self):
+        Log.note("Install indexer at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
+        self._install_pypy()
+
+        if not fabric_files.exists("/home/ec2-user/ActiveData-ETL/"):
+            with cd("/home/ec2-user"):
+                sudo("yum -y install git")
+                run("git clone https://github.com/klahnakoski/ActiveData-ETL.git")
+
+        with cd("/home/ec2-user/ActiveData-ETL/"):
+            run("git checkout push-to-es6")
+            sudo("yum -y install gcc")  # REQUIRED FOR psutil
+            sudo("~/pypy/bin/pip install -r requirements.txt")
+
+        put("~/private_active_data_etl.json", "/home/ec2-user/private.json")
 
     def _install_supervisor(self):
         Log.note("Install Supervisor-plus-Cron at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)

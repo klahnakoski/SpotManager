@@ -65,7 +65,7 @@
 		{"instance_type": "c3.8xlarge", "storage": 640, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 108, "num_drives": 2, "memory": 60, "cpu": 32, "utility": 12.8},
 		{"instance_type": "c3.large", "storage": 32, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 7, "num_drives": 2, "memory": 3.75, "cpu": 2, "utility": 0.64},
 		{"instance_type": "c3.xlarge", "storage": 80, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 14, "num_drives": 2, "memory": 7.5, "cpu": 4, "utility": 1.6},
-		{"instance_type": "cc2.8xlarge", "storage": 3360, "drives": {"$ref": "#4_ephemeral_drives"}, "discount": 0, "ecu": 88, "num_drives": 4, "memory": 60.5, "cpu": 32, "utility": 60},
+//		{"instance_type": "cc2.8xlarge", "storage": 3360, "drives": {"$ref": "#4_ephemeral_drives"}, "discount": 0, "ecu": 88, "num_drives": 4, "memory": 60.5, "cpu": 32, "utility": 60},
 //		{"instance_type": "cg1.4xlarge", "storage": 1680, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 33.5, "num_drives": 2, "memory": 22.5, "cpu": 16, "utility": 22.5},
 		{"instance_type": "cr1.8xlarge", "storage": 240, "drives": {"$ref": "#2_ephemeral_drives"}, "discount": 0, "ecu": 88, "num_drives": 2, "memory": 244, "cpu": 32, "utility": 4.8},
 		{"instance_type": "d2.2xlarge", "storage": 12000, "drives": {"$ref": "#6_ephemeral_drives"}, "discount": 0, "ecu": 28, "num_drives": 6, "memory": 61, "cpu": 8, "utility": 60},

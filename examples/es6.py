@@ -27,6 +27,10 @@ from spot.instance_manager import InstanceManager
 JRE = "jre-8u131-linux-x64.rpm"
 LOCAL_JRE = "resources/" + JRE
 
+PYPY_DIR = "pypy-6.0.0-linux_x86_64-portable"
+PYPY_BZ2 = "pypy-6.0.0-linux_x86_64-portable.tar.bz2"
+LOCAL_PYPY = "resources/" + PYPY_BZ2
+
 
 class ES6Spot(InstanceManager):
     """
@@ -104,7 +108,7 @@ class ES6Spot(InstanceManager):
             if "Java(TM) SE Runtime Environment" not in response:
                 with cd("/home/ec2-user/temp"):
                     run('rm -f '+JRE)
-                    put("resources/"+JRE, JRE)
+                    put(LOCAL_JRE, JRE)
                     sudo("rpm -i "+JRE)
                     sudo("alternatives --install /usr/bin/java java /usr/java/default/bin/java 20000")
                     run("export JAVA_HOME=/usr/java/default")
@@ -232,13 +236,16 @@ class ES6Spot(InstanceManager):
     def _install_pypy(self):
         Log.note("Install pypy at {{instance_id}} ({{address}})", instance_id=self.instance.id, address=self.instance.ip_address)
 
+        if not File(LOCAL_PYPY).exists:
+            Log.error("Expecting {{file}} on manager to spread to ES instances", file=LOCAL_PYPY)
+
         if fabric_files.exists("~/pypy/bin/pip"):
             return
 
         with cd("/home/ec2-user/"):
-            run('wget https://bitbucket.org/squeaky/portable-pypy/downloads/pypy-6.0.0-linux_x86_64-portable.tar.bz2')
-            run('tar jxf pypy-6.0.0-linux_x86_64-portable.tar.bz2')
-            sudo("mv pypy-6.0.0-linux_x86_64-portable pypy")
+            put(LOCAL_PYPY, PYPY_BZ2)
+            run('tar jxf ' + PYPY_BZ2)
+            run("mv " + PYPY_DIR + " pypy")
 
         run("rm -fr /home/ec2-user/temp", warn_only=True)
         run("mkdir /home/ec2-user/temp")
@@ -257,8 +264,8 @@ class ES6Spot(InstanceManager):
 
         with cd("/home/ec2-user/ActiveData-ETL/"):
             run("git checkout push-to-es6")
-            sudo("yum -y install gcc")  # REQUIRED FOR psutil
-            sudo("~/pypy/bin/pip install -r requirements.txt")
+            # sudo("yum -y install gcc")  # REQUIRED FOR psutil
+            run("~/pypy/bin/pip install -r requirements.txt")
 
         put("~/private_active_data_etl.json", "/home/ec2-user/private.json")
 

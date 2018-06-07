@@ -132,18 +132,22 @@ class ES6Spot(InstanceManager):
 
         self.conn = self.instance.connection
 
-        # MOUNT AND FORMAT THE EBS VOLUMES (list with `lsblk`)
+        # MOUNT AND FORMAT THE VOLUMES (list with `lsblk`)
         for i, k in enumerate(volumes):
             if not fabric_files.exists(k.path):
                 with fabric_settings(warn_only=True):
                     sudo('sudo umount '+k.device)
 
                 sudo('yes | sudo mkfs -t ext4 '+k.device)
+
+                # ES AND JOURNALLING DO NOT MIX
+                sudo('tune2fs -o journal_data_writeback '+k.device)
+                sudo('tune2fs -O ^has_journal '+k.device)
                 sudo('mkdir '+k.path)
                 sudo('sudo mount '+k.device+' '+k.path)
                 sudo('chown -R ec2-user:ec2-user '+k.path)
 
-                #ADD TO /etc/fstab SO AROUND AFTER REBOOT
+                # ADD TO /etc/fstab SO AROUND AFTER REBOOT
                 sudo("sed -i '$ a\\"+k.device+"   "+k.path+"       ext4    defaults,nofail  0   2' /etc/fstab")
 
         # TEST IT IS WORKING

@@ -217,7 +217,7 @@ class ES6Spot(InstanceManager):
         with cd("/home/ec2-user/ActiveData-ETL/"):
             run("git checkout push-to-es6")
             sudo("yum -y install gcc")  # REQUIRED FOR psutil
-            sudo("pip install -r requirements.txt")
+            run("~/pypy/bin/pypy -m pip install -r requirements.txt")
 
         put("~/private_active_data_etl.json", "/home/ec2-user/private.json")
 

@@ -21,7 +21,7 @@ script.max_compilations_rate: 10000/1m
 
 
 bootstrap.memory_lock: true
-path.data: /data1
+path.data: {{data_paths}}
 path.logs: /data1/logs
 
 

@@ -74,7 +74,7 @@ class ES6Spot(InstanceManager):
 
             # ASK NICELY TO STOP Elasticsearch PROCESS
             with fabric_settings(warn_only=True):
-                sudo("supervisorctl stop es")
+                sudo("supervisorctl stop es:*")
 
             # ASK NICELY TO STOP "supervisord" PROCESS
             with fabric_settings(warn_only=True):

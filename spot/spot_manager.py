@@ -466,7 +466,8 @@ class SpotManager(object):
             Log.note("life cycle watcher has stopped")
 
         # Log.warning("lifecycle watcher is disabled")
-        self.watcher = Thread.run("lifecycle watcher", life_cycle_watcher)
+        timeout = Till(seconds=self.settings.run_interval.seconds - 60)
+        self.watcher = Thread.run("lifecycle watcher", life_cycle_watcher, please_stop=timeout)
 
     def _get_valid_availability_zones(self):
         subnets = list(self.vpc_conn.get_all_subnets(subnet_ids=self.settings.ec2.request.network_interfaces.subnet_id))

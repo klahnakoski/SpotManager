@@ -44,7 +44,12 @@ class ETL(InstanceManager):
     def required_utility(self):
         queue = aws.Queue(self.settings.work_queue)
         pending = len(queue)
-        return max(self.settings.minimum_utility, Math.ceiling(pending / 30))
+
+        tod_minimum = None
+        if Date.now().hour not in [4, 5, 6, 7, 8, 9, 10, 11]:
+            tod_minimum = 100
+
+        return max(self.settings.minimum_utility, tod_minimum, Math.ceiling(pending / 30))
 
     def setup(
         self,

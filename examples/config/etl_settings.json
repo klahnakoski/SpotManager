@@ -1,6 +1,5 @@
 {
 	"budget": 3.00,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
-	"minimum_utility": 10,   // HOW MUCH UTILITY CAN REMAIN IDLE
 	"max_utility_price": 0.02,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 50,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"max_requests_per_type": 10,
@@ -115,7 +114,7 @@
 		"grcov": {
 			"platform": "linux-x86_64"
 		},
-		"minimum_utility": 2,
+		"minimum_utility": 10,   // HOW MUCH UTILITY CAN REMAIN IDLE
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 			"user": "ubuntu",

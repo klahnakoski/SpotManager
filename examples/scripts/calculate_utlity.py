@@ -9,7 +9,7 @@
 from __future__ import division
 from __future__ import unicode_literals
 
-from pyLibrary.queries import jx
+from jx_python import jx
 
 from mo_dots import wrap, Null
 from mo_files import File

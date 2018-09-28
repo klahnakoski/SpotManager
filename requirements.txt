@@ -3,4 +3,5 @@ boto
 requests
 # ecdsa required by fabric (but not installed by pip)
 ecdsa
-fabric
+fabric2
+invoke

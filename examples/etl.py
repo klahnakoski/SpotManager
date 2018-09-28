@@ -9,21 +9,13 @@
 from __future__ import division
 from __future__ import unicode_literals
 
-from contextlib import contextmanager
-
-from fabric2 import Connection as _Connection
-from invoke.util import cd
-from mo_dots import set_default
-
-from mo_files import File, TempFile
-from mo_future import text_type
+from mo_fabric import Connection
+from mo_files import File
 from mo_kwargs import override
 from mo_logs import Log, constants, startup
-from mo_logs.strings import between, quote
+from mo_logs.strings import between
 from mo_math import Math
-from mo_threads import Thread, Till
 from mo_times import Date
-from mo_times import Duration
 from pyLibrary import aws
 from spot.instance_manager import InstanceManager
 
@@ -58,22 +50,14 @@ class ETL(InstanceManager):
         if not self.settings.setup_timeout:
             Log.error("expecting instance.setup_timeout to prevent setup from locking")
 
-        def worker(instance, utility, please_stop):
-            with Connection(host=instance.ip_address, kwargs=self.settings.connect) as c:
-                cpu_count = int(round(utility.cpu))
+        Log.note("setup {{instance}}", instance=instance.id)
+        with Connection(host=instance.ip_address, kwargs=self.settings.connect) as c:
+            cpu_count = int(round(utility.cpu))
 
-                self._update_ubuntu_packages(c)
-                self._setup_etl_code(c)
-                self._add_private_file(c)
-                self._setup_etl_supervisor(c, cpu_count)
-
-        return Thread.run(
-            "etl setup started at "+text_type(Date.now().format()),
-            worker,
-            instance,
-            utility
-        )
-        Till(seconds=1000000).wait()
+            self._update_ubuntu_packages(c)
+            self._setup_etl_code(c)
+            self._add_private_file(c)
+            self._setup_etl_supervisor(c, cpu_count)
 
     def teardown(self, instance):
         with Connection(instance) as conn:
@@ -89,7 +73,6 @@ class ETL(InstanceManager):
     def _setup_etl_code(self, conn):
         conn.sudo("apt-get install -y python2.7")
 
-        Log.note("5")
         if not conn.exists("/usr/local/bin/pip"):
             conn.run("mkdir -p /home/ubuntu/temp")
 
@@ -99,7 +82,6 @@ class ETL(InstanceManager):
                 conn.sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
                 conn.sudo("python2.7 get-pip.py")
 
-        Log.note("6")
         if not conn.exists("/home/ubuntu/ActiveData-ETL/README.md"):
             with conn.cd("/home/ubuntu"):
                 conn.sudo("apt-get -yf install git-core")
@@ -107,8 +89,6 @@ class ETL(InstanceManager):
                 conn.run("git clone https://github.com/klahnakoski/ActiveData-ETL.git")
                 conn.run("mkdir -p /home/ubuntu/ActiveData-ETL/results/logs")
 
-
-        Log.note("7")
         with conn.cd("/home/ubuntu/ActiveData-ETL"):
             conn.run("git checkout etl")
             # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
@@ -152,78 +132,8 @@ class ETL(InstanceManager):
         conn.run('rm -f /home/ubuntu/private.json')
         conn.put('~/private_active_data_etl.json', '/home/ubuntu/private.json')
         with conn.cd("/home/ubuntu"):
-            conn.run("chmod o-r private.json")
-
-
-
-class Connection(object):
-
-    @override
-    def __init__(
-        self,
-        host,
-        user=None,
-        port=None,
-        config=None,
-        gateway=None,
-        forward_agent=None,
-        connect_timeout=None,
-        connect_kwargs=None,
-        inline_ssh_env=None,
-        key_filename=None,  # part of connect_kwargs
-        kwargs=None
-    ):
-        connect_kwargs = set_default({}, connect_kwargs, {"key_filename": File(key_filename).abspath})
-        config = set_default({}, config, {"run": {
-            "hide": True,
-            "err_stream": LogStream(host, "stderr"),
-            "in_stream": LogStream(host, "stdin")
-        }})
-
-        self.conn = _Connection(
-            host,
-            user,
-            port,
-            config,
-            gateway,
-            forward_agent,
-            connect_timeout,
-            connect_kwargs,
-            inline_ssh_env
-        )
-        result = self.conn.run("pwd")
-        self.cwd = result.stdout.split("\n")[0]
-
-    def exists(self, path):
-        with TempFile() as t:
-            try:
-                result = self.conn.get(path, t.abspath)
-                return t.exists
-            except IOError:
-                return False
-
-    def __getattr__(self, item):
-        return getattr(self.conn, item)
-
-
-class LogStream(object):
-
-    def __init__(self, name, type):
-        self.name=name
-        self.type=type
-        self.part_line=""
-
-    def write(self, value):
-        lines = value.split("\n")
-        if len(lines)==1:
-            self.part_line+=lines[0]
-            return
-
-        prefix = self.part_line
-        for line in lines[0:-1]:
-            Log.note("{{name}} ({{type}}): {{line}}", name=self.name, type=self.type, line=prefix + line)
-            prefix = ""
-        self.part_line = lines[-1]
+            conn.run("chmod o-r pr"
+                     "ivate.json")
 
 
 def main():
@@ -236,6 +146,7 @@ def main():
         Log.warning("Problem with setup of ETL", cause=e)
     finally:
         Log.stop()
+
 
 if __name__ == "__main__":
     main()

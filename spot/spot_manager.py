@@ -17,24 +17,23 @@ import boto.vpc
 from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
 from boto.utils import ISO8601
+
+from jx_python import jx
+from jx_python.containers.list_usingPythonList import ListContainer
 from mo_collections import UniqueIndex
 from mo_dots import unwrap, coalesce, wrap, listwrap, FlatList, Data
+from mo_dots.objects import datawrap
 from mo_files import File
+from mo_future import text_type
 from mo_kwargs import override
 from mo_logs import Log, startup, Except, constants
-from mo_math import Math, MAX
-from mo_math import SUM
-from mo_threads import Lock, Thread, Till
-from mo_threads import Signal
-from mo_times import MINUTE, Date, Duration, Timer
-from pyLibrary import convert
-
-from mo_dots.objects import datawrap
 from mo_logs.startup import SingleInstance
+from mo_math import Math, MAX, SUM
+from mo_threads import Lock, Thread, Till, Signal
 from mo_threads.threads import MAIN_THREAD
-from mo_times.durations import DAY, WEEK, SECOND, HOUR
+from mo_times import MINUTE, Date, Duration, Timer, DAY, WEEK, SECOND, HOUR
+from pyLibrary import convert
 from pyLibrary.meta import cache, new_instance
-from pyLibrary.queries import jx, expressions
 
 ENABLE_SIDE_EFFECTS = True
 DEBUG_PRICING = True
@@ -136,7 +135,7 @@ class SpotManager(object):
             )
 
         # Give EC2 a chance to notice the new requests before tagging them.
-        Till(timeout=3).wait()
+        Till(seconds=3).wait()
         with self.net_new_locker:
             for req in self.net_new_spot_requests:
                 req.add_tag("Name", self.settings.ec2.instance.name)
@@ -390,7 +389,19 @@ class SpotManager(object):
                     (i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests]
                     if i.id and not i.tags.get("Name") and i._state.name == "running" and Date.now() > Date(i.launch_time) + DELAY_BEFORE_SETUP
                 ]
+
+                setup_threads = []
                 for i, r in please_setup:
+                    if not time_to_stop_trying.get(i.id):
+                        time_to_stop_trying[i.id] = Date.now() + TIME_FROM_RUNNING_TO_LOGIN
+                    if Date.now() > time_to_stop_trying[i.id]:
+                        # FAIL TO SETUP AFTER x MINUTES, THEN TERMINATE INSTANCE
+                        self.ec2_conn.terminate_instances(instance_ids=[i.id])
+                        with self.net_new_locker:
+                            self.net_new_spot_requests.remove(r.id)
+                        Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id, cause=e)
+                        continue
+
                     try:
                         p = self.settings.utility[i.instance_type]
                         if p == None:
@@ -400,26 +411,34 @@ class SpotManager(object):
                                     self.net_new_spot_requests.remove(r.id)
                             finally:
                                 Log.error("Can not setup unknown {{instance_id}} of type {{type}}", instance_id=i.id, type=i.instance_type)
+
                         i.markup = p
-                        try:
-                            self.instance_manager.setup(i, coalesce(p, 0))
-                        except Exception as e:
-                            e = Except.wrap(e)
-                            failed_attempts[r.id] += [e]
-                            Log.error(ERROR_ON_CALL_TO_SETUP, e)
-                        i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
-                        with self.net_new_locker:
-                            self.net_new_spot_requests.remove(r.id)
+                        self.instance_manager.setup(i, p)
+
+                        i.add_tag("Name", self.settings.ec2.instance.name + " (setup)")
+                        setup_threads.append((i, r, Thread.run(
+                            "setup for " + text_type(i.id),
+                            self.instance_manager.setup,
+                            i,
+                            p
+                        )))
                     except Exception as e:
-                        if not time_to_stop_trying.get(i.id):
-                            time_to_stop_trying[i.id] = Date.now() + TIME_FROM_RUNNING_TO_LOGIN
-                        if Date.now() > time_to_stop_trying[i.id]:
-                            # FAIL TO SETUP AFTER x MINUTES, THEN TERMINATE INSTANCE
-                            self.ec2_conn.terminate_instances(instance_ids=[i.id])
+                        i.add_tag("Name", "")
+                        Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
+
+                for i, r, t in list(setup_threads):
+                    try:
+                        if t.stopped:
+                            t.join()
+                            setup_threads.remove((i, r, t))
+                            i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
                             with self.net_new_locker:
                                 self.net_new_spot_requests.remove(r.id)
-                            Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id, cause=e)
-                        elif "Can not setup unknown " in e:
+                    except Exception as e:
+                        e = Except.wrap(e)
+                        failed_attempts[r.id] += [e]
+                        i.add_tag("Name", "")
+                        if "Can not setup unknown " in e:
                             Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
                         elif ERROR_ON_CALL_TO_SETUP in e:
                             if len(failed_attempts[r.id]) > 2:
@@ -454,12 +473,14 @@ class SpotManager(object):
                         self.ec2_conn.cancel_spot_instance_requests(request_ids=give_up.id)
                         Log.note("Cancelled spot requests {{spots}}, {{reasons}}", spots=give_up.id, reasons=give_up.status.code)
 
-                if not pending and not time_to_stop_trying and self.done_spot_requests:
+                if not pending and not time_to_stop_trying and self.done_spot_requests and not setup_threads:
                     Log.note("No more pending spot requests")
                     please_stop.go()
                     break
                 elif pending:
                     Log.note("waiting for spot requests: {{pending}}", pending=[p.id for p in pending])
+                elif setup_threads:
+                    Log.note("waiting for setup of {{num}} instances", num=len(setup_threads))
 
                 (Till(seconds=10) | please_stop).wait()
 
@@ -514,7 +535,7 @@ class SpotManager(object):
         for i in range(num_ephemeral_volumes):
             letter = convert.ascii2char(98 + i)  # START AT "b"
             kwargs.block_device_map["/dev/sd" + letter] = BlockDeviceType(
-                ephemeral_name='ephemeral' + unicode(i),
+                ephemeral_name='ephemeral' + text_type(i),
                 delete_on_termination=True
             )
 
@@ -544,9 +565,7 @@ class SpotManager(object):
                 return self.prices
 
             prices = self._get_spot_prices_from_aws()
-
             now = Date.now()
-            expressions.ALLOW_SCRIPTING = True
 
             with Timer("processing pricing data"):
                 hourly_pricing = jx.run({
@@ -592,7 +611,7 @@ class SpotManager(object):
                 }).data
 
                 bid80 = jx.run({
-                    "from": hourly_pricing,
+                    "from": ListContainer(name=None, data=hourly_pricing),
                     "edges": [
                         {
                             "value": "availability_zone",
@@ -618,12 +637,9 @@ class SpotManager(object):
                     ]
                 })
 
-                output = jx.run({
-                    "from": bid80,
-                    "sort": {"value": "estimated_value", "sort": -1}
-                })
+                output = jx.sort(bid80.values(), {"value": "estimated_value", "sort": -1})
 
-                self.prices = wrap(output.data)
+                self.prices = wrap(output)
                 self.price_lookup = UniqueIndex(("type.instance_type", "availability_zone"), data=self.prices)
             return self.prices
 
@@ -635,6 +651,7 @@ class SpotManager(object):
             except Exception as e:
                 cache = FlatList()
 
+        cache = ListContainer(name=None, data=cache)
         most_recents = jx.run({
             "from": cache,
             "edges": ["instance_type", "availability_zone"],
@@ -696,7 +713,7 @@ class SpotManager(object):
                 yield "]"
             File(self.settings.price_file).write(stream())
 
-        return prices
+        return ListContainer(name="prices", data=prices)
 
 
 def find_higher(candidates, reference):

@@ -14,7 +14,6 @@ from mo_files import File
 from mo_kwargs import override
 from mo_logs import Log, constants, startup
 from mo_logs.strings import between
-from mo_math import Math
 from mo_times import Date
 from pyLibrary import aws
 from spot.instance_manager import InstanceManager
@@ -38,14 +37,13 @@ class ETL(InstanceManager):
 
         tod_minimum = None
         if Date.now().hour not in [4, 5, 6, 7, 8, 9, 10, 11]:
-            tod_minimum = 101
-
-        return max(self.settings.minimum_utility, tod_minimum, Math.ceiling(pending / 30))
+            tod_minimum = 100
 
     def setup(
         self,
         instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
-        utility     # THE utility OBJECT FOUND IN CONFIG
+        utility,    # THE utility OBJECT FOUND IN CONFIG
+        please_stop
     ):
         if not self.settings.setup_timeout:
             Log.error("expecting instance.setup_timeout to prevent setup from locking")
@@ -91,6 +89,7 @@ class ETL(InstanceManager):
 
         with conn.cd("/home/ubuntu/ActiveData-ETL"):
             conn.run("git checkout etl")
+
             # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
             conn.sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
             conn.sudo("pip install future")
@@ -105,8 +104,8 @@ class ETL(InstanceManager):
             conn.sudo("pip install pympler")
             conn.sudo("pip install -r requirements.txt")
 
-            Log.note("8")
-            conn.sudo("apt-get -y install python-psycopg2")
+        Log.note("8")
+        conn.sudo("apt-get -y install python-psycopg2")
 
     def _setup_etl_supervisor(self, conn, cpu_count):
         # INSTALL supervsor

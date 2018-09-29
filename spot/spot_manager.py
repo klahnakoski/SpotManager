@@ -413,8 +413,6 @@ class SpotManager(object):
                                 Log.error("Can not setup unknown {{instance_id}} of type {{type}}", instance_id=i.id, type=i.instance_type)
 
                         i.markup = p
-                        self.instance_manager.setup(i, p)
-
                         i.add_tag("Name", self.settings.ec2.instance.name + " (setup)")
                         setup_threads.append((i, r, Thread.run(
                             "setup for " + text_type(i.id),
@@ -436,8 +434,8 @@ class SpotManager(object):
                                 self.net_new_spot_requests.remove(r.id)
                     except Exception as e:
                         e = Except.wrap(e)
-                        failed_attempts[r.id] += [e]
                         i.add_tag("Name", "")
+                        failed_attempts[r.id] += [e]
                         if "Can not setup unknown " in e:
                             Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
                         elif ERROR_ON_CALL_TO_SETUP in e:

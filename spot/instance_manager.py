@@ -38,7 +38,8 @@ class InstanceManager(object):
     def setup(
         self,
         instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
-        utility
+        utility,
+        please_stop
     ):
         pass
 

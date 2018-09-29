@@ -16,6 +16,7 @@ from datetime import datetime
 
 from fabric2 import Config
 from fabric2 import Connection as _Connection
+from mo_math.randoms import Random
 
 from mo_dots import set_default, unwrap, wrap
 from mo_files import File, TempFile
@@ -70,11 +71,26 @@ class Connection(object):
             except IOError:
                 return False
 
+    def get(self, remote, local):
+        self.conn.get(remote, File(local).abspath)
+
+    def put(self, local, remote, use_sudo=False):
+        if use_sudo:
+            filename = "/tmp/"+Random.hex(20)
+            self.conn.put(File(local).abspath, filename)
+            self.sudo("cp "+filename+" "+remote)
+            self.sudo("rm "+filename)
+        else:
+            self.conn.put(File(local).abspath, remote)
+
     def __enter__(self):
         return self
 
     def __exit__(self, *exc):
         self.conn.close()
+
+    def sudo(self, command):
+        self.run("sudo " + command)
 
     def __getattr__(self, item):
         return getattr(self.conn, item)

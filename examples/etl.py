@@ -39,6 +39,8 @@ class ETL(InstanceManager):
         if Date.now().hour not in [4, 5, 6, 7, 8, 9, 10, 11]:
             tod_minimum = 100
 
+
+
     def setup(
         self,
         instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP

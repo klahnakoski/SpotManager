@@ -45,7 +45,8 @@ class InstanceManager(object):
 
     def teardown(
         self,
-        instance   # THE boto INSTANCE OBJECT FOR THE MACHINE TO TEARDOWN
+        instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO TEARDOWN
+        please_stop
     ):
         pass
 

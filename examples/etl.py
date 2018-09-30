@@ -34,6 +34,7 @@ class ETL(InstanceManager):
         self.settings = kwargs
 
     def required_utility(self):
+        return 10000
         queue = aws.Queue(self.settings.work_queue)
         pending = len(queue)
 
@@ -41,8 +42,7 @@ class ETL(InstanceManager):
         if Date.now().dow not in [6, 7] and Date.now().hour not in [4, 5, 6, 7, 8, 9, 10, 11]:
             tod_minimum = 100
 
-        return max(self.settings.minimum_utility, tod_minimum, Math.ceiling(pending / 20))
-
+        return max(self.settings.minimum_utility, tod_minimum, Math.ceiling(pending / 30))
 
     def setup(
         self,
@@ -65,7 +65,7 @@ class ETL(InstanceManager):
     def teardown(self, instance, please_stop):
         with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:
             Log.note("teardown {{instance}}", instance=instance.id)
-            conn.sudo("supervisorctl stop all")
+            conn.sudo("supervisorctl stop all", warn=True)
 
     def _update_ubuntu_packages(self, conn):
         conn.sudo("apt-get clean")
@@ -115,7 +115,7 @@ class ETL(InstanceManager):
     def _setup_etl_supervisor(self, conn, cpu_count):
         # INSTALL supervsor
         conn.sudo("apt-get install -y supervisor")
-        # with fabric_settings(warn_only=True):
+        # with fabric_settings(warn=True:
         conn.sudo("service supervisor start")
 
         # READ LOCAL CONFIG FILE, ALTER IT FOR THIS MACHINE RESOURCES, AND PUSH TO REMOTE

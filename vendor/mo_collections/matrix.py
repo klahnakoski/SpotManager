@@ -24,7 +24,6 @@ class Matrix(object):
     """
     ZERO = None
 
-    @override
     def __init__(self, dims=[], list=None, value=None, zeros=None, kwargs=None):
         if list:
             self.num = 1

@@ -12,6 +12,7 @@ from __future__ import unicode_literals
 
 import os
 import sys
+from contextlib import contextmanager
 from datetime import datetime
 
 from fabric2 import Config
@@ -43,12 +44,16 @@ class Connection(object):
         kwargs=None
     ):
         connect_kwargs = set_default({}, connect_kwargs, {"key_filename": File(key_filename).abspath})
+
+        self.stdout = LogStream(host, "stdout")
+        self.stderr = LogStream(host, "stderr")
         config = Config(**unwrap(set_default({}, config, {"overrides": {"run": {
             # "hide": True,
-            "err_stream": LogStream(host, "stderr"),
-            "out_stream": LogStream(host, "stdout")
+            "out_stream": self.stdout,
+            "err_stream": self.stderr
         }}})))
 
+        self.warn = False
         self.conn = _Connection(
             host,
             user,
@@ -60,8 +65,6 @@ class Connection(object):
             connect_kwargs,
             inline_ssh_env
         )
-        result = self.conn.run("pwd")
-        self.cwd = result.stdout.split("\n")[0]
 
     def exists(self, path):
         with TempFile() as t:
@@ -70,6 +73,17 @@ class Connection(object):
                 return t.exists
             except IOError:
                 return False
+
+    def warn_only(self):
+        """
+        IGNORE WARNING IN THIS CONTEXT
+        """
+        @contextmanager
+        def warning_set():
+            old, self.warn = self.warn, True
+            yield
+            self.warn = old
+        return warning_set
 
     def get(self, remote, local):
         self.conn.get(remote, File(local).abspath)
@@ -89,8 +103,11 @@ class Connection(object):
     def __exit__(self, *exc):
         self.conn.close()
 
-    def sudo(self, command):
-        self.run("sudo " + command)
+    def run(self, command):
+        return self.conn.run(command)
+
+    def sudo(self, command, warn=False):
+        return self.run("sudo " + command, warn=warn)
 
     def __getattr__(self, item):
         return getattr(self.conn, item)
@@ -115,7 +132,8 @@ class LogStream(object):
 
         prefix = self.part_line
         for line in lines[0:-1]:
-            note(u"{{name}} ({{type}}): {{line}}", name=self.name, type=self.type, line=prefix + line)
+            full_line = prefix + line
+            note(u"{{name}} ({{type}}): {{line}}", name=self.name, type=self.type, line=full_line)
             prefix = EMPTY
         self.part_line = lines[-1]
 

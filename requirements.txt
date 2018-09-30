@@ -1,7 +1,8 @@
 
 boto
 requests
-# ecdsa required by fabric (but not installed by pip)
+# required by fabric (but not installed by pip)
 ecdsa
+cffi
+bcrypt
 fabric2
-invoke

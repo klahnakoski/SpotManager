@@ -6,3 +6,4 @@ ecdsa
 cffi
 bcrypt
 fabric2
+beautifulsoup4

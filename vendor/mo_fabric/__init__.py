@@ -103,8 +103,8 @@ class Connection(object):
     def __exit__(self, *exc):
         self.conn.close()
 
-    def run(self, command):
-        return self.conn.run(command)
+    def run(self, command, warn=False):
+        return self.conn.run(command, warn=warn)
 
     def sudo(self, command, warn=False):
         return self.run("sudo " + command, warn=warn)

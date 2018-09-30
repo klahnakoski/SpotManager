@@ -34,7 +34,6 @@ class ETL(InstanceManager):
         self.settings = kwargs
 
     def required_utility(self):
-        return 10000
         queue = aws.Queue(self.settings.work_queue)
         pending = len(queue)
 

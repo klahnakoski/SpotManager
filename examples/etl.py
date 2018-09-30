@@ -9,6 +9,8 @@
 from __future__ import division
 from __future__ import unicode_literals
 
+from mo_math import Math
+
 from mo_fabric import Connection
 from mo_files import File
 from mo_kwargs import override
@@ -36,9 +38,10 @@ class ETL(InstanceManager):
         pending = len(queue)
 
         tod_minimum = None
-        if Date.now().hour not in [4, 5, 6, 7, 8, 9, 10, 11]:
+        if Date.now().dow not in [6, 7] and Date.now().hour not in [4, 5, 6, 7, 8, 9, 10, 11]:
             tod_minimum = 100
 
+        return max(self.settings.minimum_utility, tod_minimum, Math.ceiling(pending / 20))
 
 
     def setup(
@@ -59,8 +62,8 @@ class ETL(InstanceManager):
             self._add_private_file(c)
             self._setup_etl_supervisor(c, cpu_count)
 
-    def teardown(self, instance):
-        with Connection(instance) as conn:
+    def teardown(self, instance, please_stop):
+        with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:
             Log.note("teardown {{instance}}", instance=instance.id)
             conn.sudo("supervisorctl stop all")
 

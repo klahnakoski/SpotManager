@@ -285,9 +285,17 @@ class SpotManager(object):
 
         # SEND SHUTDOWN TO EACH INSTANCE
         Log.note("Shutdown {{instances}}", instances=remove_list.id)
-        for i in remove_list:
+        remove_threads = [
+            Thread.run(
+                "teardown for " + text_type(i.id),
+                self.instance_manager.teardown,
+                i
+            )
+            for i in remove_list
+        ]
+        for t in remove_threads:
             try:
-                self.instance_manager.teardown(i)
+                t.join()
             except Exception as e:
                 Log.warning("Teardown of {{id}} failed", id=i.id, cause=e)
 

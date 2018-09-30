@@ -114,7 +114,7 @@
 		"grcov": {
 			"platform": "linux-x86_64"
 		},
-		"minimum_utility": 10,   // HOW MUCH UTILITY CAN REMAIN IDLE
+		"minimum_utility": 0,   // HOW MUCH UTILITY CAN REMAIN IDLE
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 			"user": "ubuntu",

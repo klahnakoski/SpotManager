@@ -386,7 +386,8 @@ class SpotManager(object):
 
     def _start_life_cycle_watcher(self):
         def life_cycle_watcher(please_stop):
-            failed_attempts=Data()
+            failed_attempts = Data()
+            setup_threads = []
 
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
@@ -399,7 +400,6 @@ class SpotManager(object):
                     if i.id and not i.tags.get("Name") and i._state.name == "running" and Date.now() > Date(i.launch_time) + DELAY_BEFORE_SETUP
                 ]
 
-                setup_threads = []
                 for i, r in please_setup:
                     if not time_to_stop_trying.get(i.id):
                         time_to_stop_trying[i.id] = Date.now() + TIME_FROM_RUNNING_TO_LOGIN
@@ -487,10 +487,10 @@ class SpotManager(object):
                     Log.note("No more pending spot requests")
                     please_stop.go()
                     break
-                elif pending:
-                    Log.note("waiting for spot requests: {{pending}}", pending=[p.id for p in pending])
                 elif setup_threads:
                     Log.note("waiting for setup of {{num}} instances", num=len(setup_threads))
+                elif pending:
+                    Log.note("waiting for spot requests: {{pending}}", pending=[p.id for p in pending])
 
                 (Till(seconds=10) | please_stop).wait()
 

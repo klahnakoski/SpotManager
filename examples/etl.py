@@ -43,7 +43,7 @@ class ETL(InstanceManager):
 
         return max(
             Math.ceiling(pending / 20),   # ENSURE THERE IS PLENTY OF WORK BEFORE MACHINE IS DEPLOYED
-            int((current_utility - minimum) / 2) + minimum   # EXPONENTIAL DECAY TO MINIMUM
+            int(max(0, current_utility - minimum) * 2) + minimum   # EXPONENTIAL DECAY TO MINIMUM
         )
 
     def setup(

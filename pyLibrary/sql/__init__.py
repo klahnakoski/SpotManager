@@ -8,11 +8,12 @@
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-from __future__ import unicode_literals
-from __future__ import division
 from __future__ import absolute_import
-from pyLibrary.jsons import Log
-from pyLibrary.strings import expand_template
+from __future__ import division
+from __future__ import unicode_literals
+
+from mo_logs import Log
+from mo_logs.strings import expand_template
 
 
 class SQL(unicode):
@@ -28,6 +29,23 @@ class SQL(unicode):
     def sql(self):
         return expand_template(self.template, self.param)
 
+    def __add__(self, other):
+        if not isinstance(other, SQL):
+            Log.error("Can only concat other SQL")
+        else:
+            return SQL(self.sql+other.sql)
+
     def __str__(self):
         Log.error("do not do this")
+
+
+
+
+class DB(object):
+
+    def quote_column(self, column_name, table=None):
+        raise NotImplementedError()
+
+    def db_type_to_json_type(self, type):
+        raise NotImplementedError()
 

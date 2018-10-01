@@ -14,14 +14,14 @@ from collections import Mapping
 
 from datetime import datetime
 import re
+
 from pyLibrary import convert
-from pyLibrary.collections import reverse
-from pyLibrary.debugs.logs import Log
-from pyLibrary.maths import Math
-from pyLibrary.dot import split_field, Dict, Null, join_field, coalesce
-from pyLibrary.dot import listwrap
-from pyLibrary.queries.expressions import TRUE_FILTER
-from pyLibrary.times.durations import Duration
+from mo_collections import reverse
+from mo_logs import Log
+from mo_logs.strings import quote
+from mo_math import Math
+from mo_dots import split_field, Data, Null, join_field, coalesce, listwrap
+from mo_times.durations import Duration
 
 
 class _MVEL(object):
@@ -82,12 +82,8 @@ class _MVEL(object):
         path = split_field(fromPath)
 
         # ADD LOCAL VARIABLES
-        from pyLibrary.queries.es09.util import INDEX_CACHE
-
         columns = INDEX_CACHE[path[0]].columns
         for i, c in enumerate(columns):
-            if c.name=="attachments":
-                Log.debug("")
             if c.name.find("\\.") >= 0:
                 self.prefixMap.insert(0, {
                     "path": c.name,
@@ -154,7 +150,7 @@ class _MVEL(object):
         else:
             output = varName + ' = ' + '+"|"+'.join(["Value2Pipe("+v+")\n" for v in list]) + ';\n'
 
-        return Dict(
+        return Data(
             head="".join(heads),
             body=output
         )
@@ -173,9 +169,9 @@ class _MVEL(object):
         if len(split_field(self.fromData.name)) == 1 and fields:
             if isinstance(fields, Mapping):
                 # CONVERT UNORDERED FIELD DEFS
-                qb_fields, es_fields = zip(*[(k, fields[k]) for k in sorted(fields.keys())])
+                jx_fields, es_fields = zip(*[(k, fields[k]) for k in sorted(fields.keys())])
             else:
-                qb_fields, es_fields = zip(*[(i, e) for i, e in enumerate(fields)])
+                jx_fields, es_fields = zip(*[(i, e) for i, e in enumerate(fields)])
 
             # NO LOOPS BECAUSE QUERY IS SHALLOW
             # DOMAIN IS FROM A DIMENSION, USE IT'S FIELD DEFS TO PULL
@@ -183,15 +179,15 @@ class _MVEL(object):
                 def fromTerm(term):
                     return domain.getPartByKey(term)
 
-                return Dict(
+                return Data(
                     head="",
-                    body='getDocValue('+convert.string2quote(domain.dimension.fields[0])+')'
+                    body='getDocValue('+quote(domain.dimension.fields[0])+')'
                 ), fromTerm
             else:
                 def fromTerm(term):
                     terms = [convert.pipe2value(t) for t in convert.pipe2value(term).split("|")]
 
-                    candidate = dict(zip(qb_fields, terms))
+                    candidate = dict(zip(jx_fields, terms))
                     for p in domain.partitions:
                         for k, t in candidate.items():
                             if p.value[k] != t:
@@ -206,9 +202,9 @@ class _MVEL(object):
                         return Null
 
                 for f in es_fields:
-                    term.append('Value2Pipe(getDocValue('+convert.string2quote(f)+'))')
+                    term.append('Value2Pipe(getDocValue('+quote(f)+'))')
 
-                return Dict(
+                return Data(
                     head="",
                     body='Value2Pipe('+('+"|"+'.join(term))+')'
                 ), fromTerm
@@ -281,7 +277,7 @@ class _MVEL(object):
         expression = setValues(expression, constants)
 
         fromPath = self.fromData.name           # FIRST NAME IS THE INDEX
-        indexName = split_field(fromPath)[0]
+        indexName = join_field(split_field(fromPath)[:1:])
 
         context = self.getFrameVariables(expression)
         if context == "":
@@ -306,7 +302,7 @@ class _MVEL(object):
             n = "_temp" + UID()
             self.functions[n] = code
 
-        return Dict(
+        return Data(
             head='var ' + n + ' = function(){\n' + code + '\n};\n',
             body=n + '()\n'
         )
@@ -319,8 +315,8 @@ class Compiled(object):
     def __str__(self):
         return self.code
 
-    def __json__(self):
-        return convert.string2quote(self.code)
+    def __data__(self):
+        return self.code
 
 
 
@@ -392,7 +388,7 @@ def unpack_terms(facet, selects):
 #  PASS esFilter SIMPLIFIED ElasticSearch FILTER OBJECT
 #  RETURN MVEL EXPRESSION
 def _where(esFilter, _translate):
-    if not esFilter or esFilter is TRUE_FILTER:
+    if not esFilter or esFilter is True:
         return "true"
 
     keys = esFilter.keys()
@@ -483,7 +479,7 @@ def _where(esFilter, _translate):
     elif op == "prefix":
         pair = esFilter[op]
         variableName, value = pair.items()[0]
-        return _translate(variableName) + ".startsWith(" + convert.string2quote(value) + ")"
+        return _translate(variableName) + ".startsWith(" + quote(value) + ")"
     elif op == "match_all":
         return "true"
     else:
@@ -519,7 +515,7 @@ def value2MVEL(value):
 
     if Math.is_number(value):
         return str(value)
-    return convert.string2quote(value)
+    return quote(value)
 
 # FROM PYTHON VALUE TO ES QUERY EQUIVALENT
 def value2query(value):
@@ -530,7 +526,7 @@ def value2query(value):
 
     if Math.is_number(value):
         return value
-    return convert.string2quote(value)
+    return quote(value)
 
 
 def value2value(value):
@@ -553,7 +549,7 @@ def addFunctions(mvel):
     """
     PREPEND THE REQUIRED MVEL FUNCTIONS TO THE CODE
     """
-    isAdded = Dict()            # SOME FUNCTIONS DEPEND ON OTHERS
+    isAdded = Data()            # SOME FUNCTIONS DEPEND ON OTHERS
 
     head=[]
     body=mvel
@@ -570,7 +566,7 @@ def addFunctions(mvel):
             isAdded[func_name] = func_code
             head.append(func_code)
             mvel = func_code + mvel
-    return Dict(
+    return Data(
         head="".join(head),
         body=body
     )
@@ -738,5 +734,5 @@ def replacePrefix(value, prefix, new_prefix):
         if value.startswith(prefix):
             return new_prefix+value[len(prefix)::]
         return value
-    except Exception, e:
+    except Exception as e:
         Log.error("can not replace prefix", e)

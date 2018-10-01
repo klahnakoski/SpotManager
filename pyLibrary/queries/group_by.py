@@ -8,78 +8,77 @@
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-from __future__ import unicode_literals
-from __future__ import division
 from __future__ import absolute_import
-import sys
+from __future__ import division
+from __future__ import unicode_literals
+
 import math
-from pyLibrary.queries.cube import Cube
-from pyLibrary.queries.index import value2key
-from pyLibrary.dot.dicts import Dict
-from pyLibrary.dot.lists import DictList
-from pyLibrary.dot import listwrap, wrap
-from pyLibrary.debugs.logs import Log
-from pyLibrary.collections.multiset import Multiset
-from pyLibrary.thread.threads import Thread
+import sys
+
+from mo_collections.multiset import Multiset
+from mo_logs.exceptions import Except
+from mo_logs import Log
+from mo_dots import listwrap, Null, Data
+from mo_dots.lists import FlatList
+from pyLibrary.queries.containers import Container
+from pyLibrary.queries.expressions import jx_expression_to_function, jx_expression, Expression, TupleOp
 
 
 def groupby(data, keys=None, size=None, min_size=None, max_size=None, contiguous=False):
     """
-        return list of (keys, values) pairs where
-            group by the set of keys
-            values IS LIST OF ALL data that has those keys
-        contiguous - MAINTAIN THE ORDER OF THE DATA, STARTING THE NEW GROUP WHEN THE SELECTOR CHANGES
+    :param data:
+    :param keys:
+    :param size:
+    :param min_size:
+    :param max_size:
+    :param contiguous: MAINTAIN THE ORDER OF THE DATA, STARTING THE NEW GROUP WHEN THE SELECTOR CHANGES
+    :return: return list of (keys, values) PAIRS, WHERE
+                 keys IS IN LEAF FORM (FOR USE WITH {"eq": terms} OPERATOR
+                 values IS GENERATOR OF ALL VALUE THAT MATCH keys
+        contiguous -
     """
+    if isinstance(data, Container):
+        return data.groupby(keys)
 
     if size != None or min_size != None or max_size != None:
         if size != None:
             max_size = size
         return groupby_min_max_size(data, min_size=min_size, max_size=max_size)
 
-    if isinstance(data, Cube):
-        return data.groupby(keys)
-
-    keys = listwrap(keys)
-    def get_keys(d):
-        output = Dict()
-        for k in keys:
-            output[k] = d[k]
-        return output
-
-    if contiguous:
-        try:
-            if not data:
-                return wrap([])
-
-            agg = DictList()
-            acc = DictList()
-            curr_key = value2key(keys, data[0])
-            for d in data:
-                key = value2key(keys, d)
-                if key != curr_key:
-                    agg.append((get_keys(acc[0]), acc))
-                    curr_key = key
-                    acc = [d]
-                else:
-                    acc.append(d)
-            agg.append((get_keys(acc[0]), acc))
-            return wrap(agg)
-        except Exception, e:
-            Log.error("Problem grouping contiguous values", e)
-
     try:
-        agg = {}
-        for d in data:
-            key = value2key(keys, d)
-            pair = agg.get(key)
-            if pair is None:
-                pair = (get_keys(d), DictList())
-                agg[key] = pair
-            pair[1].append(d)
+        keys = listwrap(keys)
+        if not contiguous:
+            from pyLibrary.queries import jx
+            data = jx.sort(data, keys)
 
-        return agg.values()
-    except Exception, e:
-        Log.error("Problem grouping", e)
+        if not data:
+            return Null
+
+        if any(isinstance(k, Expression) for k in keys):
+            Log.error("can not handle expressions")
+        else:
+            accessor = jx_expression_to_function(jx_expression({"tuple": keys}))  # CAN RETURN Null, WHICH DOES NOT PLAY WELL WITH __cmp__
+
+        def _output():
+            start = 0
+            prev = accessor(data[0])
+            for i, d in enumerate(data):
+                curr = accessor(d)
+                if curr != prev:
+                    group = {}
+                    for k, gg in zip(keys, prev):
+                        group[k] = gg
+                    yield Data(group), data[start:i:]
+                    start = i
+                    prev = curr
+            group = {}
+            for k, gg in zip(keys, prev):
+                group[k] = gg
+            yield Data(group), data[start::]
+
+        return _output()
+    except Exception as e:
+        Log.error("Problem grouping", cause=e)
 
 
 def groupby_size(data, size):
@@ -90,9 +89,9 @@ def groupby_size(data, size):
     else:
         Log.error("do not know how to handle this type")
 
-    done = DictList()
+    done = FlatList()
     def more():
-        output = DictList()
+        output = FlatList()
         for i in range(size):
             try:
                 output.append(iterator.next())
@@ -156,21 +155,22 @@ def groupby_min_max_size(data, min_size=0, max_size=None, ):
     elif hasattr(data, "__iter__"):
         def _iter():
             g = 0
-            out = DictList()
+            out = FlatList()
             try:
                 for i, d in enumerate(data):
                     out.append(d)
                     if (i + 1) % max_size == 0:
                         yield g, out
                         g += 1
-                        out = DictList()
+                        out = FlatList()
                 if out:
                     yield g, out
-            except Exception, e:
+            except Exception as e:
+                e = Except.wrap(e)
                 if out:
                     # AT LEAST TRY TO RETURN WHAT HAS BEEN PROCESSED SO FAR
                     yield g, out
-                Log.error("Problem inside qb.groupby", e)
+                Log.error("Problem inside jx.groupby", e)
 
         return _iter()
     elif not isinstance(data, Multiset):

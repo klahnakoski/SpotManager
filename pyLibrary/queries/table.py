@@ -10,7 +10,7 @@
 from __future__ import unicode_literals
 from __future__ import division
 from __future__ import absolute_import
-from pyLibrary.dot import Dict
+from mo_dots import Data
 
 
 class Table(object):
@@ -22,8 +22,9 @@ class Table(object):
         self.header = header
 
         self.data = data
-        self.meta = Dict()
+        self.meta = Data()
 
     def groupby(self, keys):
+        pass
 
 

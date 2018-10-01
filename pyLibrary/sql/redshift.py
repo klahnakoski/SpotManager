@@ -8,9 +8,9 @@
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-from __future__ import unicode_literals
-from __future__ import division
 from __future__ import absolute_import
+from __future__ import division
+from __future__ import unicode_literals
 
 # FOR WINDOWS INSTALL OF psycopg2
 # http://stickpeople.com/projects/python/win-psycopg/2.6.0/psycopg2-2.6.0.win32-py2.7-pg9.4.1-release.exe
@@ -18,20 +18,21 @@ import psycopg2
 from psycopg2.extensions import adapt
 
 from pyLibrary import convert
-from pyLibrary.debugs.logs import Log
-from pyLibrary.meta import use_settings
-from pyLibrary.queries import qb
+from mo_logs.exceptions import suppress_exception
+from mo_logs import Log
+from mo_kwargs import override
+from pyLibrary.queries import jx
 from pyLibrary.sql import SQL
-from pyLibrary.strings import expand_template
-from pyLibrary.thread.threads import Lock
+from mo_logs.strings import expand_template
+from mo_threads import Lock
 
 
 class Redshift(object):
 
 
-    @use_settings
-    def __init__(self, host, user, password, database=None, port=5439, settings=None):
-        self.settings=settings
+    @override
+    def __init__(self, host, user, password, database=None, port=5439, kwargs=None):
+        self.settings=kwargs
         self.locker = Lock()
         self.connection = None
 
@@ -70,13 +71,11 @@ class Redshift(object):
                         output = curs.fetchall()
                 self.connection.commit()
                 done = True
-            except Exception, e:
-                try:
+            except Exception as e:
+                with suppress_exception:
                     self.connection.rollback()
                     # TODO: FIGURE OUT WHY rollback() DOES NOT HELP
                     self.connection.close()
-                except Exception, f:
-                    pass
                 self.connection = None
                 self._connect()
                 if not retry:
@@ -94,7 +93,7 @@ class Redshift(object):
                       ")"
 
             self.execute(command)
-        except Exception, e:
+        except Exception as e:
             Log.error("problem with record: {{record}}",  record= record, cause=e)
 
 
@@ -105,7 +104,7 @@ class Redshift(object):
         columns = set()
         for r in records:
             columns |= set(r.keys())
-        columns = qb.sort(columns)
+        columns = jx.sort(columns)
 
         try:
             self.execute(
@@ -121,7 +120,7 @@ class Redshift(object):
                     for r in records
                 ])
             self.execute(command)
-        except Exception, e:
+        except Exception as e:
             Log.error("problem with insert", e)
 
 
@@ -165,18 +164,15 @@ PG_TYPES = {
 
 
 class Closer(object):
-
     def __init__(self, resource):
-        self.resource=resource
+        self.resource = resource
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        try:
+        with suppress_exception:
             self.resource.close()
-        except Exception, e:
-            pass
 
     def __getattr__(self, item):
         return getattr(self.resource, item)

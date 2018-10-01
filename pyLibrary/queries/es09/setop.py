@@ -12,17 +12,18 @@ from __future__ import division
 from __future__ import absolute_import
 from collections import Mapping
 
-from pyLibrary.collections.matrix import Matrix
-from pyLibrary.collections import AND, SUM, OR
-from pyLibrary.dot import coalesce, split_field
-from pyLibrary.dot.lists import DictList
-from pyLibrary.dot import listwrap, unwrap
+from mo_collections.matrix import Matrix
+from mo_math import AND, SUM, OR
+from mo_dots import coalesce, split_field, Data, wrap
+from mo_dots.lists import FlatList
+from mo_dots import listwrap, unwrap
+from jx_base.queries import is_variable_name
 from pyLibrary.queries.es09.expressions import unpack_terms
 from pyLibrary.queries.es09.util import aggregates
 from pyLibrary.queries import domains, es09
-from pyLibrary.debugs.logs import Log
-from pyLibrary.queries.cube import Cube
-from pyLibrary.queries.expressions import simplify_esfilter, TRUE_FILTER
+from mo_logs import Log
+from pyLibrary.queries.containers.cube import Cube
+from pyLibrary.queries.expressions import simplify_esfilter, TRUE_FILTER, jx_expression, Variable
 
 
 def is_fieldop(query):
@@ -31,7 +32,7 @@ def is_fieldop(query):
     select = listwrap(query.select)
     if not query.edges:
         isDeep = len(split_field(query.frum.name)) > 1  # LOOKING INTO NESTED WILL REQUIRE A SCRIPT
-        isSimple = AND(s.value != None and (s.value == "*" or isKeyword(s.value)) for s in select)
+        isSimple = AND(s.value != None and (s.value == "*" or is_variable_name(s.value)) for s in select)
         noAgg = AND(s.aggregate == "none" for s in select)
 
         if not isDeep and isSimple and noAgg:
@@ -43,13 +44,6 @@ def is_fieldop(query):
 
     return False
 
-def isKeyword(value):
-    if isinstance(value, Mapping):
-        return AND(isKeyword(v) for k, v in value.items())
-    if isinstance(value, list):
-        return AND(isKeyword(v) for v in value)
-    return isKeyword(value)
-
 
 def es_fieldop(es, query):
     FromES = es09.util.build_es_query(query)
@@ -59,11 +53,11 @@ def es_fieldop(es, query):
             "query": {
                 "match_all": {}
             },
-            "filter": simplify_esfilter(query.where)
+            "filter": simplify_esfilter(jx_expression(query.where).to_esfilter())
         }
     }
     FromES.size = coalesce(query.limit, 200000)
-    FromES.fields = DictList()
+    FromES.fields = FlatList()
     for s in select.value:
         if s == "*":
             FromES.fields = None
@@ -93,7 +87,7 @@ def es_fieldop(es, query):
         else:
             try:
                 matricies[s.name] = Matrix.wrap([unwrap(t.fields).get(s.value, None) for t in T])
-            except Exception, e:
+            except Exception as e:
                 Log.error("", e)
 
     cube = Cube(query.select, query.edges, matricies, frum=query)
@@ -126,31 +120,26 @@ def es_setop(es, mvel, query):
     isDeep = len(split_field(query.frum.name)) > 1  # LOOKING INTO NESTED WILL REQUIRE A SCRIPT
     isComplex = OR([s.value == None and s.aggregate not in ("count", "none") for s in select])   # CONVERTING esfilter DEFINED PARTS WILL REQUIRE SCRIPT
 
-    if not isDeep and not isComplex and len(select) == 1:
-        if not select[0].value:
-            FromES.query = {"filtered": {
-                "query": {"match_all": {}},
-                "filter": simplify_esfilter(query.where)
-            }}
-            FromES.size = 1  # PREVENT QUERY CHECKER FROM THROWING ERROR
-        elif isKeyword(select[0].value):
-            FromES.facets.mvel = {
-                "terms": {
-                    "field": select[0].value,
-                    "size": coalesce(query.limit, 200000)
-                },
-                "facet_filter": simplify_esfilter(query.where)
-            }
-            if query.sort:
-                s = query.sort
-                if len(s) > 1:
-                    Log.error("can not sort by more than one field")
-
-                s0 = s[0]
-                if s0.field != select[0].value:
-                    Log.error("can not sort by anything other than count, or term")
-
-                FromES.facets.terms.order = "term" if s0.sort >= 0 else "reverse_term"
+    if not isDeep and not isComplex:
+        if len(select) == 1 and not select[0].value or select[0].value == "*":
+            FromES = wrap({
+                "query": {"filtered": {
+                    "query": {"match_all": {}},
+                    "filter": simplify_esfilter(jx_expression(query.where).to_esfilter())
+                }},
+                "sort": query.sort,
+                "size": 1
+            })
+        elif all(isinstance(v, Variable) for v in select.value):
+            FromES = wrap({
+                "query": {"filtered": {
+                    "query": {"match_all": {}},
+                    "filter": simplify_esfilter(query.where.to_esfilter())
+                }},
+                "fields": select.value,
+                "sort": query.sort,
+                "size": coalesce(query.limit, 200000)
+            })
     elif not isDeep:
         simple_query = query.copy()
         simple_query.where = TRUE_FILTER  # THE FACET FILTER IS FASTER
@@ -159,7 +148,7 @@ def es_setop(es, mvel, query):
                 "script_field": mvel.code(simple_query),
                 "size": coalesce(simple_query.limit, 200000)
             },
-            "facet_filter": simplify_esfilter(query.where)
+            "facet_filter": simplify_esfilter(jx_expression(query.where).to_esfilter())
         }
     else:
         FromES.facets.mvel = {
@@ -167,21 +156,17 @@ def es_setop(es, mvel, query):
                 "script_field": mvel.code(query),
                 "size": coalesce(query.limit, 200000)
             },
-            "facet_filter": simplify_esfilter(query.where)
+            "facet_filter": simplify_esfilter(jx_expression(query.where).to_esfilter())
         }
 
     data = es09.util.post(es, FromES, query.limit)
 
-    if len(select) == 1:
-        if not select[0].value:
-            # SPECIAL CASE FOR SINGLE COUNT
-            output = Matrix(value=data.hits.total)
-            cube = Cube(query.select, [], {select[0].name: output})
-        elif isKeyword(select[0].value):
-            # SPECIAL CASE FOR SINGLE TERM
-            T = data.facets.terms
-            output = Matrix.wrap([t.term for t in T])
-            cube = Cube(query.select, [], {select[0].name: output})
+    if len(select) == 1 and  not select[0].value or select[0].value == "*":
+        # SPECIAL CASE FOR SINGLE COUNT
+        cube = wrap(data).hits.hits._source
+    elif isinstance(select[0].value, Variable):
+        # SPECIAL CASE FOR SINGLE TERM
+        cube = wrap(data).hits.hits.fields
     else:
         data_list = unpack_terms(data.facets.mvel, select)
         if not data_list:
@@ -190,9 +175,10 @@ def es_setop(es, mvel, query):
             output = zip(*data_list)
             cube = Cube(select, [], {s.name: Matrix(list=output[i]) for i, s in enumerate(select)})
 
-    cube.frum = query
-    return cube
-
+    return Data(
+        meta={"esquery": FromES},
+        data=cube
+    )
 
 
 def is_deep(query):
@@ -220,13 +206,13 @@ def es_deepop(es, mvel, query):
 
     temp_query = query.copy()
     temp_query.select = select
-    temp_query.edges = DictList()
+    temp_query.edges = FlatList()
     FromES.facets.mvel = {
         "terms": {
             "script_field": mvel.code(temp_query),
             "size": query.limit
         },
-        "facet_filter": simplify_esfilter(query.where)
+        "facet_filter": simplify_esfilter(jx_expression(query.where).to_esfilter())
     }
 
     data = es09.util.post(es, FromES, query.limit)
@@ -234,7 +220,7 @@ def es_deepop(es, mvel, query):
     rows = unpack_terms(data.facets.mvel, query.edges)
     terms = zip(*rows)
 
-    # NUMBER ALL EDGES FOR Qb INDEXING
+    # NUMBER ALL EDGES FOR JSON EXPRESSION INDEXING
     edges = query.edges
     for f, e in enumerate(edges):
         for r in terms[f]:

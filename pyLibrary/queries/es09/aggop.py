@@ -11,14 +11,14 @@ from __future__ import unicode_literals
 from __future__ import division
 from __future__ import absolute_import
 
-from pyLibrary.collections.matrix import Matrix
-from pyLibrary.collections import AND
-from pyLibrary.dot import listwrap, unwrap, literal_field
-from pyLibrary.queries.domains import is_keyword
+from mo_collections.matrix import Matrix
+from mo_math import AND
+from mo_dots import listwrap, unwrap, literal_field
+from jx_base.queries import is_variable_name
 from pyLibrary.queries.es09.util import aggregates, fix_es_stats, build_es_query
 from pyLibrary.queries import es09
-from pyLibrary.queries.cube import Cube
-from pyLibrary.queries.expressions import simplify_esfilter
+from pyLibrary.queries.containers.cube import Cube
+from pyLibrary.queries.expressions import simplify_esfilter, Variable, jx_expression_to_function
 
 
 def is_aggop(query):
@@ -41,17 +41,17 @@ def es_aggop(es, mvel, query):
 
     for s in select:
         if s.value not in value2facet:
-            if is_keyword(s.value):
+            if isinstance(s.value, Variable):
                 unwrap(FromES.facets)[s.name] = {
                     "statistical": {
-                        "field": s.value
+                        "field": s.value.var
                     },
-                    "facet_filter": simplify_esfilter(query.where)
+                    "facet_filter": simplify_esfilter(query.where.to_esfilter())
                 }
             else:
                 unwrap(FromES.facets)[s.name] = {
                     "statistical": {
-                        "script": es09.expressions.compile_expression(s.value, query)
+                        "script": jx_expression_to_function(s.value)
                     },
                     "facet_filter": simplify_esfilter(query.where)
                 }
@@ -75,7 +75,7 @@ def es_countop(es, mvel, query):
     FromES = build_es_query(query)
     for s in select:
 
-        if is_keyword(s.value):
+        if is_variable_name(s.value):
             FromES.facets[s.name] = {
                 "terms": {
                     "field": s.value,

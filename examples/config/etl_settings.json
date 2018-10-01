@@ -1,54 +1,77 @@
 {
-	"budget": 0.25,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"budget": 3.00,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.02,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
-	"max_new_utility": 40,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
-	"max_requests_per_type": 5,
+	"max_new_utility": 50,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
+	"max_requests_per_type": 10,
 	"max_percent_per_type": 0.70,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES.   DEFAULT = 1.0 (100%, NO LIMITS)
 	"price_file": "resources/aws/prices.json",
 	"run_interval": "10minute",
-	"bid_percentile": 0.8,      //THE LOWEST PRICE POINT THAT GIVES YOU THE UPTIME YOU DESIRE
+	"uptime":{
+		"history": "day",       //HOW MUCH HISTORY TO USE
+		"duration": "5minute",    //HOW LONG WE WOULD LIKE OUR MACHINE TO TO STAY UP
+		"bid_percentile": 0.70   //THE PROBABILITY WE ACHIEVE OUR UPTIME
+	},
 	"availability_zone": "us-west-2c",
 	"product":"Linux/UNIX",
 	"aws": {
 		"$ref": "//~/private.json#aws_credentials"
 	},
 	"utility":[
-		{"instance_type": "m3.medium", "utility": 1},
-		{"instance_type": "m3.large", "utility": 2},
-		{"instance_type": "m3.xlarge", "utility": 4},
-		{"instance_type": "m3.2xlarge", "utility": 8},
+		{"instance_type": "c4.large", "cpu": 2, "utility": 1},
+		{"instance_type": "c4.xlarge", "cpu": 4, "utility": 4},
+		{"instance_type": "c4.2xlarge", "cpu": 8, "utility": 8},
+		{"instance_type": "c4.4xlarge", "cpu": 16, "utility": 16},
+		{"instance_type": "c4.8xlarge", "cpu": 36, "utility": 36},
 
-		{"instance_type": "c4.large", "utility": 2},
-		{"instance_type": "c4.xlarge", "utility": 4},
-		{"instance_type": "c4.2xlarge", "utility": 8},
-		{"instance_type": "c4.4xlarge", "utility": 16},
-		{"instance_type": "c4.8xlarge", "utility": 36},
+		{"instance_type": "c5.large", "cpu": 2, "utility": 1},
+		{"instance_type": "c5.xlarge", "cpu": 4, "utility": 4},
+		{"instance_type": "c5.2xlarge", "cpu": 8, "utility": 8},
+		{"instance_type": "c5.4xlarge", "cpu": 16, "utility": 16},
+		{"instance_type": "c5.9xlarge", "cpu": 36, "utility": 36},
+		{"instance_type": "c5.18xlarge", "cpu": 72, "utility": 72},
 
-		{"instance_type": "c3.large", "utility": 2},
-		{"instance_type": "c3.xlarge", "utility": 4},
-		{"instance_type": "c3.2xlarge", "utility": 8},
-		{"instance_type": "c3.4xlarge", "utility": 16},
-		{"instance_type": "c3.8xlarge", "utility": 32},
+		{"instance_type": "d2.xlarge", "ecu": 14, "num_drives": 3, "memory": 30.5, "cpu": 4, "utility": 4},
+		{"instance_type": "d2.2xlarge", "ecu": 28, "num_drives": 6, "memory": 61, "cpu": 8, "utility": 8},
+		{"instance_type": "d2.4xlarge", "ecu": 56, "num_drives": 12, "memory": 122, "cpu": 16, "utility": 16},
+		{"instance_type": "d2.8xlarge", "ecu": 116, "num_drives": 24, "memory": 244, "cpu": 36, "utility": 36},
 
-		{"instance_type": "r3.large", "utility": 2},
-		{"instance_type": "r3.xlarge", "utility": 4},
-		{"instance_type": "r3.2xlarge", "utility": 8},
-		{"instance_type": "r3.4xlarge", "utility": 16},
-		{"instance_type": "r3.8xlarge", "utility": 32},
+		{"instance_type": "h1.2xlarge", "num_drives": 3, "memory": 32, "cpu": 8, "utility": 8},
+		{"instance_type": "h1.4xlarge", "num_drives": 6, "memory": 64, "cpu": 16, "utility": 16},
+		{"instance_type": "h1.8xlarge", "num_drives": 12, "memory": 128, "cpu": 32, "utility": 32},
+		{"instance_type": "h1.16xlarge", "num_drives": 24, "memory": 256, "cpu": 64, "utility": 64},
 
-		{"instance_type": "d2.xlarge", "utility": 4},
-		{"instance_type": "d2.2xlarge", "utility": 8},
-		{"instance_type": "d2.4xlarge", "utility": 16},
-		{"instance_type": "d2.8xlarge", "utility": 36}
+//		{"instance_type": "m1.small", "ecu": 3, "num_drives": 1, "memory": 1.7, "cpu": 1, "utility": 1},  # TOO SMALL
+		{"instance_type": "m1.medium", "ecu": 3, "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 1},
+		{"instance_type": "m1.large", "ecu": 6.5, "num_drives": 2, "memory": 7.5, "cpu": 2, "utility": 2},
+		{"instance_type": "m1.xlarge", "ecu": 13, "num_drives": 4, "memory": 15, "cpu": 4, "utility": 4},
+
+		{"instance_type": "m2.xlarge",  "num_drives": 1, "memory": 17.1, "cpu": 2, "utility": 2},
+		{"instance_type": "m2.2xlarge",  "num_drives": 1, "memory": 34, "cpu": 4, "utility": 4},
+		{"instance_type": "m2.4xlarge", "num_drives": 2, "memory": 68, "cpu": 8, "utility": 8},
+
+		{"instance_type": "m3.medium", "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 1},
+		{"instance_type": "m3.large", "num_drives": 1, "memory": 7.5, "cpu": 2, "utility": 2},
+		{"instance_type": "m3.xlarge", "num_drives": 2, "memory": 15, "cpu": 4, "utility": 4},
+		{"instance_type": "m3.2xlarge",  "num_drives": 2, "memory": 30, "cpu": 8, "utility": 8},
+
+
+		{"instance_type": "r3.large", "ecu": 6.5, "num_drives": 1, "memory": 15.25, "cpu": 2, "utility": 2},
+		{"instance_type": "r3.xlarge", "ecu": 13, "num_drives": 1, "memory": 30.5, "cpu": 4, "utility": 4},
+		{"instance_type": "r3.2xlarge", "ecu": 26, "num_drives": 1, "memory": 61, "cpu": 8, "utility": 8},
+		{"instance_type": "r3.4xlarge", "ecu": 52, "num_drives": 1, "memory": 122, "cpu": 16, "utility": 16},
+		{"instance_type": "r3.8xlarge", "ecu": 104, "num_drives": 2, "memory": 244, "cpu": 32, "utility": 32},
+
+
 	],
 	"ec2": {
 		"request": {
 			//SEE http://boto.readthedocs.org/en/latest/ref/ec2.html#boto.ec2.connection.EC2Connection.request_spot_instances
 			"price": 0.001,
-			"image_id": "ami-5189a661",
+			"image_id": "ami-835b4efa", //UBUNTU (old: ami-a9d276c9)
 			"count": 1,
 			"type": "one-time",
 			"valid_from": null,
+			"expiration": "hour",  //SPECIAL, USED TO FILL valid_until
 			"valid_until": null,
 			"launch_group": null,
 			"availability_zone_group": null,
@@ -63,14 +86,20 @@
 			"monitoring_enabled": false,
 			"subnet_id": null,
 			"placement_group": null,
-			"block_device_map": null,
+//			"block_device_map": {
+//				"/dev/sda1": {
+//					"volume_id":"snap-039ffe051a6c30204",  // UBUNTU SNAPSHOT
+//					"volume_type":"standard",
+//					"size": 15
+//				}
+//			},
 			"instance_profile_arn": null,
 			"instance_profile_name": "active-data",
 			"security_group_ids": null,
 			"ebs_optimized": false,
 			"network_interfaces": {
-				"subnet_id": "subnet-b7c137ee",
-				"groups": ["sg-bb542fde"],
+				"subnet_id": "subnet-5750c90d",  // active-data-etl subnet-5750c90d
+				"groups": ["sg-a8c758d6"],   // ActiveData ETL
 				"associate_public_ip_address": true
 			},
 			"dry_run": false
@@ -81,20 +110,27 @@
 	},
 	"instance":{
 		"class":"examples.etl.ETL",
-		"minimum_utility": 2,
+		"setup_timeout": "10minute",
+		"grcov": {
+			"platform": "linux-x86_64"
+		},
+		"minimum_utility": 10,   // HOW MUCH UTILITY CAN REMAIN IDLE
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 			"user": "ubuntu",
-			"key_filename": "~/keys/aws-pulse-logger.pem",
+			"key_filename": "~/.ssh/aws-pulse-logger.pem",
 			"disable_known_hosts": true,
 			"host_string": "",
 			"port": 22,
 			"password": ""
 		},
 		"work_queue": {
-			"name": "ekyle-etl",
+			"name": "active-data-etl",
 			"$ref": "file://~/private.json#aws_credentials"
 		}
+	},
+	"constants":{
+		"pyLibrary.env.http.default_headers":{"Referer": "https://github.com/klahnakoski/SpotManager"}
 	},
 	"debug": {
 		"trace": true,
@@ -107,15 +143,15 @@
 				"class": "logging.handlers.RotatingFileHandler",
 				"filename": "examples/logs/examples_etl.log",
 				"maxBytes": 10000000,
-				"backupCount": 100,
+				"backupCount": 10,
 				"encoding": "utf8"
 			},
 			{
-				"log_type": "email",
+				"log_type": "ses",
 				"from_address": "klahnakoski@mozilla.com",
 				"to_address": "klahnakoski@mozilla.com",
-				"subject": "[ALERT][DEV] Problem in ETL Spot",
-				"$ref": "file://~/private.json#email"
+				"subject": "[ALERT][Manager] Problem in ETL Spot",
+				"$ref": "file://~/private.json#aws_credentials"
 			},
 			{
 				"log_type": "console"

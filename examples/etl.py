@@ -46,7 +46,7 @@ class ETL(InstanceManager):
             return max(minimum, Math.ceiling(pending / 20))   # ENSURE THERE IS PLENTY OF WORK BEFORE MACHINE IS DEPLOYED
         else:
             # DECREASE
-            target = max(minimum, min(current_utility, pending/2))
+            target = max(minimum, min(current_utility, pending*2))
             return target + int((current_utility-target) / 2)
 
     def setup(

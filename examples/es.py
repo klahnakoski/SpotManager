@@ -33,7 +33,7 @@ class ESSpot(InstanceManager):
         self.settings = kwargs
         self.minimum_utility = minimum_utility
 
-    def required_utility(self):
+    def required_utility(self, current_utility=None):
         return self.minimum_utility
 
     def setup(

@@ -73,7 +73,7 @@ class SpotManager(object):
         if not disable_prices:
             self.pricing()
 
-    def update_spot_requests(self, utility_required):
+    def update_spot_requests(self):
         spot_requests = self._get_managed_spot_requests()
 
         # ADD UP THE CURRENT REQUESTED INSTANCES
@@ -109,6 +109,7 @@ class SpotManager(object):
         remaining_budget = self.settings.budget - used_budget
 
         current_utility = coalesce(SUM(self.price_lookup[r.launch_specification.instance_type, r.launch_specification.placement].type.utility for r in active), 0)
+        utility_required = self.instance_manager.required_utility(current_utility)
         net_new_utility = utility_required - current_utility
 
         Log.note("have {{current_utility}} utility running; need {{need_utility}} more utility", current_utility=current_utility, need_utility=net_new_utility)
@@ -782,7 +783,7 @@ def main():
             m = SpotManager(instance_manager, kwargs=settings)
 
             if ENABLE_SIDE_EFFECTS:
-                m.update_spot_requests(instance_manager.required_utility())
+                m.update_spot_requests()
 
             if m.watcher:
                 m.watcher.join()

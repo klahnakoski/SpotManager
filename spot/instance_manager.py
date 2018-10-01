@@ -19,7 +19,7 @@ class InstanceManager(object):
     def __init__(self, settings):
         self.settings = settings
 
-    def required_utility(self):
+    def required_utility(self, current_utility=None):
         raise NotImplementedError()
 
     def setup_required(self):

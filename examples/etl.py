@@ -33,15 +33,19 @@ class ETL(InstanceManager):
         InstanceManager.__init__(self, kwargs)
         self.settings = kwargs
 
-    def required_utility(self):
+    def required_utility(self, current_utility=None):
         queue = aws.Queue(self.settings.work_queue)
         pending = len(queue)
 
         tod_minimum = None
         if Date.now().dow not in [6, 7] and Date.now().hour not in [4, 5, 6, 7, 8, 9, 10, 11]:
             tod_minimum = 100
+        minimum = max(self.settings.minimum_utility, tod_minimum)
 
-        return max(self.settings.minimum_utility, tod_minimum, Math.ceiling(pending / 30))
+        return max(
+            Math.ceiling(pending / 20),   # ENSURE THERE IS PLENTY OF WORK BEFORE MACHINE IS DEPLOYED
+            int((current_utility - minimum) / 2) + minimum   # EXPONENTIAL DECAY TO MINIMUM
+        )
 
     def setup(
         self,
@@ -60,6 +64,7 @@ class ETL(InstanceManager):
             self._setup_etl_code(c)
             self._add_private_file(c)
             self._setup_etl_supervisor(c, cpu_count)
+            Log.note("done setup {{instance}}", instance=instance.id)
 
     def teardown(self, instance, please_stop):
         with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:

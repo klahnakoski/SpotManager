@@ -433,16 +433,19 @@ class SpotManager(object):
                         i.add_tag("Name", "")
                         Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
 
-                for i, r, t in list(setup_threads):
+                please_join = [(i, r, t) for i, r, t in setup_threads if t.stopped]
+                if please_join:
+                    Log.note("{{num}} threads have stopped", num=len(please_join))
+                for i, r, t in please_join:
                     try:
-                        if t.stopped:
-                            t.join()
-                            setup_threads.remove((i, r, t))
-                            i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
-                            with self.net_new_locker:
-                                self.net_new_spot_requests.remove(r.id)
+                        t.join()
+                        setup_threads.remove((i, r, t))
+                        i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
+                        with self.net_new_locker:
+                            self.net_new_spot_requests.remove(r.id)
                     except Exception as e:
                         e = Except.wrap(e)
+                        setup_threads.remove((i, r, t))
                         i.add_tag("Name", "")
                         failed_attempts[r.id] += [e]
                         if "Can not setup unknown " in e:

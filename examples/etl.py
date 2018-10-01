@@ -63,9 +63,6 @@ class ETL(InstanceManager):
             self._setup_etl_code(c)
             self._add_private_file(c)
             self._setup_etl_supervisor(c, cpu_count)
-            stopping = Timer("stopping setup of {{instance}}", param={"instance":instance.id})
-            stopping.__enter__()
-        stopping.__exit__(None, None, None)
 
     def teardown(self, instance, please_stop):
         with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:

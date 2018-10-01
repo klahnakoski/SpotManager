@@ -19,7 +19,7 @@ import signal as _signal
 import sys
 from copy import copy
 from datetime import datetime, timedelta
-from time import sleep
+from time import sleep, time
 
 from mo_dots import Data, unwraplist
 from mo_future import get_ident, start_new_thread, get_function_name, text_type, allocate_lock
@@ -282,6 +282,7 @@ class Thread(BaseThread):
                     except Exception:
                         sys.stderr.write(str("ERROR in thread: " + self.name + " " + text_type(e) + "\n"))
             finally:
+                stopping = time()
                 try:
                     with self.child_lock:
                         children = copy(self.children)
@@ -308,6 +309,9 @@ class Thread(BaseThread):
                 finally:
                     self.stopped.go()
                     DEBUG and Log.note("thread {{name|quote}} is done", name=self.name)
+
+        duration = time() - stopping
+        Log.note("thread {{name|quote}} took {{duration|round(2)}} seconds to shutdown", name=self.name, duration=duration)
 
     def is_alive(self):
         return not self.stopped

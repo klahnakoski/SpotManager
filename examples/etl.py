@@ -9,14 +9,13 @@
 from __future__ import division
 from __future__ import unicode_literals
 
-from mo_math import Math
-
 from mo_fabric import Connection
 from mo_files import File
 from mo_kwargs import override
 from mo_logs import Log, constants, startup
 from mo_logs.strings import between
-from mo_times import Date
+from mo_math import Math
+from mo_times import Date, Timer
 from pyLibrary import aws
 from spot.instance_manager import InstanceManager
 
@@ -64,7 +63,9 @@ class ETL(InstanceManager):
             self._setup_etl_code(c)
             self._add_private_file(c)
             self._setup_etl_supervisor(c, cpu_count)
-            Log.note("done setup {{instance}}", instance=instance.id)
+            stopping = Timer("stopping setup of {{instance}}", param={"instance":instance.id})
+            stopping.__enter__()
+        stopping.__exit__(None, None, None)
 
     def teardown(self, instance, please_stop):
         with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:

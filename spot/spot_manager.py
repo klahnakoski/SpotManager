@@ -487,10 +487,10 @@ class SpotManager(object):
                     Log.note("No more pending spot requests")
                     please_stop.go()
                     break
-                elif pending:
-                    Log.note("waiting for spot requests: {{pending}}", pending=[p.id for p in pending])
                 elif setup_threads:
                     Log.note("waiting for setup of {{num}} instances", num=len(setup_threads))
+                elif pending:
+                    Log.note("waiting for spot requests: {{pending}}", pending=[p.id for p in pending])
 
                 (Till(seconds=10) | please_stop).wait()
 

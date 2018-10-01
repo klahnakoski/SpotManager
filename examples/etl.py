@@ -41,10 +41,11 @@ class ETL(InstanceManager):
             tod_minimum = 100
         minimum = max(self.settings.minimum_utility, tod_minimum)
 
-        if current_utility < pending:
+        if current_utility < pending / 20:
             return max(minimum, Math.ceiling(pending / 20))   # ENSURE THERE IS PLENTY OF WORK BEFORE MACHINE IS DEPLOYED
         else:
-            return max(minimum, pending) + int((current_utility-max(minimum, pending)) / 2)
+            target = max(minimum, pending)
+            return target + int((current_utility-target) / 2)
 
     def setup(
         self,

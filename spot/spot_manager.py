@@ -354,7 +354,7 @@ class SpotManager(object):
         Log.warning("Shutdown {{instances}} to save money!", instances=remove_list.id)
         for i in remove_list:
             try:
-                self.instance_manager.teardown(i)
+                self.instance_manager.teardown(i, False)
             except Exception as e:
                 Log.warning("Teardown of {{id}} failed", id=i.id, cause=e)
 

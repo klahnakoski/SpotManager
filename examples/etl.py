@@ -15,7 +15,7 @@ from mo_kwargs import override
 from mo_logs import Log, constants, startup
 from mo_logs.strings import between
 from mo_math import Math
-from mo_times import Date, Timer
+from mo_times import Date
 from pyLibrary import aws
 from spot.instance_manager import InstanceManager
 

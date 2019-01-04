@@ -19,7 +19,7 @@ class InstanceManager(object):
     def __init__(self, settings):
         self.settings = settings
 
-    def required_utility(self):
+    def required_utility(self, current_utility=None):
         raise NotImplementedError()
 
     def setup_required(self):
@@ -38,13 +38,15 @@ class InstanceManager(object):
     def setup(
         self,
         instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
-        utility
+        utility,
+        please_stop
     ):
         pass
 
     def teardown(
         self,
-        instance   # THE boto INSTANCE OBJECT FOR THE MACHINE TO TEARDOWN
+        instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO TEARDOWN
+        please_stop
     ):
         pass
 

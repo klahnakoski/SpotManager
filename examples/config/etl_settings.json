@@ -1,7 +1,7 @@
 {
 	"budget": 3.00,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.02,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
-	"max_new_utility": 50,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
+	"max_new_utility": 30,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"max_requests_per_type": 10,
 	"max_percent_per_type": 0.70,  //ALL INSTANCE TYPES MAY NOT GO OVER THIS AS A PERCENT OF TOTAL INSTANCES.   DEFAULT = 1.0 (100%, NO LIMITS)
 	"price_file": "resources/aws/prices.json",
@@ -114,15 +114,12 @@
 		"grcov": {
 			"platform": "linux-x86_64"
 		},
-		"minimum_utility": 10,   // HOW MUCH UTILITY CAN REMAIN IDLE
+		"minimum_utility": 0,   // HOW MUCH UTILITY CAN REMAIN IDLE
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 			"user": "ubuntu",
 			"key_filename": "~/.ssh/aws-pulse-logger.pem",
-			"disable_known_hosts": true,
-			"host_string": "",
-			"port": 22,
-			"password": ""
+			"port": 22
 		},
 		"work_queue": {
 			"name": "active-data-etl",

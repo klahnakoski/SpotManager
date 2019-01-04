@@ -12,7 +12,7 @@ from __future__ import division
 from __future__ import unicode_literals
 
 from collections import MutableMapping, Mapping
-from copy import deepcopy
+from copy import deepcopy, copy
 from decimal import Decimal
 
 from mo_future import text_type, PY2, iteritems, none_type, generator_types, long
@@ -46,10 +46,10 @@ class Data(MutableMapping):
         else:
             if args:
                 args0 = args[0]
-                if isinstance(args0, Data):
-                    _set(self, SLOT, _get(args0, SLOT))
-                elif isinstance(args0, dict):
+                if isinstance(args0, dict):
                     _set(self, SLOT, args0)
+                elif isinstance(args0, Data):
+                    _set(self, SLOT, _get(args0, SLOT))
                 else:
                     _set(self, SLOT, dict(args0))
             elif kwargs:
@@ -151,7 +151,7 @@ class Data(MutableMapping):
             raise e
 
     def __getattr__(self, key):
-        d = self._internal_dict
+        d = _get(self, SLOT)
         v = d.get(key)
         t = v.__class__
 
@@ -253,11 +253,18 @@ class Data(MutableMapping):
         return dict.__len__(d)
 
     def copy(self):
-        return Data(**self)
+        d = self._internal_dict
+        if isinstance(d, dict):
+            return Data(**self)
+        else:
+            return copy(d)
 
     def __copy__(self):
         d = self._internal_dict
-        return Data(**d)
+        if isinstance(d, dict):
+            return Data(**self)
+        else:
+            return copy(d)
 
     def __deepcopy__(self, memo):
         d = self._internal_dict

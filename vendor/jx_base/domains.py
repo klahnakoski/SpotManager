@@ -15,11 +15,11 @@ import itertools
 from collections import Mapping
 from numbers import Number
 
-from mo_future import text_type
+from mo_future import text_type, sort_using_cmp
 
 from jx_base.expressions import jx_expression
 from mo_collections.unique_index import UniqueIndex
-from mo_dots import coalesce, Data, set_default, Null, listwrap
+from mo_dots import coalesce, Data, set_default, Null, listwrap, unwrap
 from mo_dots import wrap
 from mo_dots.lists import FlatList
 from mo_logs import Log
@@ -210,7 +210,12 @@ class SimpleSetDomain(Domain):
     DOMAIN IS A LIST OF OBJECTS, EACH WITH A value PROPERTY
     """
 
-    __slots__ = ["NULL", "partitions", "map", "order"]
+    __slots__ = [
+        "NULL",       # THE value FOR NULL
+        "partitions", # LIST OF {name, value, dataIndex} dicts
+        "map",        # MAP FROM value TO name
+        "order"       # MAP FROM value TO dataIndex
+    ]
 
     def __init__(self, **desc):
         Domain.__init__(self, **desc)
@@ -251,10 +256,13 @@ class SimpleSetDomain(Domain):
             self.key = desc.key
             self.map = UniqueIndex(keys=desc.key)
         elif desc.partitions and isinstance(desc.partitions[0][desc.key], Mapping):
+            # LOOKS LIKE OBJECTS
+            # sorted = desc.partitions[desc.key]
+
             self.key = desc.key
             self.map = UniqueIndex(keys=desc.key)
-            # self.key = UNION(set(d[desc.key].keys()) for d in desc.partitions)
-            # self.map = UniqueIndex(keys=self.key)
+            self.order = {p[self.key]: p.dataIndex for p in desc.partitions}
+            self.partitions = desc.partitions
         elif len(desc.partitions) == 0:
             # CREATE AN EMPTY DOMAIN
             self.key = "value"
@@ -663,7 +671,7 @@ class RangeDomain(Domain):
             if not self.key:
                 Log.error("Must have a key value")
 
-            parts = list(listwrap(self.partitions))
+            parts =listwrap(self.partitions)
             for i, p in enumerate(parts):
                 self.min = MIN([self.min, p.min])
                 self.max = MAX([self.max, p.max])
@@ -675,10 +683,10 @@ class RangeDomain(Domain):
 
             # VERIFY PARTITIONS DO NOT OVERLAP, HOLES ARE FINE
             for p, q in itertools.product(parts, parts):
-                if p is not q and p.min <= q.min and q.min < p.max:
+                if p.min <= q.min and q.min < p.max and unwrap(p) is not unwrap(q):
                     Log.error("partitions overlap!")
 
-            self.partitions = parts
+            self.partitions = wrap(parts)
             return
         elif any([self.min == None, self.max == None, self.interval == None]):
             Log.error("Can not handle missing parameter")

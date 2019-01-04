@@ -26,7 +26,7 @@ from tempfile import TemporaryFile
 
 import mo_json
 import mo_math
-from mo_dots import wrap, unwrap, unwraplist, concat_field
+from mo_dots import wrap, unwrap, unwraplist, concat_field, Null
 from mo_future import text_type, HTMLParser, StringIO, PY3, long
 from mo_logs import Log
 from mo_logs.exceptions import suppress_exception
@@ -53,6 +53,24 @@ def string2boolean(value):
         return False
     else:
         return None
+
+
+_v2b = {
+    True: True,
+    "true": True,
+    "T": True,
+    1: True,
+    False: False,
+    "false": False,
+    "F": False,
+    0: False,
+    None: None,
+    Null: None
+}
+
+
+def value2boolean(value):
+    return _v2b.get(value, True)
 
 
 def str2datetime(value, format=None):
@@ -543,7 +561,7 @@ def json_schema_to_markdown(schema):
 
     def _inner(schema, parent_name, indent):
         more_lines = []
-        for k,v in schema.items():
+        for k, v in schema.items():
             full_name = concat_field(parent_name, k)
             details = indent+"* "+_md_code(full_name)
             if v.type:
@@ -560,7 +578,7 @@ def json_schema_to_markdown(schema):
 
     lines = []
     if schema.title:
-        lines.append("#"+schema.title)
+        lines.append("# "+schema.title)
 
     lines.append(schema.description)
     lines.append("")
@@ -568,7 +586,7 @@ def json_schema_to_markdown(schema):
     for k, v in jx.sort(schema.properties.items(), 0):
         full_name = k
         if v.type in ["object", "array", "nested"]:
-            lines.append("##"+_md_code(full_name)+" Property")
+            lines.append("## "+_md_code(full_name)+" Property")
             if v.description:
                 lines.append(v.description)
             lines.append("")
@@ -576,7 +594,7 @@ def json_schema_to_markdown(schema):
             if v.type in ["object", "array", "nested"]:
                 lines.extend(_inner(v.properties, full_name, "  "))
         else:
-            lines.append("##"+_md_code(full_name)+" ("+v.type+")")
+            lines.append("## "+_md_code(full_name)+" ("+v.type+")")
             if v.description:
                 lines.append(v.description)
 

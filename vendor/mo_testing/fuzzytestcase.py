@@ -13,6 +13,7 @@ import types
 import unittest
 from collections import Mapping
 
+from jx_base.expressions import NULL
 import mo_dots
 from mo_collections.unique_index import UniqueIndex
 from mo_dots import coalesce, literal_field, unwrap, wrap
@@ -145,7 +146,7 @@ def assertAlmostEqualValue(test, expected, digits=None, places=None, msg=None, d
     """
     Snagged from unittest/case.py, then modified (Aug2014)
     """
-    if expected.__class__.__name__ == "NullOp":
+    if expected is NULL:
         if test == None:
             return
         else:

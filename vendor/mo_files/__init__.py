@@ -21,6 +21,7 @@ from mo_future import text_type, binary_type, PY3
 from mo_logs import Log, Except
 from mo_logs.exceptions import extract_stack
 from mo_threads import Thread, Till
+from mo_files.url import URL
 
 mime = MimeTypes()
 
@@ -42,12 +43,12 @@ class File(object):
         """
         YOU MAY SET filename TO {"path":p, "key":k} FOR CRYPTO FILES
         """
-        self._mime_type = mime_type
-        if filename == None:
-            Log.error(u"File must be given a filename")
-        elif isinstance(filename, File):
+        if isinstance(filename, File):
             return
-        elif isinstance(filename, (binary_type, text_type)):
+
+        self._mime_type = mime_type
+
+        if isinstance(filename, (binary_type, text_type)):
             try:
                 self.key = None
                 if filename==".":
@@ -440,7 +441,7 @@ class TempDirectory(File):
     WILL BE DELETED WHEN EXITED
     """
     def __new__(cls):
-        return File.__new__(cls, None)
+        return object.__new__(cls)
 
     def __init__(self):
         File.__init__(self, mkdtemp())

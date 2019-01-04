@@ -18,8 +18,8 @@ from decimal import Decimal
 from json.encoder import encode_basestring
 
 from mo_dots import Data, FlatList, NullType, join_field, split_field, _get, SLOT, DataObject
-from mo_future import text_type, binary_type, sort_using_key, long, PY2, none_type, generator_types
-from mo_json import ESCAPE_DCT, float2json
+from mo_future import text_type, binary_type, sort_using_key, long, generator_types
+from mo_json import ESCAPE_DCT, float2json, BOOLEAN, INTEGER, NUMBER, STRING, EXISTS, NESTED, python_type_to_json_type
 from mo_json.encoder import UnicodeBuilder, COLON, COMMA, problem_serializing, json_encoder
 from mo_logs import Log
 from mo_logs.strings import quote, utf82unicode
@@ -45,11 +45,19 @@ def untype_path(encoded):
 
 def unnest_path(encoded):
     if encoded.startswith(".."):
-        encoded = encoded.lstrip(".")
-        if not encoded:
-            encoded = "."
+        remainder = encoded.lstrip(".")
+        back = len(encoded) - len(remainder)
+        return ("." * back) + unnest_path(remainder)
 
-    return join_field(decode_property(c) for c in split_field(encoded) if c != NESTED_TYPE)
+    path = split_field(encoded)
+    if not path:
+        return "."
+    if path[-1] == NESTED_TYPE:
+        path = path[:-1]
+        if not path:
+            return "."
+
+    return join_field([decode_property(c) for c in path[:-1] if not c.startswith(TYPE_PREFIX)] + [decode_property(path[-1])])
 
 
 def untyped(value):
@@ -144,7 +152,7 @@ def typed_encode(value, sub_schema, path, net_new_properties, buffer):
             else:
                 from mo_logs import Log
 
-                Log.error("Can not store {{value}} in {{column|quote}}", value=value, column=sub_schema.names['.'])
+                Log.error("Can not store {{value}} in {{column|quote}}", value=value, column=sub_schema.name)
 
             sub_schema = {json_type_to_inserter_type[value_json_type]: sub_schema}
 
@@ -186,10 +194,14 @@ def typed_encode(value, sub_schema, path, net_new_properties, buffer):
                     append(buffer, text_type(len(value)))
                     append(buffer, '}')
                 else:
-                    # SINGLETON LISTS OF null SHOULD NOT EXIST
-                    from mo_logs import Log
-
-                    Log.error("should not happen")
+                    # SINGLETON LIST
+                    append(buffer, '{')
+                    append(buffer, QUOTED_NESTED_TYPE)
+                    append(buffer, '[{')
+                    append(buffer, QUOTED_EXISTS_TYPE)
+                    append(buffer, '1}]' + COMMA)
+                    append(buffer, QUOTED_EXISTS_TYPE)
+                    append(buffer, '1}')
             else:
                 if EXISTS_TYPE not in sub_schema:
                     sub_schema[EXISTS_TYPE] = {}
@@ -410,40 +422,6 @@ def _dict2json(value, sub_schema, path, net_new_properties, buffer):
         append(buffer, '1}')
 
 
-IS_NULL = '0'
-BOOLEAN = 'boolean'
-INTEGER = 'integer'
-NUMBER = 'number'
-STRING = 'string'
-OBJECT = 'object'
-NESTED = "nested"
-EXISTS = "exists"
-
-JSON_TYPES = [BOOLEAN, INTEGER, NUMBER, STRING, OBJECT]
-PRIMITIVE = [EXISTS, BOOLEAN, INTEGER, NUMBER, STRING]
-STRUCT = [EXISTS, OBJECT, NESTED]
-
-
-python_type_to_json_type = {
-    int: NUMBER,
-    text_type: STRING,
-    float: NUMBER,
-    None: OBJECT,
-    bool: BOOLEAN,
-    NullType: OBJECT,
-    none_type: OBJECT,
-    Data: OBJECT,
-    dict: OBJECT,
-    object: OBJECT,
-    Mapping: OBJECT,
-    list: NESTED,
-    FlatList: NESTED,
-    Date: NUMBER
-}
-
-if PY2:
-    python_type_to_json_type[str] = STRING
-    python_type_to_json_type[long] = NUMBER
 
 
 TYPE_PREFIX = "~"  # u'\u0442\u0443\u0440\u0435-'  # "туре"
@@ -460,6 +438,12 @@ QUOTED_NUMBER_TYPE = quote(NUMBER_TYPE) + COLON
 QUOTED_STRING_TYPE = quote(STRING_TYPE) + COLON
 QUOTED_NESTED_TYPE = quote(NESTED_TYPE) + COLON
 QUOTED_EXISTS_TYPE = quote(EXISTS_TYPE) + COLON
+
+inserter_type_to_json_type = {
+    BOOLEAN_TYPE: BOOLEAN,
+    NUMBER_TYPE: NUMBER,
+    STRING_TYPE: STRING
+}
 
 json_type_to_inserter_type = {
     BOOLEAN: BOOLEAN_TYPE,

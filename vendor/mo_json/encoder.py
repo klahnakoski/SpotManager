@@ -111,8 +111,11 @@ class cPythonJSONEncoder(object):
         try:
             with Timer("scrub", too_long=0.1):
                 scrubbed = scrub(value)
-            with Timer("encode", too_long=0.1):
-                return text_type(self.encoder(scrubbed))
+            param = {"size": 0}
+            with Timer("encode {{size}} characters", param=param, too_long=0.1):
+                output = text_type(self.encoder(scrubbed))
+                param["size"] = len(output)
+                return output
         except Exception as e:
             from mo_logs.exceptions import Except
             from mo_logs import Log
@@ -278,13 +281,13 @@ def pretty_json(value):
         elif isinstance(value, Mapping):
             try:
                 items = sort_using_key(value.items(), lambda r: r[0])
-                values = [encode_basestring(k) + PRETTY_COLON + indent(pretty_json(v)).strip() for k, v in items if v != None]
+                values = [encode_basestring(k) + PRETTY_COLON + pretty_json(v) for k, v in items if v != None]
                 if not values:
                     return "{}"
                 elif len(values) == 1:
                     return "{" + values[0] + "}"
                 else:
-                    return "{\n" + INDENT + (",\n" + INDENT).join(values) + "\n}"
+                    return "{\n" + ",\n".join(indent(v) for v in values) + "\n}"
             except Exception as e:
                 from mo_logs import Log
                 from mo_math import OR
@@ -330,7 +333,7 @@ def pretty_json(value):
                     Log.note("return value of length {{length}}", length=len(output))
                     return output
                 except BaseException as f:
-                    Log.warning("can not even explicit convert {{type}}", type=f.__class__.__name__, cause=f)
+                    Log.warning("can not convert {{type}} to json", type=f.__class__.__name__, cause=f)
                     return "null"
         elif isinstance(value, list):
             if not value:

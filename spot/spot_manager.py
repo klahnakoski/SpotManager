@@ -20,6 +20,7 @@ from boto.utils import ISO8601
 from mo_collections import UniqueIndex
 from mo_dots import unwrap, coalesce, wrap, listwrap, FlatList, Data
 from mo_files import File
+from mo_json import value2json
 from mo_kwargs import override
 from mo_logs import Log, startup, Except, constants
 from mo_math import Math, MAX
@@ -41,6 +42,7 @@ DEBUG_PRICING = True
 TIME_FROM_RUNNING_TO_LOGIN = 7 * MINUTE
 ERROR_ON_CALL_TO_SETUP = "Problem with setup()"
 DELAY_BEFORE_SETUP = 1 * MINUTE  # PROBLEM WITH CONNECTING ONLY HAPPENS WITH BIGGER ES MACHINES
+CAPACITY_NOT_AVAILABLE_RETRY = Duration("day")  # SOME MACHINES ARE NOT AVAILABLE
 
 
 class SpotManager(object):
@@ -58,6 +60,8 @@ class SpotManager(object):
         self.price_locker = Lock()
         self.prices = None
         self.price_lookup = None
+        self.no_capacity = Data()
+        self.no_capacity_file = File(kwargs.price_file).parent / "no capacity.json"
         self.done_spot_requests = Signal()
         self.net_new_locker = Lock()
         self.net_new_spot_requests = UniqueIndex(("id",))  # SPOT REQUESTS FOR THIS SESSION
@@ -227,6 +231,15 @@ class SpotManager(object):
                     )
                     continue
 
+                last_no_capacity_message = self.no_capacity[p.type.instance_type]
+                if last_no_capacity_message > Date.now() - CAPACITY_NOT_AVAILABLE_RETRY:
+                    Log.note(
+                        "Did not bid on {{type}}: \"No capacity\" last seen at {{last_time|datetime}}",
+                        type=p.type.instance_type,
+                        last_time=last_no_capacity_message
+                    )
+                    continue
+
                 try:
                     if self.settings.ec2.request.count == None or self.settings.ec2.request.count != 1:
                         Log.error("Spot Manager can only request machine one-at-a-time")
@@ -261,6 +274,12 @@ class SpotManager(object):
                     if "Max spot instance count exceeded" in e.message:
                         Log.note("No further spot requests will be attempted.")
                         return net_new_utility, remaining_budget
+
+        with Timer("Save no capacity to file"):
+            self.no_capacity_file.write(value2json([
+                {"instance_type": k, "last_failure": v}
+                for k, v in self.no_capacity
+            ]))
 
         return net_new_utility, remaining_budget
 
@@ -441,10 +460,13 @@ class SpotManager(object):
                         expired = Date.now() - self.settings.run_interval + 2 * MINUTE
                         for ii in list(self.net_new_spot_requests):
                             if Date(ii.create_time) < expired:
-                                ## SOMETIMES REQUESTS NEVER GET INTO THE MAIN LIST OF REQUESTS
+                                # SOMETIMES REQUESTS NEVER GET INTO THE MAIN LIST OF REQUESTS
                                 self.net_new_spot_requests.remove(ii)
                         for g in give_up:
                             self.net_new_spot_requests.remove(g.id)
+                            if g.status.code == "capacity-not-available":
+                                self.no_capacity[g.instance_type] = Date.now()
+
                         for g in ignore:
                             self.net_new_spot_requests.remove(g.id)
                         pending = UniqueIndex(("id",), data=pending)
@@ -628,6 +650,17 @@ class SpotManager(object):
             return self.prices
 
     def _get_spot_prices_from_aws(self):
+        with Timer("Read no capacity file"):
+            try:
+                # FILE IS LIST OF {instance_type, last_failure} OBJECTS
+                content = self.no_capacity_file.read()
+                self.no_capacity = Data(
+                    (r.instance_type, r.last_failure)
+                    for r in convert.json2value(content, flexible=False, leaves=False)
+                )
+            except Exception as e:
+                no_capacity = Data()
+
         with Timer("Read pricing file"):
             try:
                 content = File(self.settings.price_file).read()

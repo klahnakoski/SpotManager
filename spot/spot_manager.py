@@ -840,31 +840,35 @@ def main():
 ephemeral_storage = {
     "c1.medium": {"num": 1, "size": 350},
     "c1.xlarge": {"num": 4, "size": 1680},
+
     "c3.2xlarge": {"num": 2, "size": 160},
     "c3.4xlarge": {"num": 2, "size": 320},
     "c3.8xlarge": {"num": 2, "size": 640},
     "c3.large": {"num": 2, "size": 32},
     "c3.xlarge": {"num": 2, "size": 80},
+
     "c4.2xlarge": {"num": 0, "size": 0},
     "c4.4xlarge": {"num": 0, "size": 0},
     "c4.8xlarge": {"num": 0, "size": 0},
     "c4.large": {"num": 0, "size": 0},
     "c4.xlarge": {"num": 0, "size": 0},
+
     "c5.large":{"num": 0, "size": 0},
     "c5.xlarge":{"num": 0, "size": 0},
     "c5.2xlarge":{"num": 0, "size": 0},
     "c5.4xlarge":{"num": 0, "size": 0},
     "c5.9xlarge":{"num": 0, "size": 0},
     "c5.18xlarge":{"num": 0, "size": 0},
+
     "cc2.8xlarge": {"num": 4, "size": 3360},
     "cg1.4xlarge": {"num": 2, "size": 1680},
     "cr1.8xlarge": {"num": 2, "size": 240},
+
     "d2.2xlarge": {"num": 6, "size": 12000},
     "d2.4xlarge": {"num": 12, "size": 24000},
     "d2.8xlarge": {"num": 24, "size": 48000},
     "d2.xlarge": {"num": 3, "size": 6000},
-    "f1.16xlarge": {"num": 0, "size": 0},
-    "f1.2xlarge": {"num": 0, "size": 0},
+
     "g2.2xlarge": {"num": 1, "size": 60},
     "g2.8xlarge": {"num": 2, "size": 240},
     "h1.2xlarge": {"num": 1, "size": 2000},

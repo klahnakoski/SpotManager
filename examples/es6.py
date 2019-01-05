@@ -114,13 +114,18 @@ class ES6Spot(InstanceManager):
         # MOUNT AND FORMAT THE VOLUMES (list with `lsblk`)
         for i, k in enumerate(volumes):
             if not conn.exists(k.path):
+                # ENSURE DEVICE IS NOT MOUNTED
                 conn.sudo('sudo umount '+k.device, warn=True)
 
+                # (RE)PARTITION THE LOCAL DEVICE, AND FORMAT
+                conn.sudo("parted /dev/nvme0n1 --script \"mklabel gpt mkpart primary ext4 2048s 100%\"")
                 conn.sudo('yes | sudo mkfs -t ext4 '+k.device)
 
                 # ES AND JOURNALLING DO NOT MIX
                 conn.sudo('tune2fs -o journal_data_writeback '+k.device)
                 conn.sudo('tune2fs -O ^has_journal '+k.device)
+
+                # MOUNT IT
                 conn.sudo('mkdir '+k.path)
                 conn.sudo('sudo mount '+k.device+' '+k.path)
                 conn.sudo('chown -R ec2-user:ec2-user '+k.path)
@@ -211,9 +216,9 @@ class ES6Spot(InstanceManager):
         if not pip_version.startswith("pip 18."):
             conn.sudo("yum -y install python2")
             conn.sudo("easy_install pip")
-            conn.sudo("rm -f /usr/bin/pip", warn=True)
-            conn.sudo("ln -s /usr/local/bin/pip /usr/bin/pip")
-        conn.sudo("pip install --upgrade pip")
+            # conn.sudo("rm -f /usr/bin/pip", warn=True)
+            # conn.sudo("ln -s /usr/local/bin/pip /usr/bin/pip")
+            # conn.sudo("pip install --upgrade pip")
 
     def _install_pypy(self, instance, conn):
         Log.note("Install pypy at {{instance_id}} ({{address}})", instance_id=instance.id, address=instance.ip_address)

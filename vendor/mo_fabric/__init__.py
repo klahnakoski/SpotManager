@@ -6,22 +6,19 @@
 #
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
+from datetime import datetime
 import os
 import sys
-from datetime import datetime
 
-from fabric2 import Config, Result
-from fabric2 import Connection as _Connection
+from fabric2 import Config, Connection as _Connection, Result
 
 from mo_dots import set_default, unwrap, wrap
-from mo_files import File, TempFile
+from mo_files import File
 from mo_future import text_type
 from mo_kwargs import override
-from mo_logs import Log, machine_metadata, exceptions
+from mo_logs import Log, exceptions, machine_metadata
 from mo_math.randoms import Random
 
 
@@ -47,23 +44,15 @@ class Connection(object):
 
         self.stdout = LogStream(host, "stdout")
         self.stderr = LogStream(host, "stderr")
-        config = Config(
-            **unwrap(
-                set_default(
-                    {},
-                    config,
-                    {
-                        "overrides": {
-                            "run": {
-                                # "hide": True,
-                                "out_stream": self.stdout,
-                                "err_stream": self.stderr,
-                            }
-                        }
-                    },
-                )
-            )
-        )
+        config = Config(**unwrap(set_default(
+            {},
+            config,
+            {"overrides": {"run": {
+                # "hide": True,
+                "out_stream": self.stdout,
+                "err_stream": self.stderr,
+            }}},
+        )))
 
         self.warn = False
         self.conn = _Connection(
@@ -80,7 +69,7 @@ class Connection(object):
 
     def exists(self, path):
         try:
-            result = self.conn.run("ls "+path)
+            result = self.conn.run("ls " + path)
             if "No such file or directory" in result:
                 return False
             else:

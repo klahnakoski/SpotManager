@@ -878,19 +878,18 @@ ephemeral_storage = {
     "i2.4xlarge": {"num": 4, "size": 3200},
     "i2.8xlarge": {"num": 8, "size": 6400},
     "i2.xlarge": {"num": 1, "size": 800},
+
     "i3.16xlarge": {"num": 8, "size": 15200},
     "i3.2xlarge": {"num": 1, "size": 1900},
     "i3.4xlarge": {"num": 2, "size": 3800},
     "i3.8xlarge": {"num": 4, "size": 7600},
     "i3.large": {"num": 1, "size": 475},
     "i3.xlarge": {"num": 1, "size": 950},
-    # "m1.large": {"num": 2, "size": 840},
-    # "m1.medium": {"num": 1, "size": 410},
-    # "m1.small": {"num": 1, "size": 160},
-    # "m1.xlarge": {"num": 4, "size": 1680},
-    # "m2.2xlarge": {"num": 1, "size": 850},
-    # "m2.4xlarge": {"num": 2, "size": 1680},
-    # "m2.xlarge": {"num": 1, "size": 420},
+
+    "f1.2xlarge": {"num": 1, "size": 470},
+    "f1.4xlarge": {"num": 1, "size": 940},
+    "f1.16xlarge": {"num": 4, "size": 940},
+
     "m3.2xlarge": {"num": 2, "size": 160},
     "m3.large": {"num": 1, "size": 32},
     "m3.medium": {"num": 1, "size": 4},
@@ -939,6 +938,28 @@ ephemeral_storage = {
     "t2.nano": {"num": 0, "size": 0},
     "t2.small": {"num": 0, "size": 0},
     "t2.xlarge": {"num": 0, "size": 0},
+
+    "c5d.large": {"num": 1, "size": 50},
+    "c5d.xlarge": {"num": 1, "size": 100},
+    "c5d.2xlarge": {"num": 1, "size": 200},
+    "c5d.4xlarge": {"num": 1, "size": 400},
+    "c5d.9xlarge": {"num": 1, "size": 900},
+    "c5d.18xlarge": {"num": 2, "size": 900},
+
+    "x1e.xlarge": {"num": 1, "size": 120},
+    "x1e.2xlarge": {"num": 1, "size": 240},
+    "x1e.4xlarge": {"num": 1, "size": 480},
+    "x1e.8xlarge": {"num": 1, "size": 960},
+    "x1e.16xlarge": {"num": 1, "size": 1920},
+    "x1e.32xlarge": {"num": 2, "size": 1920},
+
+    "z1d.large": {"num": 1, "size": 75},
+    "z1d.xlarge": {"num": 1, "size": 150},
+    "z1d.2xlarge": {"num": 1, "size": 300},
+    "z1d.3xlarge": {"num": 1, "size": 450},
+    "z1d.6xlarge": {"num": 1, "size": 900},
+    "z1d.12xlarge": {"num": 1, "size": 900},
+
     "x1.16xlarge": {"num": 1, "size": 1920},
     "x1.32xlarge": {"num": 2, "size": 3840}
 }

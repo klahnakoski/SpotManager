@@ -79,12 +79,14 @@ class Connection(object):
         )
 
     def exists(self, path):
-        with TempFile() as t:
-            try:
-                result = self.conn.get(path, t.abspath)
-                return t.exists
-            except IOError:
+        try:
+            result = self.conn.run("ls "+path)
+            if "No such file or directory" in result:
                 return False
+            else:
+                return True
+        except Exception:
+            return False
 
     def warn_only(self):
         """
@@ -92,10 +94,23 @@ class Connection(object):
         """
         return Warning(self)
 
-    def get(self, remote, local):
-        self.conn.get(remote, File(local).abspath)
+    def get(self, remote, local, use_sudo=False):
+        if self.conn.command_cwds and not remote.startswith(("/", "~")):
+            remote = self.conn.command_cwds[-1].rstrip("/'") + "/" + remote
+
+        if use_sudo:
+            filename = "/tmp/" + Random.hex(20)
+            self.sudo("cp " + remote + " " + filename)
+            self.sudo("chmod a+r " + filename)
+            self.conn.get(filename, File(local).abspath)
+            self.sudo("rm " + filename)
+        else:
+            self.conn.get(remote, File(local).abspath)
 
     def put(self, local, remote, use_sudo=False):
+        if self.conn.command_cwds and not remote.startswith(("/", "~")):
+            remote = self.conn.command_cwds[-1].rstrip("/'") + "/" + remote
+
         if use_sudo:
             filename = "/tmp/" + Random.hex(20)
             self.conn.put(File(local).abspath, filename)

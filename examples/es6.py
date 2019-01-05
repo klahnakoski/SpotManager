@@ -10,7 +10,7 @@ from __future__ import division
 from __future__ import unicode_literals
 
 from mo_fabric import Connection
-from mo_files import File
+from mo_files import File, TempFile
 from mo_future import text_type
 from mo_kwargs import override
 from mo_logs import Log
@@ -19,11 +19,9 @@ from mo_math import Math
 from spot.instance_manager import InstanceManager
 
 JRE = "jre-8u131-linux-x64.rpm"
-LOCAL_JRE = "resources/" + JRE
-
 PYPY_DIR = "pypy-6.0.0-linux_x86_64-portable"
 PYPY_BZ2 = "pypy-6.0.0-linux_x86_64-portable.tar.bz2"
-LOCAL_PYPY = "resources/" + PYPY_BZ2
+RESOURCES = File("resources")
 
 
 class ES6Spot(InstanceManager):
@@ -45,14 +43,17 @@ class ES6Spot(InstanceManager):
         utility,    # THE utility OBJECT FOUND IN CONFIG
         please_stop
     ):
-        with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:
-            gigabytes = Math.floor(utility.memory)
-            Log.note("setup {{instance}}", instance=instance.id)
+        try:
+            with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:
+                gigabytes = Math.floor(utility.memory)
+                Log.note("setup {{instance}}", instance=instance.id)
 
-            self._install_pypy_indexer(instance, conn)
-            self._install_es(gigabytes, instance, conn)
-            self._install_supervisor(instance, conn)
-            self._start_supervisor(conn)
+                self._install_pypy_indexer(instance=instance, conn=conn)
+                self._install_es(gigabytes, instance=instance, conn=conn)
+                self._install_supervisor(instance=instance, conn=conn)
+                self._start_supervisor(conn=conn)
+        except Exception as e:
+            Log.error("could not setup ES at {{ip}}", ip=instance.ip_address, cause=e)
 
     def teardown(
         self,
@@ -73,7 +74,6 @@ class ES6Spot(InstanceManager):
             while pid:
                 pid = conn.sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}'")
 
-
     def _install_es(self, gigabytes, es_version="6.2.3", instance=None, conn=None):
         volumes = instance.markup.drives
 
@@ -81,13 +81,13 @@ class ES6Spot(InstanceManager):
             with conn.cd("/home/ec2-user/"):
                 conn.run("mkdir -p temp")
 
-            if not File(LOCAL_JRE).exists:
-                Log.error("Expecting {{file}} on manager to spread to ES instances", file=LOCAL_JRE)
+            if not (RESOURCES / JRE).exists:
+                Log.error("Expecting {{file}} on manager to spread to ES instances", file=(RESOURCES / JRE))
             response = conn.run("java -version", warn=True)
             if "Java(TM) SE Runtime Environment" not in response:
                 with conn.cd("/home/ec2-user/temp"):
                     conn.run('rm -f '+JRE)
-                    conn.put(LOCAL_JRE, JRE)
+                    conn.put((RESOURCES / JRE), JRE)
                     conn.sudo("rpm -i "+JRE)
                     conn.sudo("alternatives --install /usr/bin/java java /usr/java/default/bin/java 20000")
                     conn.run("export JAVA_HOME=/usr/java/default")
@@ -133,16 +133,16 @@ class ES6Spot(InstanceManager):
 
         # INCREASE THE FILE HANDLE LIMITS
         with conn.cd("/home/ec2-user/"):
-            File("./results/temp/sysctl.conf").delete()
-            conn.get("/etc/sysctl.conf", "./results/temp/sysctl.conf", use_sudo=True)
-            lines = File("./results/temp/sysctl.conf").read()
-            if lines.find("fs.file-max = 100000") == -1:
-                lines += "\nfs.file-max = 100000"
-            lines = lines.replace("net.bridge.bridge-nf-call-ip6tables = 0", "")
-            lines = lines.replace("net.bridge.bridge-nf-call-iptables = 0", "")
-            lines = lines.replace("net.bridge.bridge-nf-call-arptables = 0", "")
-            File("./results/temp/sysctl.conf").write(lines)
-            conn.put("./results/temp/sysctl.conf", "/etc/sysctl.conf", use_sudo=True)
+            with TempFile() as temp:
+                conn.get("/etc/sysctl.conf", temp, use_sudo=True)
+                lines = temp.read()
+                if lines.find("fs.file-max = 100000") == -1:
+                    lines += "\nfs.file-max = 100000"
+                lines = lines.replace("net.bridge.bridge-nf-call-ip6tables = 0", "")
+                lines = lines.replace("net.bridge.bridge-nf-call-iptables = 0", "")
+                lines = lines.replace("net.bridge.bridge-nf-call-arptables = 0", "")
+                temp.write(lines)
+                conn.put(temp, "/etc/sysctl.conf", use_sudo=True)
 
         conn.sudo("sudo sed -i '$ a\\vm.max_map_count = 262144' /etc/sysctl.conf")
 
@@ -170,16 +170,18 @@ class ES6Spot(InstanceManager):
 
             jvm = File("./examples/config/es6_jvm.options").read().replace('\r', '')
             jvm = expand_template(jvm, {"memory": int(gigabytes/2)})
-            File("./results/temp/jvm.options").write(jvm)
-            conn.put("./results/temp/jvm.options", '/usr/local/elasticsearch/config/jvm.options', use_sudo=True)
+            with TempFile() as temp:
+                temp.write(jvm)
+                conn.put(temp, '/usr/local/elasticsearch/config/jvm.options', use_sudo=True)
 
             yml = File("./examples/config/es6_config.yml").read().replace("\r", "")
             yml = expand_template(yml, {
                 "id": instance.ip_address,
                 "data_paths": ",".join("/data" + text_type(i + 1) for i, _ in enumerate(volumes))
             })
-            File("./results/temp/elasticsearch.yml").write(yml)
-            conn.put("./results/temp/elasticsearch.yml", '/usr/local/elasticsearch/config/elasticsearch.yml', use_sudo=True)
+            with TempFile() as temp:
+                temp.write(yml)
+                conn.put(temp, '/usr/local/elasticsearch/config/elasticsearch.yml', use_sudo=True)
 
         conn.sudo("chown -R ec2-user:ec2-user /usr/local/elasticsearch")
 
@@ -202,28 +204,28 @@ class ES6Spot(InstanceManager):
     def _install_python(self, instance, conn):
         Log.note("Install Python at {{instance_id}} ({{address}})", instance_id=instance.id, address=instance.ip_address)
         if conn.exists("/usr/bin/pip"):
-            pip_version = conn.sudo("pip --version", warn=True)
+            pip_version = text_type(conn.sudo("pip --version", warn=True))
         else:
             pip_version = ""
 
-        if not pip_version.startswith("pip 9."):
-            conn.sudo("yum -y install python27")
+        if not pip_version.startswith("pip 18."):
+            conn.sudo("yum -y install python2")
             conn.sudo("easy_install pip")
             conn.sudo("rm -f /usr/bin/pip", warn=True)
             conn.sudo("ln -s /usr/local/bin/pip /usr/bin/pip")
-            conn.sudo("pip install --upgrade pip")
+        conn.sudo("pip install --upgrade pip")
 
     def _install_pypy(self, instance, conn):
         Log.note("Install pypy at {{instance_id}} ({{address}})", instance_id=instance.id, address=instance.ip_address)
 
-        if not File(LOCAL_PYPY).exists:
-            Log.error("Expecting {{file}} on manager to spread to ES instances", file=LOCAL_PYPY)
+        if not (RESOURCES / PYPY_BZ2).exists:
+            Log.error("Expecting {{file}} on manager to spread to ES instances", file=(RESOURCES / PYPY_BZ2))
 
         if conn.exists("~/pypy/bin/pip"):
             return
 
         with conn.cd("/home/ec2-user/"):
-            conn.put(LOCAL_PYPY, PYPY_BZ2)
+            conn.put((RESOURCES / PYPY_BZ2), PYPY_BZ2)
             conn.run('tar jxf ' + PYPY_BZ2)
             conn.run("mv " + PYPY_DIR + " pypy")
 
@@ -252,11 +254,12 @@ class ES6Spot(InstanceManager):
     def _install_supervisor(self, instance, conn):
         Log.note("Install Supervisor-plus-Cron at {{instance_id}} ({{address}})", instance_id=instance.id, address=instance.ip_address)
         # REQUIRED FOR Python SSH
-        self._install_lib("libffi-devel", conn)
-        self._install_lib("openssl-devel", conn)
+        self._install_lib("libffi-devel", conn=conn)
+        self._install_lib("openssl-devel", conn=conn)
         self._install_lib('"Development tools"', install="groupinstall", conn=conn)
 
         self._install_python(instance, conn)
+        conn.sudo("pip install pyopenssl", warn=True)
         conn.sudo("pip install pyopenssl")
         conn.sudo("pip install ndg-httpsclient")
         conn.sudo("pip install pyasn1")

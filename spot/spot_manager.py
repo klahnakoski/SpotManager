@@ -20,7 +20,7 @@ import boto.vpc
 from jx_python import jx
 from jx_python.containers.list_usingPythonList import ListContainer
 from mo_collections import UniqueIndex
-from mo_dots import Data, FlatList, coalesce, listwrap, unwrap, wrap
+from mo_dots import Data, FlatList, coalesce, listwrap, unwrap, wrap, Null
 from mo_dots.objects import datawrap
 from mo_files import File
 from mo_future import text_type
@@ -58,9 +58,9 @@ class SpotManager(object):
         self.price_locker = Lock()
         self.prices = None
         self.price_lookup = None
-        self.no_capacity = Data()
+        self.no_capacity = {}
         self.no_capacity_file = File(kwargs.price_file).parent / "no capacity.json"
-        self.done_spot_requests = Signal()
+        self.done_making_new_spot_requests = Signal()
         self.net_new_locker = Lock()
         self.net_new_spot_requests = UniqueIndex(("id",))  # SPOT REQUESTS FOR THIS SESSION
         self.watcher = None
@@ -145,7 +145,7 @@ class SpotManager(object):
                 req.add_tag("Name", self.settings.ec2.instance.name)
 
         Log.note("All requests for new utility have been made")
-        self.done_spot_requests.go()
+        self.done_making_new_spot_requests.go()
 
     def add_instances(self, net_new_utility, remaining_budget):
         prices = self.pricing()
@@ -230,7 +230,7 @@ class SpotManager(object):
                     )
                     continue
 
-                last_no_capacity_message = self.no_capacity[p.type.instance_type]
+                last_no_capacity_message = self.no_capacity.get(p.type.instance_type, Null)
                 if last_no_capacity_message > Date.now() - CAPACITY_NOT_AVAILABLE_RETRY:
                     Log.note(
                         "Did not bid on {{type}}: \"No capacity\" last seen at {{last_time|datetime}}",
@@ -273,12 +273,6 @@ class SpotManager(object):
                     if "Max spot instance count exceeded" in e.message:
                         Log.note("No further spot requests will be attempted.")
                         return net_new_utility, remaining_budget
-
-        with Timer("Save no capacity to file"):
-            self.no_capacity_file.write(value2json([
-                {"instance_type": k, "last_failure": v}
-                for k, v in self.no_capacity
-            ]))
 
         return net_new_utility, remaining_budget
 
@@ -370,19 +364,19 @@ class SpotManager(object):
 
         # SEND SHUTDOWN TO EACH INSTANCE
         Log.warning("Shutdown {{instances}} to save money!", instances=remove_list.id)
-        for i in remove_list:
-            try:
-                self.instance_manager.teardown(i, False)
-            except Exception as e:
-                Log.warning("Teardown of {{id}} failed", id=i.id, cause=e)
-
-        remove_spot_requests.extend(remove_list.spot_instance_request_id)
-
-        # TERMINATE INSTANCES
-        self.ec2_conn.terminate_instances(instance_ids=remove_list.id)
-
-        # TERMINATE SPOT REQUESTS
-        self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
+        # for i in remove_list:
+        #     try:
+        #         self.instance_manager.teardown(i, False)
+        #     except Exception as e:
+        #         Log.warning("Teardown of {{id}} failed", id=i.id, cause=e)
+        #
+        # remove_spot_requests.extend(remove_list.spot_instance_request_id)
+        #
+        # # TERMINATE INSTANCES
+        # self.ec2_conn.terminate_instances(instance_ids=remove_list.id)
+        #
+        # # TERMINATE SPOT REQUESTS
+        # self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
         return remaining_budget, net_new_utility
 
     @cache(duration=5 * SECOND)
@@ -406,6 +400,7 @@ class SpotManager(object):
         def life_cycle_watcher(please_stop):
             failed_attempts = Data()
             setup_threads = []
+            bad_requests = Data()
 
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
@@ -426,7 +421,7 @@ class SpotManager(object):
                         self.ec2_conn.terminate_instances(instance_ids=[i.id])
                         with self.net_new_locker:
                             self.net_new_spot_requests.remove(r.id)
-                        Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id, cause=e)
+                        Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id)
                         continue
 
                     try:
@@ -448,7 +443,7 @@ class SpotManager(object):
                             p
                         )))
                     except Exception as e:
-                        i.add_tag("Name", "")
+                        i.delete_tags(["Name"])
                         Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
 
                 please_join = [(i, r, t) for i, r, t in setup_threads if t.stopped]
@@ -463,8 +458,8 @@ class SpotManager(object):
                             self.net_new_spot_requests.remove(r.id)
                     except Exception as e:
                         e = Except.wrap(e)
+                        i.delete_tags(["Name"])
                         setup_threads.remove((i, r, t))
-                        i.add_tag("Name", "")
                         failed_attempts[r.id] += [e]
                         if "Can not setup unknown " in e:
                             Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
@@ -480,20 +475,16 @@ class SpotManager(object):
                     last_get = Date.now()
 
                 pending = wrap([r for r in spot_requests if r.status.code in PENDING_STATUS_CODES])
-                give_up = wrap([r for r in spot_requests if r.status.code in PROBABLY_NOT_FOR_A_WHILE | TERMINATED_STATUS_CODES])
+                give_up = wrap([r for r in spot_requests if (r.status.code in PROBABLY_NOT_FOR_A_WHILE | TERMINATED_STATUS_CODES) and r.id not in bad_requests])
                 ignore = wrap([r for r in spot_requests if r.status.code in MIGHT_HAPPEN])  # MIGHT HAPPEN, BUT NO NEED TO WAIT FOR IT
 
-                if self.done_spot_requests:
+                if self.done_making_new_spot_requests:
                     with self.net_new_locker:
                         expired = Date.now() - self.settings.run_interval + 2 * MINUTE
                         for ii in list(self.net_new_spot_requests):
                             if Date(ii.create_time) < expired:
                                 # SOMETIMES REQUESTS NEVER GET INTO THE MAIN LIST OF REQUESTS
                                 self.net_new_spot_requests.remove(ii)
-                        for g in give_up:
-                            self.net_new_spot_requests.remove(g.id)
-                            if g.status.code == "capacity-not-available":
-                                self.no_capacity[g.instance_type] = Date.now()
 
                         for g in ignore:
                             self.net_new_spot_requests.remove(g.id)
@@ -504,7 +495,17 @@ class SpotManager(object):
                         self.ec2_conn.cancel_spot_instance_requests(request_ids=give_up.id)
                         Log.note("Cancelled spot requests {{spots}}, {{reasons}}", spots=give_up.id, reasons=give_up.status.code)
 
-                if not pending and not time_to_stop_trying and self.done_spot_requests and not setup_threads:
+                        for g in give_up:
+                            bad_requests[g.id] += 1
+                            if g.id in self.net_new_spot_requests:
+                                self.net_new_spot_requests.remove(g.id)
+                                if g.status.code == "capacity-not-available":
+                                    self.no_capacity[g.launch_specification.instance_type] = Date.now()
+                                if g.status.code == "bad-parameters":
+                                    self.no_capacity[g.launch_specification.instance_type] = Date.now()
+                                    Log.warning("bad parameters while requesting type {{type}}", type=g.launch_specification.instance_type)
+
+                if not pending and not time_to_stop_trying and self.done_making_new_spot_requests and not setup_threads:
                     Log.note("No more pending spot requests")
                     please_stop.go()
                     break
@@ -514,6 +515,13 @@ class SpotManager(object):
                     Log.note("waiting for spot requests: {{pending}}", pending=[p.id for p in pending])
 
                 (Till(seconds=10) | please_stop).wait()
+
+            with Timer("Save no capacity to file"):
+                table = [
+                    {"instance_type": k, "last_failure": v}
+                    for k, v in self.no_capacity.items()
+                ]
+                self.no_capacity_file.write(value2json(table, pretty=True))
 
             Log.note("life cycle watcher has stopped")
 
@@ -679,12 +687,12 @@ class SpotManager(object):
             try:
                 # FILE IS LIST OF {instance_type, last_failure} OBJECTS
                 content = self.no_capacity_file.read()
-                self.no_capacity = Data(
+                self.no_capacity = dict(
                     (r.instance_type, r.last_failure)
                     for r in convert.json2value(content, flexible=False, leaves=False)
                 )
             except Exception as e:
-                no_capacity = Data()
+                self.no_capacity = {}
 
         with Timer("Read pricing file"):
             try:
@@ -876,13 +884,13 @@ ephemeral_storage = {
     "i3.8xlarge": {"num": 4, "size": 7600},
     "i3.large": {"num": 1, "size": 475},
     "i3.xlarge": {"num": 1, "size": 950},
-    "m1.large": {"num": 2, "size": 840},
-    "m1.medium": {"num": 1, "size": 410},
-    "m1.small": {"num": 1, "size": 160},
-    "m1.xlarge": {"num": 4, "size": 1680},
-    "m2.2xlarge": {"num": 1, "size": 850},
-    "m2.4xlarge": {"num": 2, "size": 1680},
-    "m2.xlarge": {"num": 1, "size": 420},
+    # "m1.large": {"num": 2, "size": 840},
+    # "m1.medium": {"num": 1, "size": 410},
+    # "m1.small": {"num": 1, "size": 160},
+    # "m1.xlarge": {"num": 4, "size": 1680},
+    # "m2.2xlarge": {"num": 1, "size": 850},
+    # "m2.4xlarge": {"num": 2, "size": 1680},
+    # "m2.xlarge": {"num": 1, "size": 420},
     "m3.2xlarge": {"num": 2, "size": 160},
     "m3.large": {"num": 1, "size": 32},
     "m3.medium": {"num": 1, "size": 4},
@@ -893,6 +901,14 @@ ephemeral_storage = {
     "m4.4xlarge": {"num": 0, "size": 0},
     "m4.large": {"num": 0, "size": 0},
     "m4.xlarge": {"num": 0, "size": 0},
+
+    "m5d.large": {"num": 1, "size": 75},
+    "m5d.xlarge": {"num": 1, "size": 150},
+    "m5d.2xlarge": {"num": 1, "size": 300},
+    "m5d.4xlarge": {"num": 2, "size": 300},
+    "m5d.12xlarge": {"num": 2, "size": 900},
+    "m5d.24xlarge": {"num": 4, "size": 900},
+
     "p2.16xlarge": {"num": 0, "size": 0},
     "p2.8xlarge": {"num": 0, "size": 0},
     "p2.xlarge": {"num": 0, "size": 0},
@@ -907,6 +923,14 @@ ephemeral_storage = {
     "r4.8xlarge": {"num": 0, "size": 0},
     "r4.large": {"num": 0, "size": 0},
     "r4.xlarge": {"num": 0, "size": 0},
+
+    "r5d.large": {"num": 1, "size": 75},
+    "r5d.xlarge": {"num": 1, "size": 150},
+    "r5d.2xlarge": {"num": 1, "size": 300},
+    "r5d.4xlarge": {"num": 2, "size": 300},
+    "r5d.12xlarge": {"num": 2, "size": 900},
+    "r5d.24xlarge": {"num": 4, "size": 900},
+
     "t1.micro": {"num": 0, "size": 0},
     "t2.2xlarge": {"num": 0, "size": 0},
     "t2.large": {"num": 0, "size": 0},

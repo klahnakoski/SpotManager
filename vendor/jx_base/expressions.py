@@ -238,7 +238,7 @@ class Expression(BaseExpression):
         OVERRIDE THIS METHOD TO SIMPLIFY
         :return:
         """
-        return self.lang[NotOp(self.missing())]
+        return self.lang[NotOp(self.missing()).partial_eval()]
 
     def is_true(self):
         """
@@ -552,7 +552,7 @@ class Literal(Expression):
             return FALSE
         if isinstance(term, Mapping) and term.get('date'):
             # SPECIAL CASE
-            return cls.lang[DateOp(term.date)]
+            return cls.lang[DateOp(term.get('date'))]
         return object.__new__(cls)
 
     def __init__(self, term):

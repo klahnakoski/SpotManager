@@ -9,12 +9,16 @@
 #
 from __future__ import absolute_import, division, unicode_literals
 
+from math import isnan
+
+from mo_dots.lists import list_types
 from mo_future import is_text, is_binary
 from copy import copy
 
-from mo_dots import Data, NullType, is_list, listwrap
+from mo_dots import Data, NullType, is_list, listwrap, MAPPING_TYPES
 from mo_future import boolean_type, long, none_type, text_type
 from mo_logs import Log
+from mo_math import is_nan
 from mo_times import Date
 
 builtin_tuple = tuple
@@ -148,7 +152,10 @@ def value_compare(left, right, ordering=1):
     """
 
     try:
-        if is_list(left) or is_list(right):
+        ltype = left.__class__
+        rtype = right.__class__
+
+        if ltype in list_types or rtype in list_types:
             if left == None:
                 return ordering
             elif right == None:
@@ -168,16 +175,22 @@ def value_compare(left, right, ordering=1):
             else:
                 return 0
 
-        ltype = left.__class__
-        rtype = right.__class__
-        ltype_num = TYPE_ORDER.get(ltype, 10)
-        rtype_num = TYPE_ORDER.get(rtype, 10)
+        if ltype is float and isnan(left):
+            left = None
+            ltype = none_type
+        if rtype is float and isnan(right):
+            right = None
+            rtype = none_type
+
+        null_order = ordering*10
+        ltype_num = TYPE_ORDER.get(ltype, null_order)
+        rtype_num = TYPE_ORDER.get(rtype, null_order)
 
         type_diff = ltype_num - rtype_num
         if type_diff != 0:
             return ordering if type_diff > 0 else -ordering
 
-        if ltype_num == 9:
+        if ltype_num == null_order:
             return 0
         elif ltype is builtin_tuple:
             for a, b in zip(left, right):
@@ -185,7 +198,7 @@ def value_compare(left, right, ordering=1):
                 if c != 0:
                     return c * ordering
             return 0
-        elif ltype in (dict, Data):
+        elif ltype in MAPPING_TYPES:
             for k in sorted(set(left.keys()) | set(right.keys())):
                 c = value_compare(left.get(k), right.get(k)) * ordering
                 if c != 0:
@@ -211,9 +224,7 @@ TYPE_ORDER = {
     list: 3,
     builtin_tuple: 3,
     dict: 4,
-    Data: 4,
-    none_type: 9,
-    NullType: 9
+    Data: 4
 }
 
 

@@ -28,7 +28,8 @@ from mo_json import value2json
 from mo_kwargs import override
 from mo_logs import Except, Log, constants, startup
 from mo_logs.startup import SingleInstance
-from mo_math import MAX, Math, SUM
+import mo_math
+from mo_math import MAX, SUM
 from mo_threads import Lock, Signal, Thread, Till
 from mo_threads.threads import MAIN_THREAD
 from mo_times import DAY, Date, Duration, HOUR, MINUTE, SECOND, Timer, WEEK
@@ -122,12 +123,12 @@ class SpotManager(object):
 
         if net_new_utility < 0:
             if self.settings.allowed_overage:
-                net_new_utility = Math.min(net_new_utility + self.settings.allowed_overage * utility_required, 0)
+                net_new_utility = mo_math.min(net_new_utility + self.settings.allowed_overage * utility_required, 0)
 
             net_new_utility = self.remove_instances(net_new_utility)
 
         if net_new_utility > 0:
-            net_new_utility = Math.min(net_new_utility, self.settings.max_new_utility)
+            net_new_utility = mo_math.min(net_new_utility, self.settings.max_new_utility)
             net_new_utility, remaining_budget = self.add_instances(net_new_utility, remaining_budget)
 
         if net_new_utility > 0:
@@ -167,7 +168,7 @@ class SpotManager(object):
 
             # DO NOT BID HIGHER THAN WHAT WE ARE WILLING TO PAY
             max_acceptable_price = p.type.utility * self.settings.max_utility_price + p.type.discount
-            max_bid = Math.min(p.higher_price, max_acceptable_price, remaining_budget)
+            max_bid = mo_math.min(p.higher_price, max_acceptable_price, remaining_budget)
             min_bid = p.price_80
 
             if min_bid > max_acceptable_price:
@@ -189,15 +190,15 @@ class SpotManager(object):
             elif min_bid > max_bid:
                 Log.error("not expected")
 
-            naive_number_needed = int(Math.round(float(net_new_utility) / float(p.type.utility), decimal=0))
+            naive_number_needed = int(mo_math.round(float(net_new_utility) / float(p.type.utility), decimal=0))
             limit_total = None
             if self.settings.max_percent_per_type < 1:
                 current_count = sum(1 for a in self.active if a.launch_specification.instance_type == p.type.instance_type and a.launch_specification.placement == p.availability_zone)
                 all_count = sum(1 for a in self.active if a.launch_specification.placement == p.availability_zone)
                 all_count = max(all_count, naive_number_needed)
-                limit_total = int(Math.floor((all_count * self.settings.max_percent_per_type - current_count) / (1 - self.settings.max_percent_per_type)))
+                limit_total = int(mo_math.floor((all_count * self.settings.max_percent_per_type - current_count) / (1 - self.settings.max_percent_per_type)))
 
-            num = Math.min(naive_number_needed, limit_total, self.settings.max_requests_per_type)
+            num = mo_math.min(naive_number_needed, limit_total, self.settings.max_requests_per_type)
             if num < 0:
                 Log.note(
                     "{{type}} is over {{limit|percent}} of instances, no more requested",
@@ -206,10 +207,10 @@ class SpotManager(object):
                 )
                 continue
             elif num == 1:
-                min_bid = Math.min(Math.max(p.current_price * 1.1, min_bid), max_acceptable_price)
+                min_bid = mo_math.min(Math.max(p.current_price * 1.1, min_bid), max_acceptable_price)
                 price_interval = 0
             else:
-                price_interval = Math.min(min_bid / 10, (max_bid - min_bid) / (num - 1))
+                price_interval = mo_math.min(min_bid / 10, (max_bid - min_bid) / (num - 1))
 
             for i in range(num):
                 bid_per_machine = min_bid + (i * price_interval)

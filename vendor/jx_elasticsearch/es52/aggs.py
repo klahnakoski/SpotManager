@@ -9,11 +9,13 @@
 #
 from __future__ import absolute_import, division, unicode_literals
 
+from mo_future import is_text, is_binary
 from collections import deque
 
 from jx_base.domains import SetDomain
 from jx_base.expressions import NULL, TupleOp, Variable as Variable_
 from jx_base.query import DEFAULT_LIMIT
+from jx_base.utils import is_op
 from jx_elasticsearch import post as es_post
 from jx_elasticsearch.es52.decoders import AggsDecoder
 from jx_elasticsearch.es52.es_query import Aggs, ComplexAggs, ExprAggs, FilterAggs, NestedAggs, TermsAggs, simplify
@@ -23,14 +25,13 @@ from jx_elasticsearch.es52.setop import get_pull_stats
 from jx_elasticsearch.es52.util import aggregates
 from jx_python import jx
 from jx_python.expressions import jx_expression_to_function
-from jx_python.jx import first
 from mo_dots import Data, Null, coalesce, join_field, listwrap, literal_field, unwrap, unwraplist, wrap
-from mo_future import text_type
+from mo_future import first, text_type
 from mo_json import EXISTS, NESTED, OBJECT
 from mo_json.typed_encoder import encode_property
 from mo_logs import Log
 from mo_logs.strings import expand_template, quote
-from mo_math import Math
+import mo_math
 from mo_times.timer import Timer
 
 DEBUG = False
@@ -179,7 +180,7 @@ def es_aggsop(es, frum, query):
     new_select = Data()  # MAP FROM canonical_name (USED FOR NAMES IN QUERY) TO SELECT MAPPING
     formula = []
     for s in select:
-        if isinstance(s.value, Variable_):
+        if is_op(s.value, Variable_):
             s.query_path = query_path
             if s.aggregate == "count":
                 new_select["count_"+literal_field(s.value.var)] += [s]
@@ -237,9 +238,9 @@ def es_aggsop(es, frum, query):
                     Log.error("Do not know how to count columns with more than one type (script probably)")
                 # ES USES DIFFERENT METHOD FOR PERCENTILES
                 key = canonical_name + " percentile"
-                if isinstance(s.percentile, text_type) or s.percetile < 0 or 1 < s.percentile:
+                if is_text(s.percentile) or s.percetile < 0 or 1 < s.percentile:
                     Log.error("Expecting percentile to be a float from 0.0 to 1.0")
-                percent = Math.round(s.percentile * 100, decimal=6)
+                percent = mo_math.round(s.percentile * 100, decimal=6)
 
                 acc.add(ExprAggs(key, {"percentiles": {
                     "field": first(columns).es_column,
@@ -326,7 +327,7 @@ def es_aggsop(es, frum, query):
             Log.error("do not know how to handle")
 
         canonical_name = s.name
-        if isinstance(s.value, TupleOp):
+        if is_op(s.value, TupleOp):
             if s.aggregate == "count":
                 # TUPLES ALWAYS EXIST, SO COUNTING THEM IS EASY
                 s.pull = jx_expression_to_function("doc_count")
@@ -367,7 +368,7 @@ def es_aggsop(es, frum, query):
         elif s.aggregate == "percentile":
             # ES USES DIFFERENT METHOD FOR PERCENTILES THAN FOR STATS AND COUNT
             key = literal_field(canonical_name + " percentile")
-            percent = Math.round(s.percentile * 100, decimal=6)
+            percent = mo_math.round(s.percentile * 100, decimal=6)
             nest.add(ExprAggs(key, {"percentiles": {
                 "script": text_type(Painless[s.value].to_es_script(schema)),
                 "percents": [percent]

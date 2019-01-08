@@ -15,7 +15,7 @@ from mo_future import text_type
 from mo_kwargs import override
 from mo_logs import Log
 from mo_logs.strings import expand_template
-from mo_math import Math
+import mo_math
 from spot.instance_manager import InstanceManager
 
 JRE = "jre-8u131-linux-x64.rpm"
@@ -45,7 +45,7 @@ class ES6Spot(InstanceManager):
     ):
         try:
             with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:
-                gigabytes = Math.floor(utility.memory)
+                gigabytes = mo_math.floor(utility.memory)
                 Log.note("setup {{instance}}", instance=instance.id)
 
                 self._install_pypy_indexer(instance=instance, conn=conn)

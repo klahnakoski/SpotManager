@@ -9,9 +9,10 @@
 #
 from __future__ import absolute_import, division, unicode_literals
 
+from mo_future import is_text, is_binary
 from copy import copy
 
-from mo_dots import Data, NullType, listwrap
+from mo_dots import Data, NullType, is_list, listwrap
 from mo_future import boolean_type, long, none_type, text_type
 from mo_logs import Log
 from mo_times import Date
@@ -23,18 +24,15 @@ expression_module = None
 JX = None
 
 
-def first(values):
-    return iter(values).next()
+_next_id = 0
 
 
-def _gen_ids():
-    id = 0
-    while (True):
-        yield id
-        id += 1
-
-
-_ids = _gen_ids()
+def next_id():
+    global _next_id
+    try:
+        return _next_id
+    finally:
+        _next_id+=1
 
 
 def all_bases(bases):
@@ -51,7 +49,7 @@ class LanguageElement(type):
         x.lang = None
         if x.__module__ == expression_module:
             # ALL OPS IN expression_module ARE GIVEN AN ID
-            x.id = _ids.next()
+            x.id = next_id()
         return x
 
     def __init__(cls, *args):
@@ -118,10 +116,26 @@ def define_language(lang_name, module_vars):
     return language
 
 
-# def value_compare(left, right, ordering=1):
-#     result = _value_compare(left, right, ordering)
-#     Log.note("{{left}} vs {{right}} == {{result}} (ordering={{ordering}})", left=left, right=right, result=result, ordering=ordering)
-#     return result
+def is_op(call, op):
+    """
+    :param call: The specific operator instance (a method call)
+    :param op: The the operator we are testing against
+    :return: isinstance(call, op), but faster
+    """
+    try:
+        return call.id == op.id
+    except Exception as e:
+        return False
+
+
+def is_expression(call):
+    try:
+        output = getattr(call, 'id', None) != None
+    except Exception:
+        output = False
+    if output != isinstance(call, Expression):
+        Log.error("programmer error")
+    return output
 
 
 def value_compare(left, right, ordering=1):
@@ -134,7 +148,7 @@ def value_compare(left, right, ordering=1):
     """
 
     try:
-        if isinstance(left, list) or isinstance(right, list):
+        if is_list(left) or is_list(right):
             if left == None:
                 return ordering
             elif right == None:
@@ -156,13 +170,8 @@ def value_compare(left, right, ordering=1):
 
         ltype = left.__class__
         rtype = right.__class__
-        ltype_num = TYPE_ORDER.get(ltype, 9)
-        rtype_num = TYPE_ORDER.get(rtype, 9)
-
-        # if rtype_num == 10 and hasattr(rtype, "id"):
-        #     Log.warning("problem with {{right|json}}, {{id}}, all={{all}}", right=rtype.__name__, id=id(rtype), all=[(id(k), k.__name__, v) for k, v in TYPE_ORDER.items()])
-        # if ltype_num == 10 and hasattr(ltype, "id"):
-        #     Log.warning("problem with {{left|json}}, {{id}}, all={{all}}", left=ltype.__name__, id=id(ltype), all=[(id(k), k.__name__, v) for k, v in TYPE_ORDER.items()])
+        ltype_num = TYPE_ORDER.get(ltype, 10)
+        rtype_num = TYPE_ORDER.get(rtype, 10)
 
         type_diff = ltype_num - rtype_num
         if type_diff != 0:

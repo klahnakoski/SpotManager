@@ -9,6 +9,7 @@
 #
 from __future__ import absolute_import, division, unicode_literals
 
+from mo_dots.datas import register_data
 from mo_future import is_text, is_binary
 from uuid import uuid4
 
@@ -193,7 +194,9 @@ class {{class_name}}(Mapping):
         },
     )
 
-    return _exec(code, name)
+    output = _exec(code, name)
+    register_data(output)
+    return output
 
 
 class TableDesc(

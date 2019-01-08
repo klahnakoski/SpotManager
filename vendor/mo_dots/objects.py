@@ -14,6 +14,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from mo_dots import Data, FlatList, NullType, SLOT, get_attr, set_attr, unwrap, wrap
+from mo_dots.datas import register_data
 from mo_dots.utils import CLASS, OBJ
 from mo_future import binary_type, generator_types, get_function_arguments, get_function_defaults, none_type, text_type
 
@@ -95,6 +96,9 @@ class DataObject(Mapping):
     def __call__(self, *args, **kwargs):
         obj = _get(self, OBJ)
         return obj(*args, **kwargs)
+
+
+register_data(DataObject)
 
 
 def datawrap(v):

@@ -15,7 +15,7 @@ from mo_dots.lists import list_types
 from mo_future import is_text, is_binary
 from copy import copy
 
-from mo_dots import Data, NullType, is_list, listwrap, MAPPING_TYPES
+from mo_dots import Data, NullType, is_list, listwrap, data_types
 from mo_future import boolean_type, long, none_type, text_type
 from mo_logs import Log
 from mo_math import is_nan
@@ -198,7 +198,7 @@ def value_compare(left, right, ordering=1):
                 if c != 0:
                     return c * ordering
             return 0
-        elif ltype in MAPPING_TYPES:
+        elif ltype in data_types:
             for k in sorted(set(left.keys()) | set(right.keys())):
                 c = value_compare(left.get(k), right.get(k)) * ordering
                 if c != 0:

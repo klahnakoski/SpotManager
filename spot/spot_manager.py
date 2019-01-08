@@ -207,7 +207,7 @@ class SpotManager(object):
                 )
                 continue
             elif num == 1:
-                min_bid = mo_math.min(Math.max(p.current_price * 1.1, min_bid), max_acceptable_price)
+                min_bid = mo_math.min(mo_math.max(p.current_price * 1.1, min_bid), max_acceptable_price)
                 price_interval = 0
             else:
                 price_interval = mo_math.min(min_bid / 10, (max_bid - min_bid) / (num - 1))

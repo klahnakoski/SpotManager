@@ -9,22 +9,14 @@
 from __future__ import division
 from __future__ import unicode_literals
 
-from fabric.api import settings as fabric_settings
-from fabric.context_managers import cd, hide
-from fabric.contrib import files as fabric_files
-from fabric.operations import run, sudo, put
-from fabric.state import env
-
+from mo_fabric import Connection
 from mo_files import File
 from mo_kwargs import override
 from mo_logs import Log, constants, startup
-from mo_logs.strings import between, expand_template
+from mo_logs.strings import between
 from mo_math import Math
-from mo_threads import Lock, Thread, Till
 from mo_times import Date
-from mo_times import Duration
 from pyLibrary import aws
-from pyLibrary.env import http
 from spot.instance_manager import InstanceManager
 
 
@@ -38,126 +30,98 @@ class ETL(InstanceManager):
         kwargs=None
     ):
         InstanceManager.__init__(self, kwargs)
-        self.locker = Lock()
         self.settings = kwargs
 
-    def required_utility(self):
+    def required_utility(self, current_utility=None):
         queue = aws.Queue(self.settings.work_queue)
         pending = len(queue)
 
         tod_minimum = None
-        if Date.now().hour not in [4, 5, 6, 7, 8, 9, 10, 11]:
+        if Date.now().dow not in [6, 7] and Date.now().hour not in [4, 5, 6, 7, 8, 9, 10, 11]:
             tod_minimum = 100
+        minimum = max(self.settings.minimum_utility, tod_minimum)
 
-        return max(self.settings.minimum_utility, tod_minimum, Math.ceiling(pending / 30))
+        if current_utility < pending / 20:
+            # INCREASE
+            return max(minimum, Math.ceiling(pending / 20))   # ENSURE THERE IS PLENTY OF WORK BEFORE MACHINE IS DEPLOYED
+        else:
+            # DECREASE
+            target = max(minimum, min(current_utility, pending*2))
+            return target + int((current_utility-target) / 2)
 
     def setup(
         self,
         instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
-        utility     # THE utility OBJECT FOUND IN CONFIG
+        utility,    # THE utility OBJECT FOUND IN CONFIG
+        please_stop
     ):
-        with self.locker:
-            if not self.settings.setup_timeout:
-                Log.error("expecting instance.setup_timeout to prevent setup from locking")
+        if not self.settings.setup_timeout:
+            Log.error("expecting instance.setup_timeout to prevent setup from locking")
 
-            def worker(please_stop):
-                cpu_count = int(round(utility.cpu))
+        Log.note("setup {{instance}}", instance=instance.id)
+        with Connection(host=instance.ip_address, kwargs=self.settings.connect) as c:
+            cpu_count = int(round(utility.cpu))
 
-                with hide('output'):
-                    Log.note("setup {{instance}}", instance=instance.id)
-                    self._config_fabric(instance)
-                    Log.note("update packages on {{instance}} ip={{ip}}", instance=instance.id, ip=instance.ip_address)
-                    try:
-                        self._update_ubuntu_packages()
-                    except Exception as e:
-                        Log.warning("Can not setup {{instance}}, type={{type}}", instance=instance.id, type=instance.instance_type, cause=e)
-                        return
-                    Log.note("setup etl on {{instance}}", instance=instance.id)
-                    self._setup_etl_code()
-                    Log.note("setup grcov on {{instance}}", instance=instance.id)
-                    self._setup_grcov()
-                    Log.note("add config file on {{instance}}", instance=instance.id)
-                    self._add_private_file()
-                    Log.note("setup supervisor on {{instance}}", instance=instance.id)
-                    self._setup_etl_supervisor(cpu_count)
-                    Log.note("setup done {{instance}}", instance=instance.id)
-            worker_thread = Thread.run("etl setup started at "+unicode(Date.now().format()), worker)
-            (Till(timeout=Duration(self.settings.setup_timeout).seconds) | worker_thread.stopped).wait()
-            if not worker_thread.stopped:
-                Log.error("critical failure in thread {{name|quote}}", name=worker_thread.name)
-            worker_thread.join()
+            self._update_ubuntu_packages(c)
+            self._setup_etl_code(c)
+            self._add_private_file(c)
+            self._setup_etl_supervisor(c, cpu_count)
 
-    def teardown(self, instance):
-        with self.locker:
+    def teardown(self, instance, please_stop):
+        with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:
             Log.note("teardown {{instance}}", instance=instance.id)
-            self._config_fabric(instance)
-            sudo("supervisorctl stop all")
+            conn.sudo("supervisorctl stop all", warn=True)
 
-    def _update_ubuntu_packages(self):
-        sudo("apt-get clean")
-        sudo("dpkg --configure -a")
-        sudo("apt-get clean")
-        sudo("apt-get update")
+    def _update_ubuntu_packages(self, conn):
+        conn.sudo("apt-get clean")
+        conn.sudo("dpkg --configure -a")
+        conn.sudo("apt-get clean")
+        conn.sudo("apt-get update")
 
-    def _setup_grcov(self):
-        sudo("apt-get install -y gcc")
+    def _setup_etl_code(self, conn):
+        conn.sudo("apt-get install -y python2.7")
 
-        response = http.get_json("https://api.github.com/repos/marco-c/grcov/releases/latest")
-        with cd("~/ActiveData-ETL"):
-            for asset in response.assets:
-                if self.settings.grcov.platform in asset.browser_download_url:
-                    run("wget "+asset.browser_download_url)
-                    run(expand_template("tar xf grcov-{{platform}}.tar.bz2", self.settings.grcov))
-                    run(expand_template("rm grcov-{{platform}}.tar.bz2", self.settings.grcov))
+        if not conn.exists("/usr/local/bin/pip"):
+            conn.run("mkdir -p /home/ubuntu/temp")
 
-
-    def _setup_etl_code(self):
-        sudo("apt-get install -y python2.7")
-
-        Log.note("5")
-        if not fabric_files.exists("/usr/local/bin/pip"):
-            run("mkdir -p /home/ubuntu/temp")
-
-            with cd("/home/ubuntu/temp"):
+            with conn.cd("/home/ubuntu/temp"):
                 # INSTALL FROM CLEAN DIRECTORY
-                run("wget https://bootstrap.pypa.io/get-pip.py")
-                sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
-                sudo("python2.7 get-pip.py")
+                conn.run("wget https://bootstrap.pypa.io/get-pip.py")
+                conn.sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
+                conn.sudo("python2.7 get-pip.py")
 
-        Log.note("6")
-        if not fabric_files.exists("/home/ubuntu/ActiveData-ETL/README.md"):
-            with cd("/home/ubuntu"):
-                sudo("apt-get -yf install git-core")
-                run('rm -fr /home/ubuntu/ActiveData-ETL')
-                run("git clone https://github.com/klahnakoski/ActiveData-ETL.git")
-                run("mkdir -p /home/ubuntu/ActiveData-ETL/results/logs")
+        if not conn.exists("/home/ubuntu/ActiveData-ETL/README.md"):
+            with conn.cd("/home/ubuntu"):
+                conn.sudo("apt-get -yf install git-core")
+                conn.run('rm -fr /home/ubuntu/ActiveData-ETL')
+                conn.run("git clone https://github.com/klahnakoski/ActiveData-ETL.git")
+                conn.run("mkdir -p /home/ubuntu/ActiveData-ETL/results/logs")
 
+        with conn.cd("/home/ubuntu/ActiveData-ETL"):
+            conn.run("git checkout etl")
 
-        Log.note("7")
-        with cd("/home/ubuntu/ActiveData-ETL"):
-            run("git checkout etl")
             # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
-            sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
-            sudo("pip install future")
-            sudo("pip install BeautifulSoup")
-            sudo("pip install MozillaPulse")
-            sudo("pip install boto")
-            sudo("pip install requests")
-            sudo("pip install taskcluster")
-            sudo("apt-get install -y python-dev")  # REQUIRED FOR psutil
-            sudo("apt-get install -y build-essential")  # REQUIRED FOR psutil
-            sudo("pip install psutil")
-            sudo("pip install pympler")
-            sudo("pip install -r requirements.txt")
+            conn.sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
+            conn.sudo("pip install future")
+            conn.sudo("pip install BeautifulSoup")
+            conn.sudo("pip install MozillaPulse")
+            conn.sudo("pip install boto")
+            conn.sudo("pip install requests")
+            conn.sudo("pip install taskcluster")
+            conn.sudo("apt-get install -y python-dev")  # REQUIRED FOR psutil
+            conn.sudo("apt-get install -y build-essential")  # REQUIRED FOR psutil
+            conn.sudo("pip install psutil")
+            conn.sudo("pip install pympler")
+            conn.sudo("pip install -r requirements.txt")
 
-            Log.note("8")
-            sudo("apt-get -y install python-psycopg2")
+        Log.note("8")
+        conn.sudo("apt-get -y install python-psycopg2")
 
-    def _setup_etl_supervisor(self, cpu_count):
+    def _setup_etl_supervisor(self, conn, cpu_count):
         # INSTALL supervsor
-        sudo("apt-get install -y supervisor")
-        with fabric_settings(warn_only=True):
-            sudo("service supervisor start")
+        conn.sudo("apt-get install -y supervisor")
+        # with fabric_settings(warn=True:
+        conn.sudo("service supervisor start")
 
         # READ LOCAL CONFIG FILE, ALTER IT FOR THIS MACHINE RESOURCES, AND PUSH TO REMOTE
         conf_file = File("./examples/config/etl_supervisor.conf")
@@ -165,28 +129,20 @@ class ETL(InstanceManager):
         find = between(content, "numprocs=", "\n")
         content = content.replace("numprocs=" + find + "\n", "numprocs=" + str(cpu_count) + "\n")
         File("./temp/etl_supervisor.conf.alt").write_bytes(content)
-        sudo("rm -f /etc/supervisor/conf.d/etl_supervisor.conf")
-        put("./temp/etl_supervisor.conf.alt", '/etc/supervisor/conf.d/etl_supervisor.conf', use_sudo=True)
-        run("mkdir -p /home/ubuntu/ActiveData-ETL/results/logs")
+        conn.sudo("rm -f /etc/supervisor/conf.d/etl_supervisor.conf")
+        conn.put("./temp/etl_supervisor.conf.alt", '/etc/supervisor/conf.d/etl_supervisor.conf', use_sudo=True)
+        conn.run("mkdir -p /home/ubuntu/ActiveData-ETL/results/logs")
 
         # POKE supervisor TO NOTICE THE CHANGE
-        sudo("supervisorctl reread")
-        sudo("supervisorctl update")
+        conn.sudo("supervisorctl reread")
+        conn.sudo("supervisorctl update")
 
-    def _add_private_file(self):
-        run('rm -f /home/ubuntu/private.json')
-        put('~/private_active_data_etl.json', '/home/ubuntu/private.json')
-        with cd("/home/ubuntu"):
-            run("chmod o-r private.json")
-
-    def _config_fabric(self, instance):
-        if not instance.ip_address:
-            Log.error("Expecting an ip address for {{instance_id}}", instance_id=instance.id)
-
-        for k, v in self.settings.connect.items():
-            env[k] = v
-        env.host_string = instance.ip_address
-        env.abort_exception = Log.error
+    def _add_private_file(self, conn):
+        conn.run('rm -f /home/ubuntu/private.json')
+        conn.put('~/private_active_data_etl.json', '/home/ubuntu/private.json')
+        with conn.cd("/home/ubuntu"):
+            conn.run("chmod o-r pr"
+                     "ivate.json")
 
 
 def main():
@@ -199,6 +155,7 @@ def main():
         Log.warning("Problem with setup of ETL", cause=e)
     finally:
         Log.stop()
+
 
 if __name__ == "__main__":
     main()

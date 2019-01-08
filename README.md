@@ -11,7 +11,7 @@ The module assumes your workload is **long running** and has
 **many save-points**.    
 
 In my case each machine is setup to pull small tasks off a queue and 
-execute them.  These machines can be shutdown at any time; with the most 
+execute them. These machines can be shutdown at any time; with the most 
 recent task simply placed back on the queue for some other machine to run.   
 
 ## Overview
@@ -32,7 +32,7 @@ with the best `estimated_value`, are bid on first.
 * boto
 * requests
 * ecdsa (required by fabric, but not installed by pip)
-* fabric
+* fabric2
 
 ## Installation
 
@@ -45,7 +45,7 @@ For now, you must clone the repo
 There are three main branches
 
 * **dev** - development done here (unstable)
-* **beta** - not used
+* **manager-etl** - multithreaded management, not ready for ES node management (Oct 2018)
 * **manager** - used to manage the staging clusters
 * **master** - proven stable on **manager** for at least a few days
 
@@ -162,7 +162,7 @@ Some caveats:
 ephemeral drives, but the EBS will be removed too.  If you want the volume 
 to be permanent, you must map the block device yourself.
 * ***block devices will not be formatted nor mounted***.  The `path` is 
-provided only so the InstanceManger.setup() routine can perform the `mkfs` 
+provided only so the `InstanceManger.setup()` routine can perform the `mkfs` 
 and `mount` commands.
 
 ### Writing a InstanceManager
@@ -177,9 +177,10 @@ also up to you.  The `examples` uses the size of the pending queue to
 determine, roughly, how much utility is required.
 * **`setup()`** - function is called to setup an instance.  It is passed 
 both a boto ec2 instance object, and the utility this instance is 
-expected to provide. 
+expected to provide. This is run in its own thread, and multiple can be 
+called at the same time; ensure your code is threadsafe. 
 * **`teardown()`** - When the machine is no longer required, this will be 
-called before SpotManager terminates the EC2 instance.  This method is 
+called before SpotManager terminates the EC2 instance. This method is 
 *not* called when AWS terminates the instance.  
 
 

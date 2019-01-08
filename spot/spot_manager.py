@@ -775,7 +775,7 @@ def find_higher(candidates, reference):
 
 
 TERMINATED_STATUS_CODES = {
-    "marked-for-termination",   # AS GOOD AS DEAD
+    "marked-for-termination",  # AS GOOD AS DEAD
     "capacity-oversubscribed",
     "capacity-not-available",
     "instance-terminated-capacity-oversubscribed",
@@ -798,8 +798,6 @@ PROBABLY_NOT_FOR_A_WHILE = {
     "placement-group-constraint",
     "price-too-low"
 }
-
-
 RUNNING_STATUS_CODES = {
     "fulfilled",
     "request-canceled-and-instance-running"

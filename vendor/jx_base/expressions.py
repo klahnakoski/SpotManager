@@ -19,20 +19,19 @@ LANGUAGE, BUT WE KEEP CODE HERE SO THERE IS LESS OF IT
 """
 from __future__ import absolute_import, division, unicode_literals
 
-from collections import Mapping
 from decimal import Decimal
 import operator
 import re
 
 from jx_base.queries import get_property_name, is_variable_name
-from jx_base.utils import BaseExpression, define_language, first, TYPE_ORDER, value_compare, JX
-from mo_dots import Null, coalesce, split_field, wrap
-from mo_future import get_function_name, items as items_, text_type, utf8_json_encoder, zip_longest
+from jx_base.utils import BaseExpression, TYPE_ORDER, define_language, is_expression, is_op, value_compare
+from mo_dots import Null, coalesce, is_data, is_list, split_field, wrap, is_sequence
+from mo_future import first, get_function_name, is_text, items as items_, text_type, utf8_json_encoder, zip_longest
 import mo_json
 from mo_json import BOOLEAN, INTEGER, IS_NULL, NUMBER, OBJECT, STRING, python_type_to_json_type, scrub
 from mo_json.typed_encoder import inserter_type_to_json_type
 from mo_logs import Except, Log
-from mo_math import MAX, MIN, Math, UNION
+from mo_math import is_integer, MAX, MIN
 from mo_times.dates import Date, unicode2Date
 
 ALLOW_SCRIPTING = False
@@ -93,7 +92,7 @@ def _jx_expression(expr, lang):
     """
     WRAP A JSON EXPRESSION WITH OBJECT REPRESENTATION
     """
-    if isinstance(expr, Expression):
+    if is_expression(expr):
         # CONVERT TO lang
         new_op = lang[expr.id]
         if not new_op:
@@ -106,9 +105,9 @@ def _jx_expression(expr, lang):
         return TRUE
     elif expr in (True, False, None) or expr == None or isinstance(expr, (float, int, Decimal, Date)):
         return Literal(expr)
-    elif isinstance(expr, text_type):
+    elif is_text(expr):
         return Variable(expr)
-    elif isinstance(expr, (list, tuple)):
+    elif is_sequence(expr):
         return lang[TupleOp([_jx_expression(e, lang) for e in expr])]
 
     # expr = wrap(expr)
@@ -142,16 +141,16 @@ class Expression(BaseExpression):
 
     def __init__(self, args):
         self.simplified = False
-        if isinstance(args, (list, tuple)):
-            if not all(isinstance(t, Expression) for t in args):
+        if is_sequence(args):
+            if not all(is_expression(t) for t in args):
                 Log.error("Expecting an expression")
-        elif isinstance(args, Mapping):
-            if not all(isinstance(k, Variable) and isinstance(v, Literal) for k, v in args.items()):
+        elif is_data(args):
+            if not all(is_op(k, Variable) and is_literal(v) for k, v in args.items()):
                 Log.error("Expecting an {<variable>: <literal>}")
         elif args == None:
             pass
         else:
-            if not isinstance(args, Expression):
+            if not is_expression(args):
                 Log.error("Expecting an expression")
 
     @classmethod
@@ -180,11 +179,11 @@ class Expression(BaseExpression):
 
             if term == None:
                 return class_([], **clauses)
-            elif isinstance(term, list):
+            elif is_list(term):
                 terms = [jx_expression(t) for t in term]
                 return class_(terms, **clauses)
-            elif isinstance(term, Mapping):
-                items = term.items()
+            elif is_data(term):
+                items = items_(term)
                 if class_.has_simple_form:
                     if len(items) == 1:
                         k, v = items[0]
@@ -295,7 +294,7 @@ class Variable(Expression):
             row = row.get(p)
             if row is None:
                 return None
-        if isinstance(row, list) and len(row) == 1:
+        if is_list(row) and len(row) == 1:
             return row[0]
         return row
 
@@ -316,9 +315,9 @@ class Variable(Expression):
         return self.var.__hash__()
 
     def __eq__(self, other):
-        if isinstance(other, Variable):
+        if is_op(other, Variable):
             return self.var == other.var
-        elif isinstance(other, text_type):
+        elif is_text(other):
             return self.var == other
         return False
 
@@ -345,7 +344,7 @@ class OffsetOp(Expression):
 
     def __init__(self, var):
         Expression.__init__(self, None)
-        if not Math.is_integer(var):
+        if not is_integer(var):
             Log.error("Expecting an integer")
         self.var = var
 
@@ -380,8 +379,8 @@ class RowsOp(Expression):
     def __init__(self, term):
         Expression.__init__(self, term)
         self.var, self.offset = term
-        if isinstance(self.var, Variable):
-            if isinstance(self.var, Variable) and not any(self.var.var.startswith(p) for p in ["row.", "rows.", "rownum"]):  # VARIABLES ARE INTERPRETED LITERALLY
+        if is_op(self.var, Variable):
+            if is_op(self.var, Variable) and not any(self.var.var.startswith(p) for p in ["row.", "rows.", "rownum"]):  # VARIABLES ARE INTERPRETED LITERALLY
                 self.var = Literal(self.var.var)
             else:
                 Log.error("can not handle")
@@ -389,7 +388,7 @@ class RowsOp(Expression):
             Log.error("can not handle")
 
     def __data__(self):
-        if isinstance(self.var, Literal) and isinstance(self.offset, Literal):
+        if is_literal(self.var) and is_literal(self.offset):
             return {"rows": {self.var.json, self.offset.value}}
         else:
             return {"rows": [self.var.__data__(), self.offset.__data__()]}
@@ -409,7 +408,7 @@ class GetOp(Expression):
         self.var, self.offset = term
 
     def __data__(self):
-        if isinstance(self.var, Literal) and isinstance(self.offset, Literal):
+        if is_literal(self.var) and is_literal(self.offset):
             return {"get": {self.var.json, self.offset.value}}
         else:
             return {"get": [self.var.__data__(), self.offset.__data__()]}
@@ -435,17 +434,17 @@ class SelectOp(Expression):
         expr = wrap(expr)
         term = expr.select
         terms = []
-        if not isinstance(term, list):
+        if not is_list(term):
             raise Log.error("Expecting a list")
         for t in term:
-            if isinstance(t, text_type):
+            if is_text(t):
                 if not is_variable_name(t):
                     Log.error("expecting {{value}} a simple dot-delimited path name", value=t)
                 terms.append({"name": t, "value": _jx_expression(t, cls.lang)})
             elif t.name == None:
                 if t.value == None:
                     Log.error("expecting select parameters to have name and value properties")
-                elif isinstance(t.value, text_type):
+                elif is_text(t.value):
                     if not is_variable_name(t):
                         Log.error("expecting {{value}} a simple dot-delimited path name", value=t.value)
                     else:
@@ -482,7 +481,7 @@ class ScriptOp(Expression):
 
     def __init__(self, script, data_type=OBJECT):
         Expression.__init__(self, None)
-        if not isinstance(script, text_type):
+        if not is_text(script):
             Log.error("expecting text of a script")
         self.simplified = True
         self.script = script
@@ -507,6 +506,10 @@ class ScriptOp(Expression):
 
     def __str__(self):
         return str(self.script)
+
+
+class QueryOp(Expression):
+    pass
 
 
 class EsScript(Expression):
@@ -550,7 +553,7 @@ class Literal(Expression):
             return TRUE
         if term is False:
             return FALSE
-        if isinstance(term, Mapping) and term.get('date'):
+        if is_data(term) and term.get('date'):
             # SPECIAL CASE
             return cls.lang[DateOp(term.get('date'))]
         return object.__new__(cls)
@@ -576,7 +579,7 @@ class Literal(Expression):
         elif self.term == None:
             return False
 
-        if isinstance(other, Literal):
+        if is_literal(other):
             return (self.term == other.term) or (self.json == other.json)
 
     def __data__(self):
@@ -692,6 +695,8 @@ class NullOp(Literal):
     def __str__(self):
         return b"null"
 
+    def __hash__(self):
+        return id(None)
 
 NULL = NullOp()
 TYPE_ORDER[NullOp] = 9
@@ -806,7 +811,7 @@ class DateOp(Literal):
     def __init__(self, term):
         if hasattr(self, "date"):
             return
-        if isinstance(term, text_type):
+        if is_text(term):
             self.date = term
         else:
             self.date = coalesce(term.get('literal'), term)
@@ -827,6 +832,16 @@ class DateOp(Literal):
         return Date(self.date)
 
 
+literal_op_ids = (Literal.id, NullOp.id, TrueOp.id, FalseOp.id, DateOp.id)
+
+
+def is_literal(l):
+    try:
+        return l.id in literal_op_ids
+    except Exception:
+        return False
+
+
 class TupleOp(Expression):
     date_type = OBJECT
 
@@ -834,7 +849,7 @@ class TupleOp(Expression):
         Expression.__init__(self, terms)
         if terms == None:
             self.terms = []
-        elif isinstance(terms, list):
+        elif is_list(terms):
             self.terms = terms
         else:
             self.terms = [terms]
@@ -894,7 +909,7 @@ class BaseBinaryOp(Expression):
         return self.op
 
     def __data__(self):
-        if isinstance(self.lhs, Variable) and isinstance(self.rhs, Literal):
+        if is_op(self.lhs, Variable) and is_literal(self.rhs):
             return {self.op: {self.lhs.var, self.rhs.value}, "default": self.default}
         else:
             return {self.op: [self.lhs.__data__(), self.rhs.__data__()], "default": self.default}
@@ -915,7 +930,7 @@ class BaseBinaryOp(Expression):
         lhs = self.lhs.partial_eval()
         rhs = self.rhs.partial_eval()
         default = self.default.partial_eval()
-        if isinstance(lhs, Literal) and isinstance(rhs, Literal):
+        if is_literal(lhs) and is_literal(rhs):
             return Literal(builtin_ops[self.op](lhs.value, rhs.value))
         return self.__class__([lhs, rhs], default=default)
 
@@ -947,7 +962,7 @@ class DivOp(BaseBinaryOp):
         if rhs is ZERO:
             return default
         lhs = self.lhs.partial_eval()
-        if isinstance(lhs, Literal) and isinstance(rhs, Literal):
+        if is_literal(lhs) and is_literal(rhs):
             return Literal(builtin_ops[self.op](lhs.value, rhs.value))
         return self.__class__([lhs, rhs], default=default)
 
@@ -966,7 +981,7 @@ class BaseInequalityOp(Expression):
         return self.op
 
     def __data__(self):
-        if isinstance(self.lhs, Variable) and isinstance(self.rhs, Literal):
+        if is_op(self.lhs, Variable) and is_literal(self.rhs):
             return {self.op: {self.lhs.var, self.rhs.value}}
         else:
             return {self.op: [self.lhs.__data__(), self.rhs.__data__()]}
@@ -990,7 +1005,7 @@ class BaseInequalityOp(Expression):
         lhs = self.lhs.partial_eval()
         rhs = self.rhs.partial_eval()
 
-        if isinstance(lhs, Literal) and isinstance(rhs, Literal):
+        if is_literal(lhs) and is_literal(rhs):
             return Literal(builtin_ops[self.op](lhs, rhs))
 
         return self.__class__([lhs, rhs])
@@ -1026,7 +1041,7 @@ class FloorOp(Expression):
         self.default = default
 
     def __data__(self):
-        if isinstance(self.lhs, Variable) and isinstance(self.rhs, Literal):
+        if is_op(self.lhs, Variable) and is_literal(self.rhs):
             return {"floor": {self.lhs.var, self.rhs.value}, "default": self.default}
         else:
             return {"floor": [self.lhs.__data__(), self.rhs.__data__()], "default": self.default}
@@ -1049,12 +1064,12 @@ class EqOp(Expression):
     data_type = BOOLEAN
 
     def __new__(cls, terms):
-        if isinstance(terms, list):
+        if is_list(terms):
             return object.__new__(cls)
 
         items = terms.items()
         if len(items) == 1:
-            if isinstance(items[0][1], list):
+            if is_list(items[0][1]):
                 return cls.lang[InOp(items[0])]
             else:
                 return cls.lang[EqOp(items[0])]
@@ -1072,13 +1087,13 @@ class EqOp(Expression):
         self.lhs, self.rhs = terms
 
     def __data__(self):
-        if isinstance(self.lhs, Variable) and isinstance(self.rhs, Literal):
+        if is_op(self.lhs, Variable) and is_literal(self.rhs):
             return {"eq": {self.lhs.var, self.rhs.value}}
         else:
             return {"eq": [self.lhs.__data__(), self.rhs.__data__()]}
 
     def __eq__(self, other):
-        if isinstance(other, EqOp):
+        if is_op(other, EqOp):
             return self.lhs == other.lhs and self.rhs == other.rhs
         return False
 
@@ -1099,7 +1114,7 @@ class EqOp(Expression):
         lhs = self.lang[self.lhs].partial_eval()
         rhs = self.lang[self.rhs].partial_eval()
 
-        if isinstance(lhs, Literal) and isinstance(rhs, Literal):
+        if is_literal(lhs) and is_literal(rhs):
             return FALSE if value_compare(lhs.value, rhs.value) else TRUE
         else:
             return self.lang[CaseOp(
@@ -1117,15 +1132,15 @@ class NeOp(Expression):
 
     def __init__(self, terms):
         Expression.__init__(self, terms)
-        if isinstance(terms, (list, tuple)):
+        if is_sequence(terms):
             self.lhs, self.rhs = terms
-        elif isinstance(terms, Mapping):
+        elif is_data(terms):
             self.rhs, self.lhs = terms.items()[0]
         else:
             Log.error("logic error")
 
     def __data__(self):
-        if isinstance(self.lhs, Variable) and isinstance(self.rhs, Literal):
+        if is_op(self.lhs, Variable) and is_literal(self.rhs):
             return {"ne": {self.lhs.var, self.rhs.value}}
         else:
             return {"ne": [self.lhs.__data__(), self.rhs.__data__()]}
@@ -1156,7 +1171,7 @@ class NotOp(Expression):
         return {"not": self.term.__data__()}
 
     def __eq__(self, other):
-        if not isinstance(other, NotOp):
+        if not is_op(other, NotOp):
             return False
         return self.term == other.term
 
@@ -1178,33 +1193,33 @@ class NotOp(Expression):
                 return TRUE
             elif term is NULL:
                 return TRUE
-            elif isinstance(term, Literal):
+            elif is_literal(term):
                 Log.error("`not` operator expects a Boolean term")
-            elif isinstance(term, WhenOp):
+            elif is_op(term, WhenOp):
                 output = self.lang[WhenOp(
                     term.when,
                     **{"then": inverse(term.then), "else": inverse(term.els_)}
                 )].partial_eval()
-            elif isinstance(term, CaseOp):
+            elif is_op(term, CaseOp):
                 output = self.lang[CaseOp(
                     [
-                        WhenOp(w.when, **{"then": inverse(w.then)}) if isinstance(w, WhenOp) else inverse(w)
+                        WhenOp(w.when, **{"then": inverse(w.then)}) if is_op(w, WhenOp) else inverse(w)
                         for w in term.whens
                     ]
                 )].partial_eval()
-            elif isinstance(term, AndOp):
+            elif is_op(term, AndOp):
                 output = self.lang[OrOp([inverse(t) for t in term.terms])].partial_eval()
-            elif isinstance(term, OrOp):
+            elif is_op(term, OrOp):
                 output = self.lang[AndOp([inverse(t) for t in term.terms])].partial_eval()
-            elif isinstance(term, MissingOp):
+            elif is_op(term, MissingOp):
                 output = self.lang[NotOp(term.expr.missing())]
-            elif isinstance(term, ExistsOp):
+            elif is_op(term, ExistsOp):
                 output = term.field.missing().partial_eval()
-            elif isinstance(term, NotOp):
+            elif is_op(term, NotOp):
                 output = self.lang[term.term].partial_eval()
-            elif isinstance(term, NeOp):
+            elif is_op(term, NeOp):
                 output = self.lang[EqOp([term.lhs, term.rhs])].partial_eval()
-            elif isinstance(term, (BasicIndexOfOp, BasicSubstringOp)):
+            elif is_op(term, BasicIndexOfOp) or is_op(term, BasicSubstringOp):
                 return FALSE
             else:
                 output = self.lang[NotOp(term)]
@@ -1222,7 +1237,7 @@ class AndOp(Expression):
         Expression.__init__(self, terms)
         if terms == None:
             self.terms = []
-        elif isinstance(terms, list):
+        elif is_list(terms):
             self.terms = terms
         else:
             self.terms = [terms]
@@ -1231,7 +1246,7 @@ class AndOp(Expression):
         return {"and": [t.__data__() for t in self.terms]}
 
     def __eq__(self, other):
-        if isinstance(other, AndOp):
+        if is_op(other, AndOp):
             return all(a == b for a, b in zip_longest(self.terms, other.terms))
         return False
 
@@ -1259,11 +1274,11 @@ class AndOp(Expression):
                 continue
             elif simple is FALSE:
                 return FALSE
-            elif isinstance(simple, AndOp):
+            elif is_op(simple, AndOp):
                 for and_terms in or_terms:
                     and_terms.extend([tt for tt in simple.terms if tt not in and_terms])
                 continue
-            elif isinstance(simple, OrOp):
+            elif is_op(simple, OrOp):
                 or_terms = [
                     and_terms + [o]
                     for o in simple.terms
@@ -1319,7 +1334,7 @@ class OrOp(Expression):
         return any(t(row, rownum, rows) for t in self.terms)
 
     def __eq__(self, other):
-        if not isinstance(other, OrOp):
+        if not is_op(other, OrOp):
             return False
         if len(self.terms) != len(other.terms):
             return False
@@ -1338,9 +1353,9 @@ class OrOp(Expression):
                 return TRUE
             elif simple is FALSE:
                 pass
-            elif isinstance(simple, OrOp):
+            elif is_op(simple, OrOp):
                 terms.extend(tt for tt in simple.terms if tt not in terms)
-            elif isinstance(simple, AndOp):
+            elif is_op(simple, AndOp):
                 ands.append(simple)
             elif simple not in terms:
                 terms.append(simple)
@@ -1368,7 +1383,7 @@ class LengthOp(Expression):
         self.term = term
 
     def __eq__(self, other):
-        if isinstance(other, LengthOp):
+        if is_op(other, LengthOp):
             return self.term == other.term
 
     def __data__(self):
@@ -1386,8 +1401,8 @@ class LengthOp(Expression):
     @simplified
     def partial_eval(self):
         term = self.lang[self.term].partial_eval()
-        if isinstance(term, Literal):
-            if isinstance(term.value, text_type):
+        if is_literal(term):
+            if is_text(term.value):
                 return self.lang[Literal(len(term.value))]
             else:
                 return NULL
@@ -1416,13 +1431,13 @@ class FirstOp(Expression):
     @simplified
     def partial_eval(self):
         term = self.lang[self.term].partial_eval()
-        if isinstance(self.term, FirstOp):
+        if is_op(self.term, FirstOp):
             return term
         elif term.type != OBJECT and not term.many:
             return term
         elif term is NULL:
             return term
-        elif isinstance(term, Literal):
+        elif is_literal(term):
             Log.error("not handled yet")
         else:
             return self.lang[FirstOp(term)]
@@ -1449,14 +1464,14 @@ class LastOp(Expression):
     @simplified
     def partial_eval(self):
         term = self.term.partial_eval()
-        if isinstance(self.term, LastOp):
+        if is_op(self.term, LastOp):
             return term
         elif term.type != OBJECT and not term.many:
             return term
         elif term is NULL:
             return term
-        elif isinstance(term, Literal):
-            if isinstance(term, list):
+        elif is_literal(term):
+            if is_list(term):
                 if len(term) > 0:
                     return term[-1]
                 return NULL
@@ -1540,7 +1555,7 @@ class IntegerOp(Expression):
     @simplified
     def partial_eval(self):
         term = self.lang[FirstOp(self.term)].partial_eval()
-        if isinstance(term, CoalesceOp):
+        if is_op(term, CoalesceOp):
             return self.lang[CoalesceOp([IntegerOp(t) for t in term.terms])]
         if term.type == INTEGER:
             return term
@@ -1589,7 +1604,7 @@ class NumberOp(Expression):
     @simplified
     def partial_eval(self):
         term = self.lang[FirstOp(self.term)].partial_eval()
-        if isinstance(term, CoalesceOp):
+        if is_op(term, CoalesceOp):
             return self.lang[CoalesceOp([NumberOp(t) for t in term.terms])]
         return self
 
@@ -1652,11 +1667,11 @@ class StringOp(Expression):
         if term.type is IS_NULL:
             return NULL
         term = self.lang[FirstOp(term)].partial_eval()
-        if isinstance(term, StringOp):
+        if is_op(term, StringOp):
             return term.term.partial_eval()
-        elif isinstance(term, CoalesceOp):
+        elif is_op(term, CoalesceOp):
             return self.lang[CoalesceOp([self.lang[StringOp(t)].partial_eval() for t in term.terms])]
-        elif isinstance(term, Literal):
+        elif is_literal(term):
             if term.type == STRING:
                 return term
             else:
@@ -1690,7 +1705,7 @@ class CountOp(Expression):
 
     def __init__(self, terms, **clauses):
         Expression.__init__(self, terms)
-        if isinstance(terms, list):
+        if is_list(terms):
             # SHORTCUT: ASSUME AN ARRAY OF IS A TUPLE
             self.terms = self.lang[TupleOp(terms)]
         else:
@@ -1719,7 +1734,7 @@ class MaxOp(Expression):
         Expression.__init__(self, terms)
         if terms == None:
             self.terms = []
-        elif isinstance(terms, list):
+        elif is_list(terms):
             self.terms = terms
         else:
             self.terms = [terms]
@@ -1747,7 +1762,7 @@ class MaxOp(Expression):
             simple = t.partial_eval()
             if simple is NULL:
                 pass
-            elif isinstance(simple, Literal):
+            elif is_literal(simple):
                 maximum = MAX([maximum, simple.value])
             else:
                 terms.append(simple)
@@ -1772,7 +1787,7 @@ class MinOp(Expression):
         Expression.__init__(self, terms)
         if terms == None:
             self.terms = []
-        elif isinstance(terms, list):
+        elif is_list(terms):
             self.terms = terms
         else:
             self.terms = [terms]
@@ -1798,9 +1813,9 @@ class MinOp(Expression):
         terms = []
         for t in self.terms:
             simple = t.partial_eval()
-            if isinstance(simple, NullOp):
+            if is_op(simple, NullOp):
                 pass
-            elif isinstance(simple, Literal):
+            elif is_literal(simple):
                 minimum = MIN([minimum, simple.value])
             else:
                 terms.append(simple)
@@ -1873,7 +1888,7 @@ class BaseMultiOp(Expression):
             simple = t.partial_eval()
             if simple is NULL:
                 pass
-            elif isinstance(simple, Literal):
+            elif is_literal(simple):
                 if acc is None:
                     acc = simple.value
                 else:
@@ -1961,7 +1976,7 @@ class CoalesceOp(Expression):
         return {"coalesce": [t.__data__() for t in self.terms]}
 
     def __eq__(self, other):
-        if isinstance(other, CoalesceOp):
+        if is_op(other, CoalesceOp):
             if len(self.terms) == len(other.terms):
                 return all(s == o for s, o in zip(self.terms, other.terms))
         return False
@@ -1986,7 +2001,7 @@ class CoalesceOp(Expression):
             simple = self.lang[FirstOp(t)].partial_eval()
             if simple is NULL:
                 pass
-            elif isinstance(simple, Literal):
+            elif is_literal(simple):
                 terms.append(simple)
                 break
             else:
@@ -2011,7 +2026,7 @@ class MissingOp(Expression):
         return {"missing": self.expr.__data__()}
 
     def __eq__(self, other):
-        if not isinstance(other, MissingOp):
+        if not is_op(other, MissingOp):
             return False
         else:
             return self.expr == other.expr
@@ -2031,7 +2046,7 @@ class MissingOp(Expression):
     @simplified
     def partial_eval(self):
         output = self.lang[self.expr].partial_eval().missing()
-        if isinstance(output, MissingOp):
+        if is_op(output, MissingOp):
             return output
         else:
             return output.partial_eval()
@@ -2073,7 +2088,7 @@ class PrefixOp(Expression):
         if not term:
             self.expr = None
             self.prefix = None
-        elif isinstance(term, Mapping):
+        elif is_data(term):
             self.expr, self.prefix = term.items()[0]
         else:
             self.expr, self.prefix = term
@@ -2081,7 +2096,7 @@ class PrefixOp(Expression):
     def __data__(self):
         if not self.expr:
             return {"prefix": {}}
-        elif isinstance(self.expr, Variable) and isinstance(self.prefix, Literal):
+        elif is_op(self.expr, Variable) and is_literal(self.prefix):
             return {"prefix": {self.expr.var: self.prefix.value}}
         else:
             return {"prefix": [self.expr.__data__(), self.prefix.__data__()]}
@@ -2118,7 +2133,7 @@ class SuffixOp(Expression):
         Expression.__init__(self, term)
         if not term:
             self.expr = self.suffix = None
-        elif isinstance(term, Mapping):
+        elif is_data(term):
             self.expr, self.suffix = term.items()[0]
         else:
             self.expr, self.suffix = term
@@ -2126,7 +2141,7 @@ class SuffixOp(Expression):
     def __data__(self):
         if self.expr is None:
             return {"suffix": {}}
-        elif isinstance(self.expr, Variable) and isinstance(self.suffix, Literal):
+        elif is_op(self.expr, Variable) and is_literal(self.suffix):
             return {"suffix": {self.expr.var: self.suffix.value}}
         else:
             return {"suffix": [self.expr.__data__(), self.suffix.__data__()]}
@@ -2153,7 +2168,7 @@ class SuffixOp(Expression):
     def partial_eval(self):
         if self.expr is None:
             return TRUE
-        if not isinstance(self.suffix, Literal) and self.suffix.type == STRING:
+        if not is_literal(self.suffix) and self.suffix.type == STRING:
             Log.error("can only hanlde literal suffix ")
 
         return WhenOp(
@@ -2168,19 +2183,19 @@ class ConcatOp(Expression):
 
     def __init__(self, term, **clauses):
         Expression.__init__(self, term)
-        if isinstance(term, Mapping):
+        if is_data(term):
             self.terms = term.items()[0]
         else:
             self.terms = term
         self.separator = clauses.get("separator", Literal(""))
         self.default = clauses.get("default", NULL)
-        if not isinstance(self.separator, Literal):
+        if not is_literal(self.separator):
             Log.error("Expecting a literal separator")
 
     @classmethod
     def define(cls, expr):
         term = expr.concat
-        if isinstance(term, Mapping):
+        if is_data(term):
             k, v = term.items()[0]
             terms = [Variable(k), Literal(v)]
         else:
@@ -2192,7 +2207,7 @@ class ConcatOp(Expression):
         )]
 
     def __data__(self):
-        if isinstance(self.value, Variable) and isinstance(self.length, Literal):
+        if is_op(self.value, Variable) and is_literal(self.length):
             output = {"concat": {self.terms[0].var: self.terms[2].value}}
         else:
             output = {"concat": [t.__data__() for t in self.terms]}
@@ -2259,13 +2274,13 @@ class LeftOp(Expression):
 
     def __init__(self, term):
         Expression.__init__(self, term)
-        if isinstance(term, Mapping):
+        if is_data(term):
             self.value, self.length = term.items()[0]
         else:
             self.value, self.length = term
 
     def __data__(self):
-        if isinstance(self.value, Variable) and isinstance(self.length, Literal):
+        if is_op(self.value, Variable) and is_literal(self.length):
             return {"left": {self.value.var: self.length.value}}
         else:
             return {"left": [self.value.__data__(), self.length.__data__()]}
@@ -2303,13 +2318,13 @@ class NotLeftOp(Expression):
 
     def __init__(self, term):
         Expression.__init__(self, term)
-        if isinstance(term, Mapping):
+        if is_data(term):
             self.value, self.length = term.items()[0]
         else:
             self.value, self.length = term
 
     def __data__(self):
-        if isinstance(self.value, Variable) and isinstance(self.length, Literal):
+        if is_op(self.value, Variable) and is_literal(self.length):
             return {"not_left": {self.value.var: self.length.value}}
         else:
             return {"not_left": [self.value.__data__(), self.length.__data__()]}
@@ -2347,13 +2362,13 @@ class RightOp(Expression):
 
     def __init__(self, term):
         Expression.__init__(self, term)
-        if isinstance(term, Mapping):
+        if is_data(term):
             self.value, self.length = term.items()[0]
         else:
             self.value, self.length = term
 
     def __data__(self):
-        if isinstance(self.value, Variable) and isinstance(self.length, Literal):
+        if is_op(self.value, Variable) and is_literal(self.length):
             return {"right": {self.value.var: self.length.value}}
         else:
             return {"right": [self.value.__data__(), self.length.__data__()]}
@@ -2391,13 +2406,13 @@ class NotRightOp(Expression):
 
     def __init__(self, term):
         Expression.__init__(self, term)
-        if isinstance(term, Mapping):
+        if is_data(term):
             self.value, self.length = term.items()[0]
         else:
             self.value, self.length = term
 
     def __data__(self):
-        if isinstance(self.value, Variable) and isinstance(self.length, Literal):
+        if is_op(self.value, Variable) and is_literal(self.length):
             return {"not_right": {self.value.var: self.length.value}}
         else:
             return {"not_right": [self.value.__data__(), self.length.__data__()]}
@@ -2445,7 +2460,7 @@ class FindOp(Expression):
             self.start = ZERO
 
     def __data__(self):
-        if isinstance(self.value, Variable) and isinstance(self.find, Literal):
+        if is_op(self.value, Variable) and is_literal(self.find):
             output = {
                 "find": {self.value.var, self.find.value},
                 "start": self.start.__data__()
@@ -2514,7 +2529,7 @@ class SplitOp(Expression):
         self.value, self.find = term
 
     def __data__(self):
-        if isinstance(self.value, Variable) and isinstance(self.find, Literal):
+        if is_op(self.value, Variable) and is_literal(self.find):
             return {"split": {self.value.var, self.find.value}}
         else:
             return {"split": [self.value.__data__(), self.find.__data__()]}
@@ -2557,7 +2572,7 @@ class BetweenOp(Expression):
         self.suffix = suffix
         self.default = default
         self.start = start
-        if isinstance(self.prefix, Literal) and isinstance(self.suffix, Literal):
+        if is_literal(self.prefix) and is_literal(self.suffix):
             pass
         else:
             Log.error("Expecting literal prefix and suffix only")
@@ -2565,7 +2580,7 @@ class BetweenOp(Expression):
     @classmethod
     def define(cls, expr):
         term = expr.between
-        if isinstance(term, list):
+        if is_list(term):
             return cls.lang[BetweenOp(
                 value=jx_expression(term[0]),
                 prefix=jx_expression(term[1]),
@@ -2573,9 +2588,9 @@ class BetweenOp(Expression):
                 default=jx_expression(expr.default),
                 start=jx_expression(expr.start)
             )]
-        elif isinstance(term, Mapping):
+        elif is_data(term):
             var, vals = term.items()[0]
-            if isinstance(vals, list) and len(vals) == 2:
+            if is_list(vals) and len(vals) == 2:
                 return cls.lang[BetweenOp(
                     value=Variable(var),
                     prefix=Literal(vals[0]),
@@ -2601,7 +2616,7 @@ class BetweenOp(Expression):
         )
 
     def __data__(self):
-        if isinstance(self.value, Variable) and isinstance(self.prefix, Literal) and isinstance(self.suffix, Literal):
+        if is_op(self.value, Variable) and is_literal(self.prefix) and is_literal(self.suffix):
             output = wrap({"between": {self.value.var: [self.prefix.value, self.suffix.value]}})
         else:
             output = wrap({"between": [self.value.__data__(), self.prefix.__data__(), self.suffix.__data__()]})
@@ -2657,9 +2672,9 @@ class InOp(Expression):
     data_type = BOOLEAN
 
     def __new__(cls, terms):
-        if isinstance(terms[0], Variable) and isinstance(terms[1], Literal):
+        if is_op(terms[0], Variable) and is_op(terms[1], Literal):
             name, value = terms
-            if not isinstance(value.value, (list, tuple)):
+            if not is_sequence(value.value):
                 return cls.lang[EqOp([name, Literal([value.value])])]
         return object.__new__(cls)
 
@@ -2668,13 +2683,13 @@ class InOp(Expression):
         self.value, self.superset = term
 
     def __data__(self):
-        if isinstance(self.value, Variable) and isinstance(self.superset, Literal):
+        if is_op(self.value, Variable) and is_literal(self.superset):
             return {"in": {self.value.var: self.superset.value}}
         else:
             return {"in": [self.value.__data__(), self.superset.__data__()]}
 
     def __eq__(self, other):
-        if isinstance(other, InOp):
+        if is_op(other, InOp):
             return self.value == other.value and self.superset == other.superset
         return False
 
@@ -2690,7 +2705,7 @@ class InOp(Expression):
         superset = self.superset.partial_eval()
         if superset is NULL:
             return FALSE
-        elif isinstance(value, Literal) and isinstance(superset, Literal):
+        elif is_literal(value) and is_literal(superset):
             return Literal(self())
         else:
             return self
@@ -2757,7 +2772,7 @@ class WhenOp(Expression):
             return self.lang[self.then].partial_eval()
         elif when in [FALSE, NULL]:
             return self.lang[self.els_].partial_eval()
-        elif isinstance(when, Literal):
+        elif is_op(when, Literal):
             Log.error("Expecting `when` clause to return a Boolean, or `null`")
 
         then = self.lang[self.then].partial_eval()
@@ -2779,14 +2794,14 @@ class WhenOp(Expression):
 
 class CaseOp(Expression):
     def __init__(self, terms, **clauses):
-        if not isinstance(terms, (list, tuple)):
+        if not is_sequence(terms):
             Log.error("case expression requires a list of `when` sub-clauses")
         Expression.__init__(self, terms)
         if len(terms) == 0:
             Log.error("Expecting at least one clause")
 
         for w in terms[:-1]:
-            if not isinstance(w, WhenOp) or w.els_:
+            if not is_op(w, WhenOp) or w.els_:
                 Log.error("case expression does not allow `else` clause in `when` sub-clause")
         self.whens = terms
 
@@ -2794,7 +2809,7 @@ class CaseOp(Expression):
         return {"case": [w.__data__() for w in self.whens]}
 
     def __eq__(self, other):
-        if isinstance(other, CaseOp):
+        if is_op(other, CaseOp):
             return all(s == o for s, o in zip(self.whens, other.whens))
 
     def vars(self):
@@ -2840,7 +2855,7 @@ class CaseOp(Expression):
 
     @property
     def type(self):
-        types = set(w.then.type if isinstance(w, WhenOp) else w.type for w in self.whens)
+        types = set(w.then.type if is_op(w, WhenOp) else w.type for w in self.whens)
         if len(types) > 1:
             return OBJECT
         else:
@@ -2853,7 +2868,7 @@ class UnionOp(Expression):
         Expression.__init__(self, terms)
         if terms == None:
             self.terms = []
-        elif isinstance(terms, list):
+        elif is_list(terms):
             self.terms = terms
         else:
             self.terms = [terms]
@@ -2885,7 +2900,7 @@ class UnionOp(Expression):
             simple = t.partial_eval()
             if simple is NULL:
                 pass
-            elif isinstance(simple, Literal):
+            elif is_op(simple, Literal):
                 minimum = MIN([minimum, simple.value])
             else:
                 terms.append(simple)
@@ -2921,7 +2936,7 @@ class EsNestedOp(Expression):
         return {"es.nested": {self.path.var: self.query.__data__()}}
 
     def __eq__(self, other):
-        if isinstance(other, EsNestedOp):
+        if is_op(other, EsNestedOp):
             return self.path.var == other.path.var and self.query == other.query
         return False
 
@@ -2944,7 +2959,7 @@ class BasicStartsWithOp(Expression):
         return {"basic.startsWith": [self.value.__data__(), self.prefix.__data__()]}
 
     def __eq__(self, other):
-        if isinstance(other, BasicStartsWithOp):
+        if is_op(other, BasicStartsWithOp):
             return self.value == other.value and self.prefix == other.prefix
 
     def vars(self):
@@ -3005,7 +3020,7 @@ class BasicEqOp(Expression):
         return FALSE
 
     def __eq__(self, other):
-        if not isinstance(other, EqOp):
+        if not is_op(other, EqOp):
             return False
         return self.lhs == other.lhs and self.rhs == other.rhs
 
@@ -3044,7 +3059,7 @@ class BasicMultiOp(Expression):
             simple = t.partial_eval()
             if simple is NULL:
                 pass
-            elif isinstance(simple, Literal):
+            elif is_op(simple, Literal):
                 if acc is None:
                     acc = simple.value
                 else:
@@ -3104,7 +3119,7 @@ class SqlEqOp(Expression):
         return FALSE
 
     def __eq__(self, other):
-        if not isinstance(other, EqOp):
+        if not is_op(other, EqOp):
             return False
         return self.lhs == other.lhs and self.rhs == other.rhs
 

@@ -9,10 +9,9 @@
 #
 from __future__ import absolute_import, division, unicode_literals
 
-from collections import Mapping
-
+from mo_future import is_text, is_binary
 from jx_python import jx
-from mo_dots import Data, ROOT_PATH, unwrap
+from mo_dots import Data, ROOT_PATH, is_data, unwrap
 from mo_json import NESTED, OBJECT, json2value
 from mo_json.encoder import UnicodeBuilder
 from mo_json.typed_encoder import typed_encode
@@ -29,7 +28,9 @@ class TypedInserter(object):
         if es:
             _schema = Data()
             for c in parse_properties(es.settings.alias, ".", ROOT_PATH, es.get_properties()):
-                if c.es_type not in (OBJECT, NESTED):
+                if c.es_type in (OBJECT, NESTED):
+                    _schema[c.name] = {}
+                else:
                     _schema[c.name] = c
             self.schema = unwrap(_schema)
         else:
@@ -44,7 +45,7 @@ class TypedInserter(object):
             value = r.get('value')
             if "json" in r:
                 value = json2value(r["json"])
-            elif isinstance(value, Mapping) or value != None:
+            elif is_data(value) or value != None:
                 pass
             else:
                 from mo_logs import Log
@@ -53,7 +54,7 @@ class TypedInserter(object):
             _buffer = UnicodeBuilder(1024)
             net_new_properties = []
             path = []
-            if isinstance(value, Mapping):
+            if is_data(value):
                 given_id = self.get_id(value)
                 value['_id'] = None
                 version = self.get_version(value)

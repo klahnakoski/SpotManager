@@ -15,7 +15,7 @@ import itertools
 import jx_base
 from jx_base import Container
 from jx_base.expressions import TRUE, Variable
-from jx_base.utils import is_expression, is_op
+from jx_base.language import is_expression, is_op
 from jx_python.expressions import jx_expression_to_function
 from jx_python.lists.aggs import is_aggs, list_aggs
 from jx_python.meta import get_schema_from_list

@@ -14,7 +14,7 @@ from collections import deque
 from jx_base.domains import SetDomain
 from jx_base.expressions import NULL, TupleOp, Variable as Variable_
 from jx_base.query import DEFAULT_LIMIT
-from jx_base.utils import is_op
+from jx_base.language import is_op
 from jx_elasticsearch import post as es_post
 from jx_elasticsearch.es52.decoders import AggsDecoder
 from jx_elasticsearch.es52.es_query import Aggs, ComplexAggs, ExprAggs, FilterAggs, NestedAggs, TermsAggs, simplify

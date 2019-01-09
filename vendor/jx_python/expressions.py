@@ -77,7 +77,7 @@ from jx_base.expressions import (
     extend,
     jx_expression,
 )
-from jx_base.utils import is_expression, is_op
+from jx_base.language import is_expression, is_op
 from jx_python.expression_compiler import compile_expression
 from mo_dots import coalesce, is_data, is_list, split_field, unwrap
 from mo_future import PY2, is_text, text_type

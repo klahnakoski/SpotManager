@@ -11,7 +11,7 @@ from __future__ import absolute_import, division, unicode_literals
 
 from jx_base.expressions import TupleOp
 from jx_base.query import canonical_aggregates
-from jx_base.utils import is_op
+from jx_base.language import is_op
 from jx_elasticsearch.es52.aggs import aggs_iterator, count_dim, format_dispatch
 from jx_python.containers.cube import Cube
 from mo_collections.matrix import Matrix

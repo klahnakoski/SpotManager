@@ -23,8 +23,8 @@ from decimal import Decimal
 import operator
 import re
 
-from jx_base.queries import get_property_name, is_variable_name
-from jx_base.utils import BaseExpression, TYPE_ORDER, define_language, is_expression, is_op, value_compare
+from jx_base.utils import get_property_name, is_variable_name
+from jx_base.language import BaseExpression, TYPE_ORDER, define_language, is_expression, is_op, value_compare
 from mo_dots import Null, coalesce, is_data, is_list, split_field, wrap, is_sequence
 from mo_future import first, get_function_name, is_text, items as items_, text_type, utf8_json_encoder, zip_longest
 import mo_json

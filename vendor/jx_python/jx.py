@@ -14,7 +14,7 @@ from jx_base import query
 from jx_base.container import Container
 from jx_base.expressions import FALSE, TRUE
 from jx_base.query import QueryOp, _normalize_selects
-from jx_base.utils import is_op, value_compare
+from jx_base.language import is_op, value_compare
 from jx_python import expressions as _expressions, flat_list, group_by
 from jx_python.containers.cube import Cube
 from jx_python.cubes.aggs import cube_aggs

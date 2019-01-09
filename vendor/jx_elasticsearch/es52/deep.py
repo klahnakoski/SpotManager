@@ -12,7 +12,7 @@ from __future__ import absolute_import, division, unicode_literals
 from mo_future import is_text, is_binary
 from jx_base.expressions import LeavesOp, NULL, Variable
 from jx_base.query import DEFAULT_LIMIT
-from jx_base.utils import is_op
+from jx_base.language import is_op
 from jx_elasticsearch import post as es_post
 from jx_elasticsearch.es52.expressions import AndOp, ES52, split_expression_by_depth
 from jx_elasticsearch.es52.setop import format_dispatch, get_pull, get_pull_function

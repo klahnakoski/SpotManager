@@ -882,12 +882,12 @@ ephemeral_storage = {
     "i2.8xlarge": {"num": 8, "size": 6400},
     "i2.xlarge": {"num": 1, "size": 800},
 
-    "i3.16xlarge": {"num": 8, "size": 15200},
+    "i3.large": {"num": 1, "size": 475},
+    "i3.xlarge": {"num": 1, "size": 950},
     "i3.2xlarge": {"num": 1, "size": 1900},
     "i3.4xlarge": {"num": 2, "size": 3800},
     "i3.8xlarge": {"num": 4, "size": 7600},
-    "i3.large": {"num": 1, "size": 475},
-    "i3.xlarge": {"num": 1, "size": 950},
+    "i3.16xlarge": {"num": 8, "size": 15200},
 
     "f1.2xlarge": {"num": 1, "size": 470},
     "f1.4xlarge": {"num": 1, "size": 940},

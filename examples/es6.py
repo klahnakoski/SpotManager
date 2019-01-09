@@ -118,7 +118,7 @@ class ES6Spot(InstanceManager):
                 conn.sudo('sudo umount '+k.device, warn=True)
 
                 # (RE)PARTITION THE LOCAL DEVICE, AND FORMAT
-                conn.sudo("parted /dev/nvme0n1 --script \"mklabel gpt mkpart primary ext4 2048s 100%\"")
+                conn.sudo("parted " + k.device + " --script \"mklabel gpt mkpart primary ext4 2048s 100%\"")
                 conn.sudo('yes | sudo mkfs -t ext4 '+k.device)
 
                 # ES AND JOURNALLING DO NOT MIX

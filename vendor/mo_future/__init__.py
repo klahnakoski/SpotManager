@@ -254,4 +254,4 @@ else:
                 d[key] = value
             return d
 
-
+_ = (ConfigParser, zip_longest, reduce, transpose, izip, HTMLParser, urlparse, StringIO, BytesIO, allocate_lock, get_ident, start_new_thread, interrupt_main)

@@ -9,7 +9,6 @@
 #
 from __future__ import absolute_import, division, unicode_literals
 
-from mo_future import is_text, is_binary
 from collections import deque
 
 from jx_base.domains import SetDomain
@@ -26,7 +25,7 @@ from jx_elasticsearch.es52.util import aggregates
 from jx_python import jx
 from jx_python.expressions import jx_expression_to_function
 from mo_dots import Data, Null, coalesce, join_field, listwrap, literal_field, unwrap, unwraplist, wrap
-from mo_future import first, text_type
+from mo_future import first, is_text, text_type
 from mo_json import EXISTS, NESTED, OBJECT
 from mo_json.typed_encoder import encode_property
 from mo_logs import Log
@@ -547,7 +546,7 @@ def count_dim(aggs, es_query, decoders):
         for child in children:
             name = child.name
             agg = aggs[name]
-            if agg.get('doc_count')==0:
+            if agg.get('doc_count') == 0:
                 continue
             elif name == "_match":
                 for i, b in enumerate(agg.get("buckets", EMPTY_LIST)):

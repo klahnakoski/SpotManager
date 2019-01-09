@@ -9,11 +9,10 @@
 #
 from __future__ import absolute_import, division, unicode_literals
 
-from mo_future import is_text, is_binary
 from jx_base.expressions import Variable
 from jx_base.utils import is_op
 from mo_dots import wrap
-from mo_future import text_type
+from mo_future import is_text
 from mo_json import BOOLEAN, IS_NULL, NUMBER, OBJECT, STRING
 from mo_logs import Log
 from pyLibrary.convert import value2boolean
@@ -55,7 +54,6 @@ def es_query_template(path):
             "sort": []
         })
         return output, wrap([f0])
-
 
 
 def jx_sort_to_es_sort(sort, schema):

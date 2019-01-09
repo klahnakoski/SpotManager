@@ -9,16 +9,13 @@
 #
 from __future__ import absolute_import, division, unicode_literals
 
+from copy import copy
 from math import isnan
 
+from mo_dots import Data, data_types, listwrap
 from mo_dots.lists import list_types
-from mo_future import is_text, is_binary
-from copy import copy
-
-from mo_dots import Data, NullType, is_list, listwrap, data_types
 from mo_future import boolean_type, long, none_type, text_type
 from mo_logs import Log
-from mo_math import is_nan
 from mo_times import Date
 
 builtin_tuple = tuple

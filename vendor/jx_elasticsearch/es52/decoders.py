@@ -7,29 +7,27 @@
 #
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
-from collections import Mapping
-
+from mo_future import is_text, is_binary
 from jx_base.dimensions import Dimension
-from jx_base.domains import SimpleSetDomain, DefaultDomain, PARTITION
-from jx_base.expressions import TupleOp, FirstOp, MissingOp, ExistsOp, LtOp, GteOp, GtOp, LteOp, LeavesOp, Variable
-from jx_base.query import MAX_LIMIT, DEFAULT_LIMIT
-from jx_elasticsearch.es52.es_query import NestedAggs, FilterAggs, Aggs, TermsAggs, RangeAggs, FiltersAggs
-from jx_elasticsearch.es52.expressions import NotOp, InOp, Literal, AndOp
+from jx_base.domains import DefaultDomain, PARTITION, SimpleSetDomain
+from jx_base.expressions import ExistsOp, FirstOp, GtOp, GteOp, LeavesOp, LtOp, LteOp, MissingOp, TupleOp, Variable
+from jx_base.query import DEFAULT_LIMIT, MAX_LIMIT
+from jx_base.language import is_op
+from jx_elasticsearch.es52.es_query import Aggs, FilterAggs, FiltersAggs, NestedAggs, RangeAggs, TermsAggs
+from jx_elasticsearch.es52.expressions import AndOp, InOp, Literal, NotOp
 from jx_elasticsearch.es52.painless import LIST_TO_PIPE, Painless
 from jx_elasticsearch.es52.util import pull_functions
 from jx_python import jx
-from jx_python.jx import first
-from mo_dots import wrap, set_default, coalesce, literal_field, Data, relative_field, concat_field
-from mo_future import text_type, transpose
-from mo_json import STRING, EXISTS, OBJECT
-from mo_json.typed_encoder import untype_path, NESTED_TYPE, EXISTS_TYPE
+from mo_dots import Data, coalesce, concat_field, is_data, literal_field, relative_field, set_default, wrap
+from mo_future import first, text_type, transpose
+from mo_json import EXISTS, OBJECT, STRING
+from mo_json.typed_encoder import EXISTS_TYPE, NESTED_TYPE, untype_path
 from mo_logs import Log
-from mo_logs.strings import quote, expand_template
-from mo_math import MAX, MIN, Math
+from mo_logs.strings import expand_template, quote
+import mo_math
+from mo_math import MAX, MIN
 
 DEBUG = False
 
@@ -42,15 +40,15 @@ class AggsDecoder(object):
             # if query.groupby:
             #     return object.__new__(DefaultDecoder, e)
 
-            if isinstance(e.value, text_type):
+            if is_text(e.value):
                 Log.error("Expecting Variable or Expression, not plain string")
 
-            if isinstance(e.value, LeavesOp):
+            if is_op(e.value, LeavesOp):
                 return object.__new__(ObjectDecoder)
-            elif isinstance(e.value, TupleOp):
+            elif is_op(e.value, TupleOp):
                 # THIS domain IS FROM A dimension THAT IS A SIMPLE LIST OF fields
                 # JUST PULL THE FIELDS
-                if not all(isinstance(t, Variable) for t in e.value.terms):
+                if not all(is_op(t, Variable) for t in e.value.terms):
                     Log.error("Can only handle variables in tuples")
 
                 e.domain = Data(
@@ -58,7 +56,7 @@ class AggsDecoder(object):
                 )
                 return object.__new__(DimFieldListDecoder)
 
-            elif isinstance(e.value, Variable):
+            elif is_op(e.value, Variable):
                 schema = query.frum.schema
                 cols = schema.leaves(e.value.var)
                 if not cols:
@@ -111,7 +109,7 @@ class AggsDecoder(object):
             # THIS domain IS FROM A dimension THAT IS A SIMPLE LIST OF fields
             # JUST PULL THE FIELDS
             fields = e.domain.dimension.fields
-            if isinstance(fields, Mapping):
+            if is_data(fields):
                 Log.error("No longer allowed: All objects are expressions")
             else:
                 return object.__new__(DimFieldListDecoder)
@@ -182,7 +180,7 @@ class SetDecoder(AggsDecoder):
 
         limit = coalesce(self.limit, len(domain.partitions))
 
-        if isinstance(value, Variable):
+        if is_op(value, Variable):
             es_field = first(self.query.frum.schema.leaves(value.var)).es_column  # ALREADY CHECKED THERE IS ONLY ONE
             match = TermsAggs(
                 "_match",
@@ -262,7 +260,7 @@ def _range_composer(self, edge, domain, es_query, to_float, schema):
             self
         ).add(es_query))
 
-    if isinstance(edge.value, Variable):
+    if is_op(edge.value, Variable):
         calc = {"field": first(schema.leaves(edge.value.var)).es_column}
     else:
         calc = {"script": text_type(Painless[edge.value].to_es_script(schema))}
@@ -494,7 +492,7 @@ class MultivalueDecoder(SetDecoder):
 class ObjectDecoder(AggsDecoder):
     def __init__(self, edge, query, limit):
         AggsDecoder.__init__(self, edge, query, limit)
-        if isinstance(edge.value, LeavesOp):
+        if is_op(edge.value, LeavesOp):
             prefix = edge.value.term.var
             flatter = lambda k: literal_field(relative_field(k, prefix))
         else:
@@ -507,7 +505,7 @@ class ObjectDecoder(AggsDecoder):
         ])
 
         self.domain = self.edge.domain = wrap({"dimension": {"fields": self.fields}})
-        self.domain.limit = Math.min(coalesce(self.domain.limit, query.limit, 10), MAX_LIMIT)
+        self.domain.limit = mo_math.min(coalesce(self.domain.limit, query.limit, 10), MAX_LIMIT)
         self.parts = list()
         self.key2index = {}
         self.computed_domain = False
@@ -577,7 +575,7 @@ class DefaultDecoder(SetDecoder):
     def __init__(self, edge, query, limit):
         AggsDecoder.__init__(self, edge, query, limit)
         self.domain = edge.domain
-        self.domain.limit = Math.min(coalesce(self.domain.limit, query.limit, 10), MAX_LIMIT)
+        self.domain.limit = mo_math.min(coalesce(self.domain.limit, query.limit, 10), MAX_LIMIT)
         self.parts = list()
         self.key2index = {}
         self.computed_domain = False
@@ -594,9 +592,9 @@ class DefaultDecoder(SetDecoder):
             self.es_order = None
 
     def append_query(self, query_path, es_query):
-        if isinstance(self.edge.value, FirstOp) and isinstance(self.edge.value.term, Variable):
+        if is_op(self.edge.value, FirstOp) and is_op(self.edge.value.term, Variable):
             self.edge.value = self.edge.value.term  # ES USES THE FIRST TERM FOR {"terms": } AGGREGATION
-        if not isinstance(self.edge.value, Variable):
+        if not is_op(self.edge.value, Variable):
             terms = TermsAggs(
                 "_match",
                 {
@@ -668,7 +666,7 @@ class DimFieldListDecoder(SetDecoder):
         edge.allowNulls = False
         self.fields = edge.domain.dimension.fields
         self.domain = self.edge.domain
-        self.domain.limit = Math.min(coalesce(self.domain.limit, query.limit, 10), MAX_LIMIT)
+        self.domain.limit = mo_math.min(coalesce(self.domain.limit, query.limit, 10), MAX_LIMIT)
         self.parts = list()
 
     def append_query(self, query_path, es_query):

@@ -10,9 +10,10 @@
 from __future__ import absolute_import, division, unicode_literals
 
 from jx_base.expressions import (AddOp as AddOp_, AndOp as AndOp_, BasicAddOp as BasicAddOp_, BasicEqOp as BasicEqOp_, BasicIndexOfOp as BasicIndexOfOp_, BasicMulOp as BasicMulOp_, BasicStartsWithOp as BasicStartsWithOp_, BasicSubstringOp as BasicSubstringOp_, BooleanOp as BooleanOp_, CaseOp as CaseOp_, CoalesceOp as CoalesceOp_, ConcatOp as ConcatOp_, CountOp as CountOp_, DateOp as DateOp_, DivOp as DivOp_, EqOp as EqOp_, EsScript as EsScript_, ExistsOp as ExistsOp_, ExpOp as ExpOp_, FALSE, FalseOp as FalseOp_, FirstOp as FirstOp_, FloorOp as FloorOp_, GtOp as GtOp_, GteOp as GteOp_, InOp as InOp_, IntegerOp as IntegerOp_, IsNumberOp as IsNumberOp_, LeavesOp as LeavesOp_, LengthOp as LengthOp_, Literal as Literal_, LtOp as LtOp_, LteOp as LteOp_, MaxOp as MaxOp_, MinOp as MinOp_, MissingOp as MissingOp_, ModOp as ModOp_, MulOp as MulOp_, NULL, NeOp as NeOp_, NotLeftOp as NotLeftOp_, NotOp as NotOp_, NullOp, NumberOp as NumberOp_, ONE, OrOp as OrOp_, PrefixOp as PrefixOp_,
-                                 StringOp as StringOp_, SubOp as SubOp_, SuffixOp as SuffixOp_, TRUE, TrueOp as TrueOp_, TupleOp as TupleOp_, UnionOp as UnionOp_, Variable as Variable_, WhenOp as WhenOp_, ZERO, define_language, extend, merge_types)
+                                 StringOp as StringOp_, SubOp as SubOp_, SuffixOp as SuffixOp_, TRUE, TrueOp as TrueOp_, TupleOp as TupleOp_, UnionOp as UnionOp_, Variable as Variable_, WhenOp as WhenOp_, ZERO, define_language, extend, merge_types, is_literal)
+from jx_base.language import is_op
 from jx_elasticsearch.es52.util import es_script
-from mo_dots import Null, coalesce
+from mo_dots import FlatList, data_types, Null, coalesce
 from mo_future import PY2, text_type
 from mo_json import BOOLEAN, INTEGER, IS_NULL, NUMBER, OBJECT, STRING
 from mo_logs import Log
@@ -286,22 +287,23 @@ class Literal(Literal_):
     def to_es_script(self, schema, not_null=False, boolean=False, many=True):
         def _convert(v):
             if v is None:
-                return NULL.to_es_script(schema)
+                return null_script
             if v is True:
-                return EsScript(type=BOOLEAN, expr="true", frum=self, schema=schema)
+                return true_script
             if v is False:
-                return EsScript(type=BOOLEAN, expr="false", frum=self, schema=schema)
-            if isinstance(v, text_type):
+                return false_script
+            class_ = v.__class__
+            if class_ is text_type:
                 return EsScript(type=STRING, expr=quote(v), frum=self, schema=schema)
-            if isinstance(v, int):
+            if class_ is int:
                 return EsScript(
                     type=INTEGER, expr=text_type(v), frum=self, schema=schema
                 )
-            if isinstance(v, float):
+            if class_ is float:
                 return EsScript(
                     type=NUMBER, expr=text_type(v), frum=self, schema=schema
                 )
-            if isinstance(v, dict):
+            if class_ is data_types:
                 return EsScript(
                     type=OBJECT,
                     expr="["
@@ -310,14 +312,14 @@ class Literal(Literal_):
                     frum=self,
                     schema=schema,
                 )
-            if isinstance(v, (list, tuple)):
+            if class_ in (FlatList, list, tuple):
                 return EsScript(
                     type=OBJECT,
                     expr="[" + ", ".join(_convert(vv).expr for vv in v) + "]",
                     frum=self,
                     schema=schema,
                 )
-            if isinstance(v, Date):
+            if class_ is Date:
                 return EsScript(
                     type=NUMBER, expr=text_type(v.unix), frum=self, schema=schema
                 )
@@ -327,7 +329,12 @@ class Literal(Literal_):
 
 class DateOp(DateOp_):
     def to_es_script(self, schema):
-        return text_type(Date(self.value).unix)
+        return EsScript(
+            type=NUMBER,
+            expr=text_type(Date(self.value).unix),
+            frum=self,
+            schema=schema
+        )
 
 
 class CoalesceOp(CoalesceOp_):
@@ -531,14 +538,14 @@ class BasicEqOp(BasicEqOp_):
                 ).to_es_script(schema)
             else:
                 if lhs.type == BOOLEAN:
-                    if isinstance(simple_rhs, Literal) and simple_rhs.value in (
+                    if is_literal(simple_rhs) and simple_rhs.value in (
                         "F",
                         False,
                     ):
                         return EsScript(
                             type=BOOLEAN, expr="!" + lhs.expr, frum=self, schema=schema
                         )
-                    elif isinstance(simple_rhs, Literal) and simple_rhs.value in (
+                    elif is_literal(simple_rhs) and simple_rhs.value in (
                         "T",
                         True,
                     ):
@@ -568,11 +575,11 @@ class BasicEqOp(BasicEqOp_):
             )
         else:
             if lhs.type == BOOLEAN:
-                if isinstance(simple_rhs, Literal) and simple_rhs.value in ("F", False):
+                if is_literal(simple_rhs) and simple_rhs.value in ("F", False):
                     return EsScript(
                         type=BOOLEAN, expr="!" + lhs.expr, frum=self, schema=schema
                     )
-                elif isinstance(simple_rhs, Literal) and simple_rhs.value in (
+                elif is_literal(simple_rhs) and simple_rhs.value in (
                     "T",
                     True,
                 ):
@@ -627,7 +634,7 @@ class BasicMulOp(BasicMulOp_):
 
 class MissingOp(MissingOp_):
     def to_es_script(self, schema, not_null=False, boolean=False, many=True):
-        if isinstance(self.expr, Variable_):
+        if is_op(self.expr, Variable_):
             if self.expr.var == "_id":
                 return EsScript(type=BOOLEAN, expr="false", frum=self, schema=schema)
             else:
@@ -647,7 +654,7 @@ class MissingOp(MissingOp_):
                     .partial_eval()
                     .to_es_script(schema)
                 )
-        elif isinstance(self.expr, Literal):
+        elif is_literal(self.expr):
             return self.expr.missing().to_es_script(schema)
         else:
             return self.expr.missing().partial_eval().to_es_script(schema)
@@ -748,7 +755,7 @@ class LengthOp(LengthOp_):
 
 class FirstOp(FirstOp_):
     def to_es_script(self, schema, not_null=False, boolean=False, many=True):
-        if isinstance(self.term, Variable_):
+        if is_op(self.term, Variable_):
             columns = schema.values(self.term.var)
             if len(columns) == 0:
                 return null_script
@@ -757,7 +764,7 @@ class FirstOp(FirstOp_):
 
         term = self.term.to_es_script(schema)
 
-        if isinstance(term.frum, CoalesceOp_):
+        if is_op(term.frum, CoalesceOp_):
             return CoalesceOp(
                 [
                     FirstOp(t.partial_eval().to_es_script(schema))
@@ -862,7 +869,7 @@ class NumberOp(NumberOp_):
         term = FirstOp(self.term).partial_eval()
         value = term.to_es_script(schema)
 
-        if isinstance(value.frum, CoalesceOp_):
+        if is_op(value.frum, CoalesceOp_):
             return CoalesceOp(
                 [
                     NumberOp(t).partial_eval().to_es_script(schema)
@@ -1041,7 +1048,7 @@ class StringOp(StringOp_):
         term = FirstOp(self.term).partial_eval()
         value = term.to_es_script(schema)
 
-        if isinstance(value.frum, CoalesceOp_):
+        if is_op(value.frum, CoalesceOp_):
             return CoalesceOp(
                 [StringOp(t).partial_eval() for t in value.frum.terms]
             ).to_es_script(schema)

@@ -7,19 +7,18 @@
 #
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
 from uuid import uuid4
 
-from mo_dots import wrap, coalesce, listwrap
-from mo_future import text_type
+from jx_base.expressions import jx_expression
+from jx_python.expressions import Literal, Python
+from mo_dots import coalesce, listwrap, wrap
+from mo_dots.datas import register_data
+from mo_future import is_text, text_type
 from mo_json import value2json
 from mo_logs import Log
 from mo_logs.strings import expand_template, quote
-from jx_base.expressions import jx_expression
-from jx_python.expressions import Python, Literal
 
 
 def generateGuid():
@@ -77,7 +76,7 @@ def DataClass(name, columns, constraint=None):
     columns = wrap(
         [
             {"name": c, "required": True, "nulls": False, "type": object}
-            if isinstance(c, text_type)
+            if is_text(c)
             else c
             for c in columns
         ]
@@ -93,6 +92,7 @@ def DataClass(name, columns, constraint=None):
     code = expand_template(
         """
 from __future__ import unicode_literals
+from mo_future import is_text, is_binary
 from collections import Mapping
 
 meta = None
@@ -193,7 +193,9 @@ class {{class_name}}(Mapping):
         },
     )
 
-    return _exec(code, name)
+    output = _exec(code, name)
+    register_data(output)
+    return output
 
 
 class TableDesc(

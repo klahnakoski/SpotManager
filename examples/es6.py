@@ -15,7 +15,7 @@ from mo_future import text_type
 from mo_kwargs import override
 from mo_logs import Log
 from mo_logs.strings import expand_template
-from mo_math import Math
+import mo_math
 from spot.instance_manager import InstanceManager
 
 JRE = "jre-8u131-linux-x64.rpm"
@@ -45,7 +45,7 @@ class ES6Spot(InstanceManager):
     ):
         try:
             with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:
-                gigabytes = Math.floor(utility.memory)
+                gigabytes = mo_math.floor(utility.memory)
                 Log.note("setup {{instance}}", instance=instance.id)
 
                 self._install_pypy_indexer(instance=instance, conn=conn)
@@ -74,7 +74,7 @@ class ES6Spot(InstanceManager):
             while pid:
                 pid = conn.sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}'")
 
-    def _install_es(self, gigabytes, es_version="6.2.3", instance=None, conn=None):
+    def _install_es(self, gigabytes, es_version="6.5.4", instance=None, conn=None):
         volumes = instance.markup.drives
 
         if not conn.exists("/usr/local/elasticsearch/config/elasticsearch.yml"):
@@ -118,7 +118,7 @@ class ES6Spot(InstanceManager):
                 conn.sudo('sudo umount '+k.device, warn=True)
 
                 # (RE)PARTITION THE LOCAL DEVICE, AND FORMAT
-                conn.sudo("parted /dev/nvme0n1 --script \"mklabel gpt mkpart primary ext4 2048s 100%\"")
+                conn.sudo("parted " + k.device + " --script \"mklabel gpt mkpart primary ext4 2048s 100%\"")
                 conn.sudo('yes | sudo mkfs -t ext4 '+k.device)
 
                 # ES AND JOURNALLING DO NOT MIX
@@ -163,7 +163,6 @@ class ES6Spot(InstanceManager):
         conn.sudo("sed -i '$ a\\ec2-user hard nofile 100000' /etc/security/limits.conf")
         conn.sudo("sed -i '$ a\\ec2-user soft memlock unlimited' /etc/security/limits.conf")
         conn.sudo("sed -i '$ a\\ec2-user hard memlock unlimited' /etc/security/limits.conf")
-
 
         if not conn.exists("/data1/logs"):
             conn.run('mkdir /data1/logs')

@@ -7,18 +7,18 @@
 #
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
-from jx_base.expressions import NULL, LeavesOp, Variable
+from mo_future import is_text, is_binary
+from jx_base.expressions import LeavesOp, NULL, Variable
 from jx_base.query import DEFAULT_LIMIT
+from jx_base.language import is_op
 from jx_elasticsearch import post as es_post
-from jx_elasticsearch.es52.expressions import split_expression_by_depth, AndOp, ES52
-from jx_elasticsearch.es52.setop import format_dispatch, get_pull_function, get_pull
-from jx_elasticsearch.es52.util import jx_sort_to_es_sort, es_query_template
+from jx_elasticsearch.es52.expressions import AndOp, ES52, split_expression_by_depth
+from jx_elasticsearch.es52.setop import format_dispatch, get_pull, get_pull_function
+from jx_elasticsearch.es52.util import es_query_template, jx_sort_to_es_sort
 from jx_python.expressions import jx_expression_to_function
-from mo_dots import split_field, FlatList, listwrap, literal_field, coalesce, Data, concat_field, set_default, relative_field, startswith_field, wrap, unwrap
+from mo_dots import Data, FlatList, coalesce, concat_field, is_list as is_list_, listwrap, literal_field, relative_field, set_default, split_field, startswith_field, unwrap, wrap
 from mo_future import zip_longest
 from mo_json import NESTED
 from mo_json.typed_encoder import untype_path
@@ -93,13 +93,13 @@ def es_deepop(es, query):
 
     es_query.stored_fields = []
 
-    is_list = isinstance(query.select, list)
+    is_list = is_list_(query.select)
     selects = wrap([unwrap(s.copy()) for s in listwrap(query.select)])
     new_select = FlatList()
 
     put_index = 0
     for select in selects:
-        if isinstance(select.value, LeavesOp) and isinstance(select.value.term, Variable):
+        if is_op(select.value, LeavesOp) and is_op(select.value.term, Variable):
             # IF THERE IS A *, THEN INSERT THE EXTRA COLUMNS
             leaves = schema.leaves(select.value.term.var)
             col_names = set()
@@ -123,7 +123,7 @@ def es_deepop(es, query):
                 if n.name.startswith("..") and n.name.lstrip(".") not in col_names:
                     n.put.name = n.name = n.name.lstrip(".")
                     col_names.add(n.name)
-        elif isinstance(select.value, Variable):
+        elif is_op(select.value, Variable):
             net_columns = schema.leaves(select.value.var)
             if not net_columns:
                 new_select.append({

@@ -9,22 +9,21 @@
 
 from __future__ import absolute_import, division, unicode_literals
 
-from collections import Mapping
 from copy import deepcopy
 import re
 
 from jx_python import jx
 from jx_python.meta import Column
-from mo_dots import Data, FlatList, Null, ROOT_PATH, SLOT, coalesce, concat_field, listwrap, literal_field, set_default, split_field, wrap
+from mo_dots import Data, FlatList, Null, ROOT_PATH, SLOT, coalesce, concat_field, is_data, is_list, listwrap, literal_field, set_default, split_field, wrap
 from mo_files.url import URL
-from mo_future import binary_type, items, text_type
+from mo_future import binary_type, is_binary, is_text, items, text_type
 from mo_json import BOOLEAN, EXISTS, NESTED, NUMBER, OBJECT, STRING, json2value, value2json
 from mo_json.typed_encoder import BOOLEAN_TYPE, EXISTS_TYPE, NESTED_TYPE, NUMBER_TYPE, STRING_TYPE, TYPE_PREFIX, json_type_to_inserter_type
 from mo_kwargs import override
 from mo_logs import Log, strings
 from mo_logs.exceptions import Except
 from mo_logs.strings import unicode2utf8, utf82unicode
-from mo_math import Math
+from mo_math import is_integer, is_number
 from mo_math.randoms import Random
 from mo_threads import Lock, ThreadedQueue, Till
 from mo_times import Date, MINUTE, Timer
@@ -39,7 +38,7 @@ ES_PRIMITIVE_TYPES = ["string", "boolean", "integer", "date", "long", "double"]
 
 INDEX_DATE_FORMAT = "%Y%m%d_%H%M%S"
 SUFFIX_PATTERN = r'\d{8}_\d{6}'
-ID = Data(field='_id', version="etl.timestamp")
+ID = Data(field='_id')
 
 STALE_METADATA = 10 * MINUTE
 DATA_KEY = text_type("data")
@@ -85,9 +84,6 @@ class Index(Features):
         if index==None:
             Log.error("not allowed")
 
-        if isinstance(id, text_type):
-            id = set_default({"id": id}, ID)
-
         self.info = None
         self.debug = debug
         self.settings = kwargs
@@ -131,12 +127,17 @@ class Index(Features):
                 typed = kwargs.typed = False
 
         if not read_only:
+            if is_text(id):
+                id_info = set_default({"id": id}, ID)
+            else:
+                id_info = set_default(id, ID)
+
             if typed:
                 from pyLibrary.env.typed_inserter import TypedInserter
 
-                self.encode = TypedInserter(self, id).typed_encode
+                self.encode = TypedInserter(self, id_info).typed_encode
             else:
-                self.encode = get_encoder(id)
+                self.encode = get_encoder(id_info)
 
     @property
     def url(self):
@@ -312,7 +313,7 @@ class Index(Features):
                     id, version, json_bytes = self.encode(r)
 
                 if version:
-                    lines.append(value2json({"index": {"_id": id, "version": int(version), "version_type": "external"}}))
+                    lines.append(value2json({"index": {"_id": id, "version": int(version), "version_type": "external_gte"}}))
                 else:
                     lines.append('{"index":{"_id": ' + value2json(id) + '}}')
                 lines.append(json_bytes)
@@ -350,7 +351,10 @@ class Index(Features):
                             fails.append(i)
                 elif self.cluster.version.startswith(("1.4.", "1.5.", "1.6.", "1.7.", "5.", "6.")):
                     for i, item in enumerate(items):
-                        if item.index.status not in [200, 201]:
+                        if item.index.status == 409:  # 409 ARE VERSION CONFLICTS
+                            if "version conflict" not in item.index.error.reason:
+                                fails.append(i)  # IF NOT A VERSION CONFLICT, REPORT AS FAILURE
+                        elif item.index.status not in [200, 201]:
                             fails.append(i)
                 else:
                     Log.error("version not supported {{version}}", version=self.cluster.version)
@@ -399,7 +403,7 @@ class Index(Features):
     def add(self, record):
         if self.settings.read_only:
             Log.error("Index opened in read only mode, no changes allowed")
-        if isinstance(record, list):
+        if is_list(record):
             Log.error("add() has changed to only accept one record, no lists")
         self.extend([record])
 
@@ -531,7 +535,7 @@ class Cluster(object):
 
     @override
     def __new__(cls, host, port=9200, kwargs=None):
-        if not Math.is_integer(port):
+        if not is_integer(port):
             Log.error("port must be integer")
         cluster = known_clusters.get((host, int(port)))
         if cluster:
@@ -748,7 +752,7 @@ class Cluster(object):
 
         if schema == None:
             Log.error("Expecting a schema")
-        elif isinstance(schema, text_type):
+        elif is_text(schema):
             Log.error("Expecting a JSON schema")
 
         for k, m in items(schema.mappings):
@@ -808,7 +812,7 @@ class Cluster(object):
         return es
 
     def delete_index(self, index_name):
-        if not isinstance(index_name, text_type):
+        if not is_text(index_name):
             Log.error("expecting an index name")
 
         self.debug and Log.note("Deleting index {{index}}", index=index_name)
@@ -895,9 +899,9 @@ class Cluster(object):
             data = kwargs.get(DATA_KEY)
             if data == None:
                 pass
-            elif isinstance(data, Mapping):
+            elif is_data(data):
                 data = kwargs[DATA_KEY] = unicode2utf8(value2json(data))
-            elif isinstance(data, text_type):
+            elif is_text(data):
                 data = kwargs[DATA_KEY] = unicode2utf8(data)
             elif hasattr(data, str("__iter__")):
                 pass  # ASSUME THIS IS AN ITERATOR OVER BYTES
@@ -905,7 +909,7 @@ class Cluster(object):
                 Log.error("data must be utf8 encoded string")
 
             if self.debug:
-                if isinstance(data, binary_type):
+                if is_binary(data):
                     sample = kwargs.get(DATA_KEY, b"")[:300]
                     Log.note("{{url}}:\n{{data|indent}}", url=url, data=sample)
                 else:
@@ -998,9 +1002,9 @@ class Cluster(object):
         data = kwargs.get(DATA_KEY)
         if data == None:
             pass
-        elif isinstance(data, Mapping):
+        elif is_data(data):
             kwargs[DATA_KEY] = unicode2utf8(value2json(data))
-        elif isinstance(kwargs[DATA_KEY], text_type):
+        elif is_text(kwargs[DATA_KEY]):
             pass
         else:
             Log.error("data must be utf8 encoded string")
@@ -1058,14 +1062,14 @@ def _scrub(r):
     try:
         if r == None:
             return None
-        elif isinstance(r, (text_type, binary_type)):
+        elif r.__class__ in (text_type, binary_type):
             if r == "":
                 return None
             return r
-        elif Math.is_number(r):
+        elif is_number(r):
             return value2number(r)
-        elif isinstance(r, Mapping):
-            if isinstance(r, Data):
+        elif is_data(r):
+            if r.__class__ is Data:
                 r = object.__getattribute__(r, SLOT)
             output = {}
             for k, v in r.items():
@@ -1365,7 +1369,7 @@ def get_encoder(id_info):
     def _encoder(r):
         id = r.get("id")
         r_value = r.get('value')
-        if isinstance(r_value, Mapping):
+        if is_data(r_value):
             r_id = get_id(r_value)
             r_value.pop('_id', None)
             if id == None:
@@ -1380,7 +1384,7 @@ def get_encoder(id_info):
         if "json" in r:
             Log.error("can not handle pure json inserts anymore")
             json = r["json"]
-        elif r_value or isinstance(r_value, (dict, Data)):
+        elif r_value or is_data(r_value):
             json = value2json(r_value)
         else:
             raise Log.error("Expecting every record given to have \"value\" or \"json\" property")
@@ -1487,7 +1491,7 @@ def retro_properties(properties):
 
 
 def add_typed_annotations(meta):
-    if meta.type in ["text", "keyword", "string", "float", "double", "integer", "nested", "boolean"]:
+    if meta.type in ["text", "keyword", "string", "float", "double", "integer", "boolean"]:
         return {
             "type": "object",
             "dynamic": True,

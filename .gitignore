@@ -3,7 +3,6 @@
 /pyLibrary/.svn
 *.pyc
 /results
-/resources/aws/prices.json
 /examples/config/etl_supervisor.conf.alt
 /result
 /tests

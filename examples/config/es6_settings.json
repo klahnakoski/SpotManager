@@ -257,6 +257,12 @@
 				"encoding": "utf8"
 			},
 			{
+				"log_type": "elasticsearch",
+				"host": "http://activedata.allizom.org",
+				"index": "debug-spot-manager",
+				"timeout": 600
+			},
+			{
 				"log_type": "ses",
 				"from_address": "klahnakoski@mozilla.com",
 				"to_address": "klahnakoski@mozilla.com",

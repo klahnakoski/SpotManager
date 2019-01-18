@@ -74,7 +74,7 @@ class ES6Spot(InstanceManager):
             while pid:
                 pid = conn.sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}'")
 
-    def _install_es(self, gigabytes, es_version="6.2.3", instance=None, conn=None):
+    def _install_es(self, gigabytes, es_version="6.5.4", instance=None, conn=None):
         volumes = instance.markup.drives
 
         if not conn.exists("/usr/local/elasticsearch/config/elasticsearch.yml"):
@@ -163,7 +163,6 @@ class ES6Spot(InstanceManager):
         conn.sudo("sed -i '$ a\\ec2-user hard nofile 100000' /etc/security/limits.conf")
         conn.sudo("sed -i '$ a\\ec2-user soft memlock unlimited' /etc/security/limits.conf")
         conn.sudo("sed -i '$ a\\ec2-user hard memlock unlimited' /etc/security/limits.conf")
-
 
         if not conn.exists("/data1/logs"):
             conn.run('mkdir /data1/logs')

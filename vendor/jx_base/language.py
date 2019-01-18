@@ -49,7 +49,7 @@ class LanguageElement(type):
         x = type.__new__(cls, name, bases, dct)
         x.lang = None
         if x.__module__ == expression_module:
-            # ALL OPS IN expression_module ARE GIVEN AN ID
+            # ALL OPS IN expression_module ARE GIVEN AN ID, NO OTHERS
             x.id = next_id()
         return x
 
@@ -73,6 +73,8 @@ class Language(object):
 
     def __getitem__(self, item):
         class_ = self.ops[item.id]
+        if class_.__name__ != item.__class__.__name__:
+            Log.error("programming error")
         item.__class__ = class_
         return item
 
@@ -102,6 +104,9 @@ def define_language(lang_name, module_vars):
             # EXPECT NEW DEFINED OPS IN THIS MODULE TO HAVE lang NOT SET
             curr = getattr(new_op, "lang")
             if not curr:
+                old_op = language.ops[new_op.id]
+                if old_op is not None and old_op.__name__ != new_op.__name__:
+                    Log.error("Logic error")
                 language.ops[new_op.id] = new_op
                 setattr(new_op, "lang", language)
 

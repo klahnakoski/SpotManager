@@ -334,8 +334,8 @@ def _select(template, data, fields, depth):
     deep_path = []
     deep_fields = UniqueIndex(["name"])
     for d in data:
-        if is_data(d):
-            Log.error("programmer error, _select can not handle Data")
+        if d.__class__ is Data:
+            Log.error("programmer error, _select can not handle Data, only dict")
 
         record = template.copy()
         children = None

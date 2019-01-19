@@ -398,14 +398,43 @@ class SpotManager(object):
         return wrap(output)
 
     def _start_life_cycle_watcher(self):
+        failed_locker = Lock()
+        failed_attempts = Data()
+
+        def track_setup(
+            instance_setup_function,
+            request,
+            instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
+            utility,    # THE utility OBJECT FOUND IN CONFIG
+            please_stop
+        ):
+            try:
+                instance_setup_function(instance, utility, please_stop)
+                instance.add_tag("Name", self.settings.ec2.instance.name + " (running)")
+                with self.net_new_locker:
+                    self.net_new_spot_requests.remove(request.id)
+            except Exception as e:
+                e = Except.wrap(e)
+                instance.delete_tags([], tags=["Name"])
+                with failed_locker:
+                    failed_attempts[request.id] += [e]
+                if "Can not setup unknown " in e:
+                    Log.warning("Unexpected failure on startup", instance_id=instance.id, cause=e)
+                elif ERROR_ON_CALL_TO_SETUP in e:
+                    with failed_locker:
+                        causes = failed_attempts[request.id]
+                    if len(causes) > 2:
+                        Log.warning("Problem with setup() of {{instance_id}}", instance_id=instance.id, cause=causes)
+                else:
+                    Log.warning("Unexpected failure on startup", instance_id=instance.id, cause=e)
+
         def life_cycle_watcher(please_stop):
-            failed_attempts = Data()
-            setup_threads = []
             bad_requests = Data()
+            setup_threads = []
+            last_get = Date.now()
 
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
-                last_get = Date.now()
                 instances = wrap({i.id: i for r in self.ec2_conn.get_all_instances() for i in r.instances})
                 # INSTANCES THAT REQUIRE SETUP
                 time_to_stop_trying = {}
@@ -437,38 +466,17 @@ class SpotManager(object):
 
                         i.markup = p
                         i.add_tag("Name", self.settings.ec2.instance.name + " (setup)")
-                        setup_threads.append((i, r, Thread.run(
+                        setup_threads.append(Thread.run(
                             "setup for " + text_type(i.id),
+                            track_setup,
                             self.instance_manager.setup,
+                            r,
                             i,
                             p
-                        )))
+                        ))
                     except Exception as e:
                         i.delete_tags(["Name"])
                         Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
-
-                please_join = [(i, r, t) for i, r, t in setup_threads if t.stopped]
-                if please_join:
-                    Log.note("{{num}} threads have stopped", num=len(please_join))
-                for i, r, t in please_join:
-                    try:
-                        t.join()
-                        setup_threads.remove((i, r, t))
-                        i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
-                        with self.net_new_locker:
-                            self.net_new_spot_requests.remove(r.id)
-                    except Exception as e:
-                        e = Except.wrap(e)
-                        i.delete_tags(["Name"])
-                        setup_threads.remove((i, r, t))
-                        failed_attempts[r.id] += [e]
-                        if "Can not setup unknown " in e:
-                            Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
-                        elif ERROR_ON_CALL_TO_SETUP in e:
-                            if len(failed_attempts[r.id]) > 2:
-                                Log.warning("Problem with setup() of {{instance_id}}", instance_id=i.id, cause=failed_attempts[r.id])
-                        else:
-                            Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
 
                 if Date.now() - last_get > 5 * SECOND:
                     # REFRESH STALE
@@ -506,12 +514,9 @@ class SpotManager(object):
                                     self.no_capacity[g.launch_specification.instance_type] = Date.now()
                                     Log.warning("bad parameters while requesting type {{type}}", type=g.launch_specification.instance_type)
 
-                if not pending and not time_to_stop_trying and self.done_making_new_spot_requests and not setup_threads:
+                if not pending and self.done_making_new_spot_requests:
                     Log.note("No more pending spot requests")
-                    please_stop.go()
                     break
-                elif setup_threads:
-                    Log.note("waiting for setup of {{num}} instances", num=len(setup_threads))
                 elif pending:
                     Log.note("waiting for spot requests: {{pending}}", pending=[p.id for p in pending])
 
@@ -523,6 +528,10 @@ class SpotManager(object):
                     for k, v in self.no_capacity.items()
                 ]
                 self.no_capacity_file.write(value2json(table, pretty=True))
+
+            # WAIT FOR SETUP TO COMPLETE
+            for t in setup_threads:
+                t.join()
 
             Log.note("life cycle watcher has stopped")
 

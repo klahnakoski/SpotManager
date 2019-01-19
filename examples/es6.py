@@ -52,6 +52,7 @@ class ES6Spot(InstanceManager):
                 self._install_es(gigabytes, instance=instance, conn=conn)
                 self._install_supervisor(instance=instance, conn=conn)
                 self._start_supervisor(conn=conn)
+                Log.alert("Done install of {{host}}", host=instance.ip_address)
         except Exception as e:
             Log.error("could not setup ES at {{ip}}", ip=instance.ip_address, cause=e)
 
@@ -256,21 +257,8 @@ class ES6Spot(InstanceManager):
         conn.put("~/private_active_data_etl.json", "/home/ec2-user/private.json")
 
     def _install_supervisor(self, instance, conn):
-        Log.note("Install Supervisor-plus-Cron at {{instance_id}} ({{address}})", instance_id=instance.id, address=instance.ip_address)
-        # REQUIRED FOR Python SSH
-        self._install_lib("libffi-devel", conn=conn)
-        self._install_lib("openssl-devel", conn=conn)
-        self._install_lib('"Development tools"', install="groupinstall", conn=conn)
-
         self._install_python(instance, conn)
-        conn.sudo("pip install pyopenssl", warn=True)
-        conn.sudo("pip install pyopenssl")
-        conn.sudo("pip install ndg-httpsclient")
-        conn.sudo("pip install pyasn1")
-        conn.sudo("pip install fabric==1.10.2")
-        conn.sudo("pip install requests")
-
-        conn.sudo("pip install supervisor-plus-cron")
+        conn.sudo("pip install supervisor")
 
     def _install_lib(self, lib_name, install="install", conn=None):
         """
@@ -289,3 +277,4 @@ class ES6Spot(InstanceManager):
         conn.sudo("supervisord -c /etc/supervisord.conf", warn=True)
         conn.sudo("supervisorctl reread")
         conn.sudo("supervisorctl update")
+

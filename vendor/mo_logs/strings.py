@@ -74,7 +74,12 @@ def datetime(value):
     else:
         value = milli2datetime(value)
 
-    return datetime2string(value, "%Y-%m-%d %H:%M:%S.%f").rstrip(".000000").rstrip("000")
+    output = datetime2string(value, "%Y-%m-%d %H:%M:%S.%f")
+    if output.endswith(".000000"):
+        output = output[:-7]
+    elif output.endswith("000"):
+        output = output[:-3]
+    return output
 
 
 @formatter

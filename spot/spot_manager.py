@@ -817,9 +817,9 @@ RUNNING_STATUS_CODES = {
 def main():
     try:
         settings = startup.read_settings()
+        constants.set(settings.constants)
         Log.start(settings.debug)
         with SingleInstance(flavor_id=settings.args.filename):
-            constants.set(settings.constants)
             settings.run_interval = Duration(settings.run_interval)
             for u in settings.utility:
                 u.discount = coalesce(u.discount, 0)

@@ -415,7 +415,7 @@ class SpotManager(object):
                     self.net_new_spot_requests.remove(request.id)
             except Exception as e:
                 e = Except.wrap(e)
-                instance.add_tag("Name", self.settings.ec2.instance.name + " (failed)")
+                instance.add_tag("Name", "")
                 with failed_locker:
                     failed_attempts[request.id] += [e]
                 if "Can not setup unknown " in e:
@@ -475,7 +475,7 @@ class SpotManager(object):
                             p
                         ))
                     except Exception as e:
-                        i.add_tag("Name", self.settings.ec2.instance.name + " (failed)")
+                        i.add_tag("Name", "")
                         Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
 
                 if Date.now() - last_get > 5 * SECOND:

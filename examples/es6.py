@@ -76,6 +76,7 @@ class ES6Spot(InstanceManager):
                 pid = conn.sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}'")
 
     def _install_es(self, gigabytes, es_version="6.5.4", instance=None, conn=None):
+        es_file = 'elasticsearch-' + es_version + '.tar.gz'
         volumes = instance.markup.drives
 
         if not conn.exists("/usr/local/elasticsearch/config/elasticsearch.yml"):
@@ -94,8 +95,8 @@ class ES6Spot(InstanceManager):
                     conn.run("export JAVA_HOME=/usr/java/default")
 
             with conn.cd("/home/ec2-user/"):
-                conn.run('wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-'+es_version+'.tar.gz')
-                conn.run('tar zxfv elasticsearch-'+es_version+'.tar.gz')
+                conn.put(RESOURCES / es_file, es_file)
+                conn.run('tar zxfv ' + es_file)
                 conn.sudo("rm -fr /usr/local/elasticsearch", warn=True)
                 conn.sudo('mkdir /usr/local/elasticsearch')
                 conn.sudo('cp -R elasticsearch-'+es_version+'/* /usr/local/elasticsearch/')

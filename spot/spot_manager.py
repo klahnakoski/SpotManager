@@ -354,7 +354,7 @@ class SpotManager(object):
         Log.warning("Shutdown {{instances}} to save money!", instances=remove_list.id)
         for g, removals in jx.groupby(remove_list, size=20):
             for t in [
-                Thread.run("teardown " + i.id, self.instance_manager.teardown, i, False)
+                Thread.run("teardown " + i.id, self.instance_manager.teardown, i, please_stop=False)
                 for i in removals
             ]:
                 t.join()

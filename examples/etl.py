@@ -9,12 +9,12 @@
 from __future__ import division
 from __future__ import unicode_literals
 
+import mo_math
 from mo_fabric import Connection
 from mo_files import File
 from mo_kwargs import override
 from mo_logs import Log, constants, startup
 from mo_logs.strings import between
-from mo_math import Math
 from mo_times import Date
 from pyLibrary import aws
 from spot.instance_manager import InstanceManager
@@ -43,7 +43,7 @@ class ETL(InstanceManager):
 
         if current_utility < pending / 20:
             # INCREASE
-            return max(minimum, Math.ceiling(pending / 20))   # ENSURE THERE IS PLENTY OF WORK BEFORE MACHINE IS DEPLOYED
+            return max(minimum, mo_math.ceiling(pending / 20))   # ENSURE THERE IS PLENTY OF WORK BEFORE MACHINE IS DEPLOYED
         else:
             # DECREASE
             target = max(minimum, min(current_utility, pending*2))

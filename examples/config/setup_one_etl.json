@@ -10,7 +10,7 @@
 	"connect": {
 		//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 		"user": "ubuntu",
-		"key_filename": "~/.ssh/aws-pulse-logger.pem",
+		"key_filename": "~/.ssh/activedata.pem",
 		"disable_known_hosts": true,
 		"host_string": "",
 		"port": 22,

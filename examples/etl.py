@@ -141,8 +141,7 @@ class ETL(InstanceManager):
         conn.run('rm -f /home/ubuntu/private.json')
         conn.put('~/private_active_data_etl.json', '/home/ubuntu/private.json')
         with conn.cd("/home/ubuntu"):
-            conn.run("chmod o-r pr"
-                     "ivate.json")
+            conn.run("chmod o-r private.json")
 
 
 def main():

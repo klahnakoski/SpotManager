@@ -117,7 +117,7 @@
 			"valid_until": null,
 			"launch_group": null,
 			"availability_zone_group": null,
-			"key_name": "aws-pulse-logger",
+			"key_name": "activedata",
 			"security_groups": null,
 			"user_data": null,
 			"addressing_type": null,
@@ -150,7 +150,7 @@
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
 			"user": "ec2-user",
-			"key_filename": "~/.ssh/aws-pulse-logger.pem",
+			"key_filename": "~/.ssh/activedata.pem",
 			"disable_known_hosts": true,
 			"host_string": "",
 			"port": 22,

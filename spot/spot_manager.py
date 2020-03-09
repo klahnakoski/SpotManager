@@ -37,6 +37,7 @@ from pyLibrary import convert
 from pyLibrary.meta import cache, new_instance
 
 ENABLE_SIDE_EFFECTS = True
+ALLOW_SHUTDOWN = False
 DEBUG_PRICING = True
 TIME_FROM_RUNNING_TO_LOGIN = 7 * MINUTE
 ERROR_ON_CALL_TO_SETUP = "Problem with setup()"
@@ -365,19 +366,20 @@ class SpotManager(object):
 
         # SEND SHUTDOWN TO EACH INSTANCE
         Log.warning("Shutdown {{instances}} to save money!", instances=remove_list.id)
-        # for i in remove_list:
-        #     try:
-        #         self.instance_manager.teardown(i, False)
-        #     except Exception as e:
-        #         Log.warning("Teardown of {{id}} failed", id=i.id, cause=e)
-        #
-        # remove_spot_requests.extend(remove_list.spot_instance_request_id)
-        #
-        # # TERMINATE INSTANCES
-        # self.ec2_conn.terminate_instances(instance_ids=remove_list.id)
-        #
-        # # TERMINATE SPOT REQUESTS
-        # self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
+        if ALLOW_SHUTDOWN:
+            for i in remove_list:
+                try:
+                    self.instance_manager.teardown(i, False)
+                except Exception as e:
+                    Log.warning("Teardown of {{id}} failed", id=i.id, cause=e)
+
+            remove_spot_requests.extend(remove_list.spot_instance_request_id)
+
+            # TERMINATE INSTANCES
+            self.ec2_conn.terminate_instances(instance_ids=remove_list.id)
+
+            # TERMINATE SPOT REQUESTS
+            self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
         return remaining_budget, net_new_utility
 
     @cache(duration=5 * SECOND)

@@ -65,15 +65,19 @@ class ES6Spot(InstanceManager):
             Log.note("teardown {{instance}}", instance=instance.id)
 
             # ASK NICELY TO STOP Elasticsearch PROCESS
+            conn.sudo("supervisorctl stop push-to-es:*", warn=True)
+            # ASK NICELY TO STOP Elasticsearch PROCESS
             conn.sudo("supervisorctl stop es:*", warn=True)
 
             # ASK NICELY TO STOP "supervisord" PROCESS
-            conn.sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}' | xargs kill -SIGINT", warn=True)
+            pid = conn.sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}'", warn=True).stdout.strip()
+            Log.note("shutdown supervisor at pid={{pid}}", pid=pid)
+            conn.sudo("kill -SIGINT " + pid, warn=True)
 
             # WAIT FOR SUPERVISOR SHUTDOWN
             pid = True
             while pid:
-                pid = conn.sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}'")
+                pid = conn.sudo("ps -ef | grep supervisord | grep -v grep | awk '{print $2}'").stdout.strip()
 
 def _install_es(gigabytes, es_version="6.5.4", instance=None, conn=None):
     es_file = 'elasticsearch-' + es_version + '.tar.gz'
@@ -250,6 +254,7 @@ def _install_pypy_indexer(instance, conn):
 
     with conn.cd("/home/ec2-user/ActiveData-ETL/"):
         conn.run("git checkout push-to-es6")
+        conn.run("git pull origin push-to-es6")
         conn.sudo("yum -y install gcc")  # REQUIRED FOR psutil
         conn.run("~/pypy/bin/pip install -r requirements.txt")
 

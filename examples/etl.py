@@ -110,7 +110,7 @@ class ETL(InstanceManager):
             conn.sudo("pip install taskcluster")
             conn.sudo("apt-get install -y python-dev")  # REQUIRED FOR psutil
             conn.sudo("apt-get install -y build-essential")  # REQUIRED FOR psutil
-            conn.sudo("pip install psutil")
+            conn.sudo("pip install psutil==5.6.7")
             conn.sudo("pip install pympler")
             conn.sudo("pip install -r requirements.txt")
 

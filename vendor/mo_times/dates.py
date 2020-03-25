@@ -5,23 +5,23 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
 from __future__ import absolute_import, division, unicode_literals
 
-from mo_future import is_text, is_binary
-from datetime import date, datetime, timedelta
-from decimal import Decimal
 import math
 import re
+from datetime import date, datetime, timedelta
+from decimal import Decimal
 from time import time as _time
 
-from mo_dots import Null, NullType
-from mo_future import long, none_type, text_type, unichr
+import mo_math
+from mo_dots import Null, NullType, coalesce
+from mo_future import is_text, PY3
+from mo_future import long, none_type, text, unichr
 from mo_logs import Except
 from mo_logs.strings import deformat
-import mo_math
 from mo_times.durations import Duration, MILLI_VALUES
 from mo_times.vendor.dateutil.parser import parse as parse_date
 
@@ -33,6 +33,7 @@ except Exception:
     pass
 
 ISO8601 = '%Y-%m-%dT%H:%M:%SZ'
+RFC1123 = '%a, %d %b %Y %H:%M:%S GMT'
 
 
 class Date(object):
@@ -54,13 +55,38 @@ class Date(object):
     def __hash__(self):
         return self.unix.__hash__()
 
-    def __eq__(self, val):
-        if val is not None and type(val) == Date:
-            return self.unix == val.unix
-        return False
+    def __eq__(self, other):
+        try:
+            type_ = other.__class__
+            if type_ in (none_type, NullType):
+                return False
+            elif type_ is Date:
+                return self.unix == other.unix
+            elif type_ in (float, int):
+                return self.unix == other
+            other = Date(other)
+            return self.unix == other.unix
+        except Exception:
+            return False
 
     def __nonzero__(self):
         return True
+
+    def __float__(self):
+        return self.unix
+
+    def __int__(self):
+        return int(self.unix)
+
+    def ceiling(self, duration=Null):
+        if duration.month:
+            from mo_logs import Log
+
+            Log.error("do not know how to handle")
+
+        neg_self = _unix2Date(-self.unix)
+        neg_floor = neg_self.floor(duration)
+        return _unix2Date(-neg_floor.unix)
 
     def floor(self, duration=None):
         if duration is None:  # ASSUME DAY
@@ -72,18 +98,25 @@ class Date(object):
             month -= 12*year
             return Date(datetime(year, month+1, 1))
         elif duration.milli % (7 * 86400000) == 0:
-            offset = 4*86400
+            offset = 4 * 86400
             return _unix2Date(math.floor((self.unix + offset) / duration.seconds) * duration.seconds - offset)
         else:
             return _unix2Date(math.floor(self.unix / duration.seconds) * duration.seconds)
 
     def format(self, format="%Y-%m-%d %H:%M:%S"):
         try:
-            return text_type(unix2datetime(self.unix).strftime(format))
+            return text(unix2datetime(self.unix).strftime(format))
         except Exception as e:
             from mo_logs import Log
 
             Log.error("Can not format {{value}} with {{format}}", value=unix2datetime(self.unix), format=format, cause=e)
+
+    @property
+    def datetime(self):
+        """
+        RETURN AS PYTHON DATETIME (GMT)
+        """
+        return datetime.utcfromtimestamp(self.unix)
 
     @property
     def milli(self):
@@ -190,20 +223,6 @@ class Date(object):
         except Exception:
             return False
 
-    def __eq__(self, other):
-        try:
-            type_ = other.__class__
-            if type_ in (none_type, NullType):
-                return False
-            elif type_ is Date:
-                return self.unix == other.unix
-            elif type_ in (float, int):
-                return self.unix == other
-            other = Date(other)
-            return self.unix == other.unix
-        except Exception:
-            return False
-
     def __le__(self, other):
         try:
             type_ = other.__class__
@@ -254,6 +273,16 @@ class Date(object):
 
     @classmethod
     def min(cls, *values):
+        output = Null
+        for v in values:
+            if output == None and v != None:
+                output = v
+            elif v < output:
+                output = v
+        return output
+
+    @classmethod
+    def max(cls, *values):
         output = Null
         for v in values:
             if output == None and v != None:
@@ -410,7 +439,7 @@ def unicode2Date(value, format=None):
 
     try:  # 2.7 DOES NOT SUPPORT %z
         local_value = parse_date(value)  #eg 2014-07-16 10:57 +0200
-        return _unix2Date(datetime2unix((local_value - local_value.utcoffset()).replace(tzinfo=None)))
+        return _unix2Date(datetime2unix((local_value - coalesce(local_value.utcoffset(), 0)).replace(tzinfo=None)))
     except Exception as e:
         e = Except.wrap(e)  # FOR DEBUGGING
         pass
@@ -436,6 +465,11 @@ def unicode2Date(value, format=None):
         "%d%b%y",
         "%d%B%Y",
         "%d%B%y",
+        "%B%d%Y",
+        "%b%d%Y",
+        "%B%d%",
+        "%b%d%y",
+        "%Y%m%d%H%M%S%f",
         "%Y%m%d%H%M%S",
         "%Y%m%dT%H%M%S",
         "%d%m%Y%H%M%S",
@@ -457,7 +491,11 @@ def unicode2Date(value, format=None):
         Log.error("Can not interpret {{value}} as a datetime", value=value)
 
 
-DATETIME_EPOCH = datetime(1970, 1, 1)
+if PY3:
+    from datetime import timezone
+    DATETIME_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+else:
+    DATETIME_EPOCH = datetime(1970, 1, 1)
 DATE_EPOCH = date(1970, 1, 1)
 
 
@@ -466,7 +504,10 @@ def datetime2unix(value):
         if value == None:
             return None
         elif isinstance(value, datetime):
-            diff = value - DATETIME_EPOCH
+            if value.tzinfo:
+                diff = value - DATETIME_EPOCH
+            else:
+                diff = value - DATETIME_EPOCH.replace(tzinfo=None)
             return diff.total_seconds()
         elif isinstance(value, date):
             diff = value - DATE_EPOCH
@@ -482,7 +523,11 @@ def datetime2unix(value):
 def unix2datetime(unix):
     if unix == None:
         return Null
-    return datetime.utcfromtimestamp(unix)
+    try:
+        return datetime.utcfromtimestamp(unix)
+    except Exception as e:
+        from mo_logs import Log
+        Log.error("Can not convert {{value}} to datetime", value=unix, cause=e)
 
 
 def unix2Date(unix):
@@ -513,9 +558,15 @@ def deformat(value):
     return "".join(output)
 
 
-Date.MIN = Date(datetime(1, 1, 1))
-Date.MAX = Date(datetime(2286, 11, 20, 17, 46, 39))
-Date.EPOCH = _unix2Date(0)
+if PY3:
+    from datetime import timezone
+    Date.MIN = Date(datetime(1, 1, 1, tzinfo=timezone.utc))
+    Date.MAX = Date(datetime(2286, 11, 20, 17, 46, 39, tzinfo=timezone.utc))
+    Date.EPOCH = _unix2Date(0)
+else:
+    Date.MIN = Date(datetime(1, 1, 1))
+    Date.MAX = Date(datetime(2286, 11, 20, 17, 46, 39))
+    Date.EPOCH = _unix2Date(0)
 
 def _mod(value, mod=1):
     """

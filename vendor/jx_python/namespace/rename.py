@@ -5,7 +5,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from __future__ import absolute_import, division, unicode_literals
 
@@ -75,7 +75,6 @@ class Rename(Namespace):
         output.where = self.convert(query.where)
         output.frum = self._convert_from(query.frum)
         output.edges = convert_list(self._convert_edge, query.edges)
-        output.having = convert_list(self._convert_having, query.having)
         output.window = convert_list(self._convert_window, query.window)
         output.sort = self._convert_clause(query.sort)
         output.format = query.format
@@ -87,12 +86,12 @@ class Rename(Namespace):
 
     def _convert_bop(self, op, term):
         if is_list(term):
-            return {op: map(self.convert, term)}
+            return {op: list(map(self.convert, term))}
 
         return {op: {self.convert(var): val for var, val in term.items()}}
 
     def _convert_many(self, k, v):
-        return {k: map(self.convert, v)}
+        return {k: list(map(self.convert, v))}
 
     def _convert_from(self, frum):
         if is_data(frum):

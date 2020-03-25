@@ -5,23 +5,23 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from __future__ import unicode_literals
 
 import types
 import unittest
+from datetime import datetime
 
-from jx_base.expressions import NULL
 from mo_collections.unique_index import UniqueIndex
 import mo_dots
-from mo_dots import coalesce, is_container, is_list, literal_field, unwrap, wrap
+from mo_dots import coalesce, is_container, is_list, literal_field, unwrap, wrap, is_data
 from mo_future import is_text, zip_longest
-from mo_json import is_data
 from mo_logs import Except, Log, suppress_exception
-from mo_logs.strings import expand_template
+from mo_logs.strings import expand_template, quote
 import mo_math
 from mo_math import is_number, log10
+from mo_times import dates
 
 
 class FuzzyTestCase(unittest.TestCase):
@@ -83,7 +83,7 @@ def assertAlmostEqual(test, expected, digits=None, places=None, msg=None, delta=
     test = unwrap(test)
     expected = unwrap(expected)
     try:
-        if test is None and expected is None:
+        if test is None and (is_null(expected) or expected is None):
             return
         elif test is expected:
             return
@@ -95,7 +95,7 @@ def assertAlmostEqual(test, expected, digits=None, places=None, msg=None, delta=
         elif is_data(expected) and is_data(test):
             for k, v2 in unwrap(expected).items():
                 v1 = test.get(k)
-                assertAlmostEqual(v1, v2, msg=msg, digits=digits, places=places, delta=delta)
+                assertAlmostEqual(v1, v2, msg=coalesce(msg, "")+"key "+quote(k)+": ", digits=digits, places=places, delta=delta)
         elif is_data(expected):
             for k, v2 in expected.items():
                 if is_text(k):
@@ -153,11 +153,11 @@ def assertAlmostEqualValue(test, expected, digits=None, places=None, msg=None, d
     """
     Snagged from unittest/case.py, then modified (Aug2014)
     """
-    if expected is NULL:
+    if is_null(expected):
         if test == None:  # pandas dataframes reject any comparision with an exception!
             return
         else:
-            raise AssertionError(expand_template("{{test}} != {{expected}}", locals()))
+            raise AssertionError(expand_template("{{test|json}} != NULL", locals()))
 
     if expected == None:  # None has no expectations
         return
@@ -172,8 +172,14 @@ def assertAlmostEqualValue(test, expected, digits=None, places=None, msg=None, d
         if is_data(expected) and not expected.keys() and test == None:
             return
         if test != expected:
-            raise AssertionError(expand_template("{{test}} != {{expected}}", locals()))
+            raise AssertionError(expand_template("{{test|json}} != {{expected|json}}", locals()))
         return
+    elif not is_number(test):
+        try:
+            # ASSUME IT IS A UTC DATE
+            test = dates.parse(test).unix
+        except Exception as e:
+            raise AssertionError(expand_template("{{test|json}} != {{expected}}", locals()))
 
     num_param = 0
     if digits != None:
@@ -182,7 +188,7 @@ def assertAlmostEqualValue(test, expected, digits=None, places=None, msg=None, d
         num_param += 1
     if delta != None:
         num_param += 1
-    if num_param>1:
+    if num_param > 1:
         raise TypeError("specify only one of digits, places or delta")
 
     if digits is not None:
@@ -191,21 +197,27 @@ def assertAlmostEqualValue(test, expected, digits=None, places=None, msg=None, d
             if diff < digits:
                 return
 
-        standardMsg = expand_template("{{test}} != {{expected}} within {{digits}} decimal places", locals())
+        standardMsg = expand_template("{{test|json}} != {{expected|json}} within {{digits}} decimal places", locals())
     elif delta is not None:
         if abs(test - expected) <= delta:
             return
 
-        standardMsg = expand_template("{{test}} != {{expected}} within {{delta}} delta", locals())
+        standardMsg = expand_template("{{test|json}} != {{expected|json}} within {{delta}} delta", locals())
     else:
         if places is None:
             places = 15
 
         with suppress_exception:
             diff = mo_math.log10(abs(test-expected))
+            if diff == None:
+                return  # Exactly the same
             if diff < mo_math.ceiling(mo_math.log10(abs(test)))-places:
                 return
 
         standardMsg = expand_template("{{test|json}} != {{expected|json}} within {{places}} places", locals())
 
     raise AssertionError(coalesce(msg, "") + ": (" + standardMsg + ")")
+
+
+def is_null(v):
+    return v.__class__.__name__ == "NullOp"

@@ -5,26 +5,26 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
 from __future__ import absolute_import, division, unicode_literals
 
 import cgi
-from collections import Mapping
-from datetime import date, datetime as builtin_datetime, timedelta
 import json as _json
-from json.encoder import encode_basestring
 import math
 import re
 import string
+from datetime import date, datetime as builtin_datetime, timedelta
+from json.encoder import encode_basestring
 
-from mo_dots import Data, coalesce, get_module, is_data, is_list, wrap, is_sequence
-from mo_future import PY3, get_function_name, is_binary, is_text, round as _round, text_type, transpose, xrange, zip_longest
+from mo_dots import Data, coalesce, get_module, is_data, is_list, wrap, is_sequence, NullType
+from mo_future import PY3, get_function_name, is_text, round as _round, text, transpose, xrange, zip_longest, \
+    binary_type, Mapping
 from mo_logs.convert import datetime2string, datetime2unix, milli2datetime, unix2datetime, value2json
 
 FORMATTERS = {}
-CR = text_type("\n")
+CR = text("\n")
 
 _json_encoder = None
 _Log = None
@@ -44,7 +44,11 @@ def _late_import():
         _json_encoder = lambda value, pretty: _json.dumps(value)
     from mo_logs import Log as _Log
     from mo_logs.exceptions import Except as _Except
-    from mo_times.durations import Duration as _Duration
+    try:
+        from mo_times.durations import Duration as _Duration
+    except Exception as e:
+        _Duration = NullType
+        _Log.warning("It would be nice to pip install mo-times", cause=e)
 
     _ = _json_encoder
     _ = _Log
@@ -56,7 +60,7 @@ def formatter(func):
     """
     register formatters
     """
-    FORMATTERS[get_function_name(func)]=func
+    FORMATTERS[get_function_name(func)] = func
     return func
 
 
@@ -74,8 +78,13 @@ def datetime(value):
     else:
         value = milli2datetime(value)
 
-    return datetime2string(value, "%Y-%m-%d %H:%M:%S.%f").rstrip(".000000").rstrip("000")
-
+    output = datetime2string(value, "%Y-%m-%d %H:%M:%S.%f")
+    if output.endswith(".000000"):
+        return output[:-7]
+    elif output.endswith("000"):
+        return output[:-3]
+    else:
+        return output
 
 @formatter
 def unicode(value):
@@ -86,7 +95,7 @@ def unicode(value):
     """
     if value == None:
         return ""
-    return text_type(value)
+    return text(value)
 
 
 @formatter
@@ -175,7 +184,7 @@ def json(value, pretty=True):
     :param pretty:
     :return:
     """
-    if not _Duration:
+    if _Duration is None:
         _late_import()
     return _json_encoder(value, pretty=pretty)
 
@@ -195,7 +204,7 @@ def tab(value):
             "\t".join(map(value2json, d))
         )
     else:
-        text_type(value)
+        text(value)
 
 
 @formatter
@@ -217,7 +226,7 @@ def indent(value, prefix=u"\t", indent=None):
         lines = content.splitlines()
         return prefix + (CR + prefix).join(lines) + suffix
     except Exception as e:
-        raise Exception(u"Problem with indent of value (" + e.message + u")\n" + text_type(toString(value)))
+        raise Exception(u"Problem with indent of value (" + e.message + u")\n" + text(toString(value)))
 
 
 @formatter
@@ -261,7 +270,7 @@ def round(value, decimal=None, digits=None, places=None):
         decimal = digits - left_of_decimal
 
     right_of_decimal = max(decimal, 0)
-    format = "{:." + text_type(right_of_decimal) + "f}"
+    format = "{:." + text(right_of_decimal) + "f}"
     return format.format(_round(value, decimal))
 
 
@@ -275,6 +284,9 @@ def percent(value, decimal=None, digits=None, places=None):
     :param places:
     :return:
     """
+    if value == None:
+        return ""
+
     value = float(value)
     if value == 0.0:
         return "0%"
@@ -286,7 +298,7 @@ def percent(value, decimal=None, digits=None, places=None):
 
     decimal = coalesce(decimal, 0)
     right_of_decimal = max(decimal, 0)
-    format = "{:." + text_type(right_of_decimal) + "%}"
+    format = "{:." + text(right_of_decimal) + "%}"
     return format.format(_round(value, decimal + 2))
 
 
@@ -350,7 +362,7 @@ def trim(value):
 
 
 @formatter
-def between(value, prefix, suffix, start=0):
+def between(value, prefix=None, suffix=None, start=0):
     """
     Return first substring between `prefix` and `suffix`
     :param value:
@@ -372,9 +384,12 @@ def between(value, prefix, suffix, start=0):
         return None
     s += len(prefix)
 
-    e = value.find(suffix, s)
-    if e == -1:
-        return None
+    if suffix is None:
+        e = len(value)
+    else:
+        e = value.find(suffix, s)
+        if e == -1:
+            return None
 
     s = value.rfind(prefix, start, e) + len(prefix)  # WE KNOW THIS EXISTS, BUT THERE MAY BE A RIGHT-MORE ONE
 
@@ -404,7 +419,7 @@ def right_align(value, length):
     if length <= 0:
         return u""
 
-    value = text_type(value)
+    value = text(value)
 
     if len(value) < length:
         return (" " * (length - len(value))) + value
@@ -417,7 +432,7 @@ def left_align(value, length):
     if length <= 0:
         return u""
 
-    value = text_type(value)
+    value = text(value)
 
     if len(value) < length:
         return value + (" " * (length - len(value)))
@@ -449,7 +464,7 @@ def comma(value):
         else:
             output = "{:,}".format(float(value))
     except Exception:
-        output = text_type(value)
+        output = text(value)
 
     return output
 
@@ -485,10 +500,12 @@ _SNIP = "...<snip>..."
 
 @formatter
 def limit(value, length):
+    """
+    LIMIT THE STRING value TO GIVEN LENGTH, CHOPPING OUT THE MIDDLE IF REQUIRED
+    """
     if value == None:
         return None
     try:
-        # LIMIT THE STRING value TO GIVEN LENGTH, CHOPPING OUT THE MIDDLE IF REQUIRED
         if len(value) <= length:
             return value
         elif length < len(_SNIP) * 2:
@@ -498,7 +515,7 @@ def limit(value, length):
             rhs = length - len(_SNIP) - lhs
             return value[:lhs] + _SNIP + value[-rhs:]
     except Exception as e:
-        if not _Duration:
+        if _Duration is None:
             _late_import()
         _Log.error("Not expected", cause=e)
 
@@ -524,14 +541,17 @@ THE REST OF THIS FILE IS TEMPLATE EXPANSION CODE USED BY mo-logs
 def expand_template(template, value):
     """
     :param template: A UNICODE STRING WITH VARIABLE NAMES IN MOUSTACHES `{{.}}`
-    :param value: Data HOLDING THE PARAMTER VALUES
+    :param value: Data HOLDING THE PARAMETER VALUES
     :return: UNICODE STRING WITH VARIABLES EXPANDED
     """
-    value = wrap(value)
-    if is_text(template):
-        return _simple_expand(template, (value,))
+    try:
+        value = wrap(value)
+        if is_text(template):
+            return _simple_expand(template, (value,))
 
-    return _expand(template, (value,))
+        return _expand(template, (value,))
+    except Exception as e:
+        return "FAIL TO EXPAND: " + template
 
 
 def common_prefix(*args):
@@ -570,7 +590,7 @@ def deformat(value):
 
     FOR SOME REASON translate CAN NOT BE CALLED:
         ERROR: translate() takes exactly one argument (2 given)
-        File "C:\Python27\lib\string.py", line 493, in translate
+        File "C:\\Python27\\lib\\string.py", line 493, in translate
     """
     output = []
     for c in value:
@@ -662,7 +682,7 @@ def _simple_expand(template, seq):
 
 
 def toString(val):
-    if not _Duration:
+    if _Duration is None:
         _late_import()
 
     if val == None:
@@ -672,13 +692,13 @@ def toString(val):
     elif hasattr(val, "__json__"):
         return val.__json__()
     elif isinstance(val, _Duration):
-        return text_type(round(val.seconds, places=4)) + " seconds"
+        return text(round(val.seconds, places=4)) + " seconds"
     elif isinstance(val, timedelta):
         duration = val.total_seconds()
-        return text_type(round(duration, 3)) + " seconds"
+        return text(round(duration, 3)) + " seconds"
     elif is_text(val):
         return val
-    elif isinstance(val, str):
+    elif isinstance(val, binary_type):
         try:
             return val.decode('utf8')
         except Exception as _:
@@ -690,15 +710,15 @@ def toString(val):
             if not _Log:
                 _late_import()
 
-            _Log.error(text_type(type(val)) + " type can not be converted to unicode", cause=e)
+            _Log.error(text(type(val)) + " type can not be converted to unicode", cause=e)
     else:
         try:
-            return text_type(val)
+            return text(val)
         except Exception as e:
             if not _Log:
                 _late_import()
 
-            _Log.error(text_type(type(val)) + " type can not be converted to unicode", cause=e)
+            _Log.error(text(type(val)) + " type can not be converted to unicode", cause=e)
 
 
 def edit_distance(s1, s2):
@@ -851,49 +871,8 @@ def apply_diff(text, diff, reverse=False, verify=True):
     return output
 
 
-def unicode2utf8(value):
-    return value.encode('utf8')
-
-
-def utf82unicode(value):
-    """
-    WITH EXPLANATION FOR FAILURE
-    """
-    try:
-        return value.decode("utf8")
-    except Exception as e:
-        if not _Log:
-            _late_import()
-
-        if not is_binary(value):
-            _Log.error("Can not convert {{type}} to unicode because it's not bytes",  type= type(value).__name__)
-
-        e = _Except.wrap(e)
-        for i, c in enumerate(value):
-            try:
-                c.decode("utf8")
-            except Exception as f:
-                _Log.error("Can not convert charcode {{c}} in string index {{i}}", i=i, c=ord(c), cause=[e, _Except.wrap(f)])
-
-        try:
-            latin1 = text_type(value.decode("latin1"))
-            _Log.error("Can not explain conversion failure, but seems to be latin1", e)
-        except Exception:
-            pass
-
-        try:
-            a = text_type(value.decode("latin1"))
-            _Log.error("Can not explain conversion failure, but seems to be latin1", e)
-        except Exception:
-            pass
-
-        _Log.error("Can not explain conversion failure of " + type(value).__name__ + "!", e)
-
-
 def wordify(value):
     return [w for w in re.split(r"[\W_]", value) if strip(w)]
-
-
 
 
 def pairwise(values):

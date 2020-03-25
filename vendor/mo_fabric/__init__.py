@@ -8,16 +8,16 @@
 #
 from __future__ import absolute_import, division, unicode_literals
 
-from mo_future import is_text, is_binary
 from datetime import datetime
 import os
 import sys
 
 from fabric2 import Config, Connection as _Connection, Result
+from mo_logs.exceptions import Except
 
-from mo_dots import set_default, unwrap, wrap
+from mo_dots import set_default, unwrap, wrap, listwrap, coalesce
 from mo_files import File
-from mo_future import text_type
+from mo_future import text
 from mo_kwargs import override
 from mo_logs import Log, exceptions, machine_metadata
 from mo_math.randoms import Random
@@ -39,9 +39,8 @@ class Connection(object):
         key_filename=None,  # part of connect_kwargs
         kwargs=None,
     ):
-        connect_kwargs = set_default(
-            {}, connect_kwargs, {"key_filename": File(key_filename).abspath}
-        )
+        connect_kwargs = wrap(coalesce(connect_kwargs, {}))
+        key_filenames = listwrap(coalesce(connect_kwargs.key_filename, key_filename))
 
         self.stdout = LogStream(host, "stdout")
         self.stderr = LogStream(host, "stderr")
@@ -56,17 +55,27 @@ class Connection(object):
         )))
 
         self.warn = False
-        self.conn = _Connection(
-            host,
-            user,
-            port,
-            config,
-            gateway,
-            forward_agent,
-            connect_timeout,
-            connect_kwargs,
-            inline_ssh_env,
-        )
+        cause = Except("expecting some private key to connect")
+        for key_file in key_filenames:
+            try:
+                connect_kwargs.key_filename=File(key_file).abspath
+                self.conn = _Connection(
+                    host,
+                    user,
+                    port,
+                    config,
+                    gateway,
+                    forward_agent,
+                    connect_timeout,
+                    connect_kwargs,
+                    inline_ssh_env,
+                )
+                self.conn.run("echo")  # verify we can connect
+                return
+            except Exception as e:
+                cause = e
+
+        Log.error("could not connect", cause = cause)
 
     def exists(self, path):
         try:
@@ -180,7 +189,7 @@ class LogStream(object):
 
 
 def note(template, **params):
-    if not is_text(template):
+    if not isinstance(template, text):
         Log.error("Log.note was expecting a unicode template")
 
     if len(template) > 10000:
@@ -207,8 +216,8 @@ def note(template, **params):
         f = sys._getframe(1)
         log_params.location = {
             "line": f.f_lineno,
-            "file": text_type(f.f_code.co_filename.split(os.sep)[-1]),
-            "method": text_type(f.f_code.co_name),
+            "file": text(f.f_code.co_filename.split(os.sep)[-1]),
+            "method": text(f.f_code.co_name),
         }
     else:
         log_template = "{{timestamp|datetime}} - " + template.replace("{{", "{{params.")

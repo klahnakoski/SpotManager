@@ -4,19 +4,17 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
 from __future__ import absolute_import, division, unicode_literals
 
-from collections import MutableMapping
 from copy import copy, deepcopy
 from decimal import Decimal
 
-from mo_future import PY2, generator_types, is_binary, iteritems, long, none_type, text_type
-
 from mo_dots import _getdefault, coalesce, get_logger, hash_value, listwrap, literal_field
 from mo_dots.utils import CLASS
+from mo_future import generator_types, iteritems, long, none_type, text, MutableMapping, OrderedDict
 
 _get = object.__getattribute__
 _set = object.__setattr__
@@ -25,7 +23,7 @@ SLOT = str("_internal_dict")
 DEBUG = False
 
 
-class Data(MutableMapping):
+class Data(object):
     """
     Please see README.md
     """
@@ -90,7 +88,7 @@ class Data(MutableMapping):
             else:
                 return output
 
-        key = text_type(key)
+        key = text(key)
         d = self._internal_dict
 
         if key.find(".") >= 0:
@@ -147,10 +145,11 @@ class Data(MutableMapping):
                 d[seq[-1]] = value
             return self
         except Exception as e:
-            raise e
+            from mo_logs import Log
+            Log.error("can not set key={{key}}", key=key, cause=e)
 
     def __getattr__(self, key):
-        d = _get(self, SLOT)
+        d = self._internal_dict
         v = d.get(key)
         t = _get(v, CLASS)
 
@@ -187,6 +186,48 @@ class Data(MutableMapping):
     def __iadd__(self, other):
         return _iadd(self, other)
 
+    def __or__(self, other):
+        """
+        RECURSIVE COALESCE OF DATA PROPERTIES
+        """
+        if not _get(other, CLASS) in data_types:
+            get_logger().error("Expecting Data")
+
+        d = self._internal_dict
+        output = Data(**d)
+        output.__ior__(other)
+        return output
+
+    def __ror__(self, other):
+        """
+        RECURSIVE COALESCE OF DATA PROPERTIES
+        """
+        if not _get(other, CLASS) in data_types:
+            get_logger().error("Expecting Data")
+
+        return wrap(other).__or__(self)
+
+    def __ior__(self, other):
+        """
+        RECURSIVE COALESCE OF DATA PROPERTIES
+        """
+        if not _get(other, CLASS) in data_types:
+            get_logger().error("Expecting Data")
+        d = self._internal_dict
+        for ok, ov in other.items():
+            if ov == None:
+                continue
+
+            sv = d.get(ok)
+            if sv == None:
+                d[ok] = ov
+            elif isinstance(sv, Data):
+                sv |= ov
+            elif is_data(sv):
+                wv = object.__new__(Data)
+                _set(wv, SLOT, sv)
+                wv |= ov
+        return self
 
     def __hash__(self):
         d = self._internal_dict
@@ -254,7 +295,7 @@ class Data(MutableMapping):
     def copy(self):
         d = self._internal_dict
         if _get(d, CLASS) is dict:
-            return Data(**self)
+            return Data(**d)
         else:
             return copy(d)
 
@@ -282,7 +323,7 @@ class Data(MutableMapping):
         d.pop(seq[-1], None)
 
     def __delattr__(self, key):
-        key = text_type(key)
+        key = text(key)
         d = self._internal_dict
         d.pop(key, None)
 
@@ -297,11 +338,18 @@ class Data(MutableMapping):
         except Exception:
             return "{}"
 
+    def __dir__(self):
+        d = self._internal_dict
+        return d.keys()
+
     def __repr__(self):
         try:
             return "Data("+dict.__repr__(self._internal_dict)+")"
         except Exception as e:
             return "Data()"
+
+
+MutableMapping.register(Data)
 
 
 def leaves(value, prefix=None):
@@ -333,203 +381,6 @@ def _split_field(field):
     return [k.replace("\a", ".") for k in field.replace("\\.", "\a").split(".")]
 
 
-class _DictUsingSelf(dict):
-
-    def __init__(self, **kwargs):
-        """
-        CALLING Data(**something) WILL RESULT IN A COPY OF something, WHICH
-        IS UNLIKELY TO BE USEFUL. USE wrap() INSTEAD
-        """
-        dict.__init__(self)
-
-    def __bool__(self):
-        return True
-
-    def __getitem__(self, key):
-        if key == None:
-            return Null
-        if is_binary(key):
-            key = key.decode("utf8")
-
-        d=self
-        if key.find(".") >= 0:
-            seq = _split_field(key)
-            for n in seq:
-                d = _getdefault(self, n)
-            return wrap(d)
-        else:
-            o = dict.get(d, None)
-
-        if o == None:
-            return NullType(d, key)
-        return wrap(o)
-
-    def __setitem__(self, key, value):
-        if key == "":
-            get_logger().error("key is empty string.  Probably a bad idea")
-        if isinstance(key, str):
-            key = key.decode("utf8")
-        d=self
-        try:
-            value = unwrap(value)
-            if key.find(".") == -1:
-                if value is None:
-                    dict.pop(d, key, None)
-                else:
-                    dict.__setitem__(d, key, value)
-                return self
-
-            seq = _split_field(key)
-            for k in seq[:-1]:
-                d = _getdefault(d, k)
-            if value == None:
-                dict.pop(d, seq[-1], None)
-            else:
-                dict.__setitem__(d, seq[-1], value)
-            return self
-        except Exception as e:
-            raise e
-
-    def __getattr__(self, key):
-        if is_binary(key):
-            ukey = key.decode("utf8")
-        else:
-            ukey = key
-
-        d = self
-        o = dict.get(d, ukey, None)
-        if o == None:
-            return NullType(d, ukey)
-        return wrap(o)
-
-    def __setattr__(self, key, value):
-        if is_binary(key):
-            ukey = key.decode("utf8")
-        else:
-            ukey = key
-
-        d = self
-        value = unwrap(value)
-        if value is None:
-            dict.pop(d, key, None)
-        else:
-            dict.__setitem__(d, ukey, value)
-        return self
-
-    def __hash__(self):
-        return hash_value(self)
-
-    def __eq__(self, other):
-        if self is other:
-            return True
-
-        d = self
-        if not d and other == None:
-            return True
-
-        if not _get(other, CLASS) in data_types:
-            return False
-        e = unwrap(other)
-        for k, v in dict.items(d):
-            if e.get(k) != v:
-                return False
-        for k, v in e.items():
-            if dict.get(d, k, None) != v:
-                return False
-        return True
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def get(self, key, default=None):
-        return wrap(dict.get(self, key, default))
-
-    def items(self):
-        return [(k, wrap(v)) for k, v in dict.items(self) if v != None or _get(v, CLASS) in data_types]
-
-    def leaves(self, prefix=None):
-        """
-        LIKE items() BUT RECURSIVE, AND ONLY FOR THE LEAVES (non dict) VALUES
-        """
-        prefix = coalesce(prefix, "")
-        output = []
-        for k, v in self.items():
-            if _get(v, CLASS) in data_types:
-                output.extend(wrap(v).leaves(prefix=prefix + literal_field(k) + "."))
-            else:
-                output.append((prefix + literal_field(k), v))
-        return output
-
-    if PY2:
-        def iteritems(self):
-            for k, v in dict.iteritems(self):
-                yield k, wrap(v)
-    else:
-        def iteritems(self):
-            for k, v in dict.items(self):
-                yield k, wrap(v)
-
-
-    def keys(self):
-        return set(dict.keys(self))
-
-    def values(self):
-        return listwrap(dict.values(self))
-
-    def clear(self):
-        get_logger().error("clear() not supported")
-
-    def __len__(self):
-        d = self._internal_dict
-        return d.__len__()
-
-    def copy(self):
-        return Data(**self)
-
-    def __copy__(self):
-        return Data(**self)
-
-    def __deepcopy__(self, memo):
-        return wrap(dict.__deepcopy__(self, memo))
-
-    def __delitem__(self, key):
-        if is_binary(key):
-            key = key.decode("utf8")
-
-        if key.find(".") == -1:
-            dict.pop(self, key, None)
-            return
-
-        d = self
-        seq = _split_field(key)
-        for k in seq[:-1]:
-            d = d[k]
-        d.pop(seq[-1], None)
-
-    def __delattr__(self, key):
-        if isinstance(key, str):
-            key = key.decode("utf8")
-
-        dict.pop(self, key, None)
-
-    def setdefault(self, k, d=None):
-        if self[k] == None:
-            self[k] = d
-        return self
-
-    def __str__(self):
-        try:
-            return dict.__str__(self)
-        except Exception as e:
-            return "{}"
-
-    def __repr__(self):
-        try:
-            return "Data("+dict.__repr__(self)+")"
-        except Exception as e:
-            return "Data()"
-
-
 def _str(value, depth):
     """
     FOR DEBUGGING POSSIBLY RECURSIVE STRUCTURES
@@ -548,8 +399,15 @@ def _str(value, depth):
 
 
 def _iadd(self, other):
+    """
+    RECURSIVE ADDITION OF DATA PROPERTIES
+    * LISTS ARE CONCATENATED
+    * SETS ARE UNIONED
+    * NUMBERS ARE ADDED
+    """
+
     if not _get(other, CLASS) in data_types:
-        get_logger().error("Expecting a Mapping")
+        get_logger().error("Expecting Data")
     d = unwrap(self)
     for ok, ov in other.items():
         sv = d.get(ok)
@@ -591,7 +449,7 @@ def _iadd(self, other):
     return self
 
 
-data_types = (Data, dict)  # TYPES TO HOLD DATA
+data_types = (Data, dict, OrderedDict)  # TYPES TO HOLD DATA
 
 
 def register_data(type_):

@@ -5,16 +5,16 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from __future__ import absolute_import, division, unicode_literals
 
-from mo_future import is_text, is_binary
 from collections import namedtuple
+import gc
 from types import FunctionType
 
 from mo_dots import Null, _get_attr, set_default
-from mo_future import get_function_arguments, get_function_name, text_type
+from mo_future import get_function_arguments, get_function_name, is_text, text
 import mo_json
 from mo_logs import Log
 from mo_logs.exceptions import Except
@@ -85,9 +85,6 @@ def get_function_by_name(full_name):
         return output
     except Exception as e:
         Log.error("Can not find function {{name}}",  name= full_name, cause=e)
-
-
-
 
 
 class cache(object):
@@ -202,7 +199,7 @@ def value2quote(value):
     if is_text(value):
         return mo_json.quote(value)
     else:
-        return text_type(repr(value))
+        return text(repr(value))
 
 
 class extenstion_method(object):

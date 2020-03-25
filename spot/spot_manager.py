@@ -23,7 +23,7 @@ from mo_collections import UniqueIndex
 from mo_dots import Data, FlatList, coalesce, listwrap, unwrap, wrap, Null
 from mo_dots.objects import datawrap
 from mo_files import File
-from mo_future import text_type
+from mo_future import text
 from mo_json import value2json
 from mo_kwargs import override
 from mo_logs import Except, Log, constants, startup
@@ -302,7 +302,7 @@ class SpotManager(object):
         Log.note("Shutdown {{instances}}", instances=remove_list.id)
         remove_threads = [
             Thread.run(
-                "teardown for " + text_type(i.id),
+                "teardown for " + text(i.id),
                 self.instance_manager.teardown,
                 i
             )
@@ -469,7 +469,7 @@ class SpotManager(object):
                         i.markup = p
                         i.add_tag("Name", self.settings.ec2.instance.name + " (setup)")
                         setup_threads.append(Thread.run(
-                            "setup for " + text_type(i.id),
+                            "setup for " + text(i.id),
                             track_setup,
                             self.instance_manager.setup,
                             r,
@@ -586,7 +586,7 @@ class SpotManager(object):
         for i in range(num_ephemeral_volumes):
             letter = convert.ascii2char(98 + i)  # START AT "b"
             kwargs.block_device_map["/dev/sd" + letter] = BlockDeviceType(
-                ephemeral_name='ephemeral' + text_type(i),
+                ephemeral_name='ephemeral' + text(i),
                 delete_on_termination=True
             )
 

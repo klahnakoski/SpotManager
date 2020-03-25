@@ -127,7 +127,7 @@
 		}
 	},
 	"constants":{
-		"pyLibrary.env.http.default_headers":{"Referer": "https://github.com/klahnakoski/SpotManager"}
+		"mo_http.http.default_headers":{"Referer": "https://github.com/klahnakoski/SpotManager"}
 	},
 	"debug": {
 		"trace": true,

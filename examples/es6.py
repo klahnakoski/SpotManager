@@ -11,7 +11,7 @@ from __future__ import unicode_literals
 
 from mo_fabric import Connection
 from mo_files import File, TempFile
-from mo_future import text_type
+from mo_future import text
 from mo_kwargs import override
 from mo_logs import Log
 from mo_logs.strings import expand_template
@@ -185,7 +185,7 @@ def _install_es(gigabytes, es_version="6.5.4", instance=None, conn=None):
         yml = File("./examples/config/es6_config.yml").read().replace("\r", "")
         yml = expand_template(yml, {
             "id": instance.ip_address,
-            "data_paths": ",".join("/data" + text_type(i + 1) for i, _ in enumerate(volumes))
+            "data_paths": ",".join("/data" + text(i + 1) for i, _ in enumerate(volumes))
         })
         with TempFile() as temp:
             temp.write(yml)
@@ -212,7 +212,7 @@ def _install_python_indexer(instance, conn):
 def _install_python(instance, conn):
     Log.note("Install Python at {{instance_id}} ({{address}})", instance_id=instance.id, address=instance.ip_address)
     if conn.exists("/usr/bin/pip"):
-        pip_version = text_type(conn.sudo("pip --version", warn=True))
+        pip_version = text(conn.sudo("pip --version", warn=True))
     else:
         pip_version = ""
 

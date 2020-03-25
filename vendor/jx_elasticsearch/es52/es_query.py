@@ -9,7 +9,11 @@ from __future__ import absolute_import, division, unicode_literals
 
 from jx_elasticsearch.es52.expressions import ES52
 from mo_dots import is_data, is_list, startswith_field
+<<<<<<< HEAD
 from mo_future import text_type
+=======
+from mo_future import text
+>>>>>>> dev
 from mo_json import value2json
 from mo_logs import Log
 
@@ -29,7 +33,11 @@ class Aggs(object):
             return {"aggs": {
                 name: t.to_es(schema, query_path)
                 for i, t in enumerate(self.children)
+<<<<<<< HEAD
                 for name in [t.name if t.name else "_" + text_type(i)]
+=======
+                for name in [t.name if t.name else "_" + text(i)]
+>>>>>>> dev
             }}
         else:
             return {}
@@ -67,6 +75,12 @@ class ExprAggs(Aggs):
     def __init__(self, name, expr, select):
         Aggs.__init__(self, name)
         self.expr = expr
+<<<<<<< HEAD
+=======
+        if not select:
+            Log.error("Expecting a select")
+
+>>>>>>> dev
         self.selects = [select]
 
     def __eq__(self, other):
@@ -93,6 +107,27 @@ class ExprAggs(Aggs):
         return output
 
 
+<<<<<<< HEAD
+=======
+class CountAggs(Aggs):
+    # DO A DOC COUNT
+
+    def __init__(self, select):
+        Aggs.__init__(self, None)
+        if not select:
+            Log.error("Expecting a select")
+        self.selects = [select]
+
+    def __eq__(self, other):
+        if self is other:
+            return True
+        return all(s is t for s, t in zip(self.selects, other.selects))
+
+    def to_es(self, schema, query_path="."):
+        return None  # NO NEED TO WRITE ANYTHING
+
+
+>>>>>>> dev
 class FilterAggs(Aggs):
     def __init__(self, name, filter, decoder):
         Aggs.__init__(self, name)
@@ -124,6 +159,7 @@ class FilterAggs(Aggs):
         return output
 
 
+<<<<<<< HEAD
 class ComplexAggs(FilterAggs):
     """
     FOR COMPLICATED AGGREGATIONS
@@ -144,6 +180,8 @@ class ComplexAggs(FilterAggs):
         return output
 
 
+=======
+>>>>>>> dev
 class FiltersAggs(Aggs):
     def __init__(self, name, filters, decoder):
         Aggs.__init__(self, name)

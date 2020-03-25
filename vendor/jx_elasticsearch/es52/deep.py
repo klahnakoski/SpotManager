@@ -5,6 +5,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http:# mozilla.org/MPL/2.0/.
 #
+<<<<<<< HEAD
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from __future__ import absolute_import, division, unicode_literals
@@ -19,18 +20,39 @@ from jx_elasticsearch.es52.setop import format_dispatch, get_pull, get_pull_func
 from jx_elasticsearch.es52.util import es_query_template, jx_sort_to_es_sort
 from jx_python.expressions import jx_expression_to_function
 from mo_dots import Data, FlatList, coalesce, concat_field, is_list as is_list_, listwrap, literal_field, relative_field, set_default, split_field, startswith_field, unwrap, wrap
+=======
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
+#
+from __future__ import absolute_import, division, unicode_literals
+
+from jx_base.expressions import LeavesOp, NULL, Variable
+from jx_base.language import is_op
+from jx_base.query import DEFAULT_LIMIT
+from jx_elasticsearch.es52.expressions import AndOp, ES52, split_expression_by_depth, MATCH_ALL
+from jx_elasticsearch.es52.set_op import set_formatters, get_pull, get_pull_function
+from jx_elasticsearch.es52.util import es_query_template, jx_sort_to_es_sort
+from jx_python.expressions import jx_expression_to_function
+from mo_dots import Data, FlatList, coalesce, concat_field, is_list as is_list_, listwrap, literal_field, \
+    relative_field, set_default, split_field, startswith_field, unwrap, wrap
+>>>>>>> dev
 from mo_future import zip_longest
 from mo_json import NESTED
 from mo_json.typed_encoder import untype_path
 from mo_logs import Log
 from mo_threads import Thread
 from mo_times.timer import Timer
+<<<<<<< HEAD
 from pyLibrary import convert
 
 EXPRESSION_PREFIX = "_expr."
 
 _ = convert
 
+=======
+
+EXPRESSION_PREFIX = "_expr."
+
+>>>>>>> dev
 
 def is_deepop(es, query):
     if query.edges or query.groupby:
@@ -73,9 +95,13 @@ def es_deepop(es, query):
                 "must_not": {
                     "nested": {
                         "path": query_path,
+<<<<<<< HEAD
                         "query": {
                             "match_all": {}
                         }
+=======
+                        "query": MATCH_ALL
+>>>>>>> dev
                     }
                 }
             }
@@ -187,6 +213,7 @@ def es_deepop(es, query):
     # <COMPLICATED> ES needs two calls to get all documents
     more = []
     def get_more(please_stop):
+<<<<<<< HEAD
         more.append(es_post(
             es,
             Data(
@@ -194,12 +221,23 @@ def es_deepop(es, query):
                 stored_fields=es_query.stored_fields
             ),
             query.limit
+=======
+        more.append(es.search(
+            Data(
+                query=more_filter,
+                stored_fields=es_query.stored_fields
+            )
+>>>>>>> dev
         ))
     if more_filter:
         need_more = Thread.run("get more", target=get_more)
 
     with Timer("call to ES") as call_timer:
+<<<<<<< HEAD
         data = es_post(es, es_query, query.limit)
+=======
+        data = es.search(es_query)
+>>>>>>> dev
 
     # EACH A HIT IS RETURNED MULTIPLE TIMES FOR EACH INNER HIT, WITH INNER HIT INCLUDED
     def inners():
@@ -216,7 +254,11 @@ def es_deepop(es, query):
     # </COMPLICATED>
 
     try:
+<<<<<<< HEAD
         formatter, groupby_formatter, mime_type = format_dispatch[query.format]
+=======
+        formatter, row_formatter, mime_type = set_formatters[query.format]
+>>>>>>> dev
 
         output = formatter(inners(), new_select, query)
         output.meta.timing.es = call_timer.duration

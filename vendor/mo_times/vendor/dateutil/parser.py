@@ -7,13 +7,11 @@ datetime module.
 """
 from __future__ import absolute_import, division, unicode_literals
 
-from mo_future import is_text, is_binary
-import collections
 import datetime
 import string
 import time
 
-from mo_future import StringIO, binary_type, integer_types, text_type
+from mo_future import StringIO, integer_types, is_binary, is_text, Callable
 from . import relativedelta, tz
 
 __license__ = "Simplified BSD"
@@ -308,8 +306,8 @@ class parser(object):
         if res.weekday is not None and not res.day:
             ret = ret+relativedelta.relativedelta(weekday=res.weekday)
         if not ignoretz:
-            if isinstance(tzinfos, collections.Callable) or tzinfos and res.tzname in tzinfos:
-                if isinstance(tzinfos, collections.Callable):
+            if isinstance(tzinfos, Callable) or tzinfos and res.tzname in tzinfos:
+                if isinstance(tzinfos, Callable):
                     tzdata = tzinfos(res.tzname, res.tzoffset)
                 else:
                     tzdata = tzinfos.get(res.tzname)

@@ -4,16 +4,14 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from __future__ import division, unicode_literals
 
-from mo_future import is_text, is_binary
 import datetime
 
-from mo_dots import Null
-from mo_future import text_type
-from mo_logs import Log
+from mo_dots import DataObject, Null, unwrap
+from mo_future import text, zip_longest
 
 
 class Version(object):
@@ -27,20 +25,28 @@ class Version(object):
             return object.__new__(cls)
 
     def __init__(self, version):
+        version = unwrap(version)
+
         if isinstance(version, tuple):
             self.version = version
+        elif isinstance(version, DataObject):
+            self.version = [0, 0, 0]
         elif isinstance(version, Version):
             self.version = version.version
         else:
-            self.version = tuple(map(int, version.split('.')))
-
-        if len(self.version) != 3:
-            Log.error("expecting <major>.<minor>.<mini> version format")
+            try:
+                self.version = tuple(map(int, version.split('.')))
+            except Exception as e:
+                self.version = [0, 0, 0]
 
     def __gt__(self, other):
         other = Version(other)
-        for s, o in zip(self.version, other.version):
-            if s < o:
+        for s, o in zip_longest(self.version, other.version):
+            if s is None and o is not None:
+                return False
+            elif s is not None and o is None:
+                return True
+            elif s < o:
                 return False
             elif s > o:
                 return True
@@ -65,7 +71,7 @@ class Version(object):
         return self.version != other.version
 
     def __str__(self):
-        return text_type(".").join(map(text_type, self.version))
+        return text(".").join(map(text, self.version))
 
     def __add__(self, other):
         major, minor, mini = self.version

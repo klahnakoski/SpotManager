@@ -34,7 +34,6 @@ from jx_base.language import is_op
 from mo_future import text
 from mo_json import NUMBER
 from mo_logs import Log
-from mo_times import Date
 
 
 class NumberOp(Expression):
@@ -67,16 +66,12 @@ class NumberOp(Expression):
                 return ZERO
             elif term is TRUE:
                 return ONE
-            elif isinstance(term.value, (text, Date)):
-                return Literal(float(term.value))
+            elif isinstance(term.value, text):
+                return Literal(float(text))
             elif isinstance(term.value, (int, float)):
                 return term
             else:
-                Log.error(
-                    "can not convert {{value|json}} of type {{type}} to number",
-                    value=term.value,
-                    type=term.value.__class__.__name__
-                )
+                Log.error("can not convert {{value|json}} to number", value=term.value)
         elif is_op(term, CaseOp):  # REWRITING
             return self.lang[
                 CaseOp(

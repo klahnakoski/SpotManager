@@ -5,17 +5,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http:# mozilla.org/MPL/2.0/.
 #
-<<<<<<< HEAD
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
-#
-from __future__ import absolute_import, division, unicode_literals
-
-from jx_base.expressions import Variable
-from jx_base.language import is_op
-from mo_dots import wrap
-from mo_future import is_text
-from mo_json import BOOLEAN, IS_NULL, NUMBER, OBJECT, STRING
-=======
 # Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from __future__ import absolute_import, division, unicode_literals
@@ -28,7 +17,6 @@ from jx_elasticsearch.es52.expressions.and_op import es_and
 from mo_dots import wrap, Null, coalesce
 from mo_future import is_text, first
 from mo_json import BOOLEAN, IS_NULL, NUMBER, OBJECT, STRING, NUMBER_TYPES
->>>>>>> dev
 from mo_logs import Log
 from pyLibrary.convert import value2boolean
 
@@ -86,13 +74,6 @@ def jx_sort_to_es_sort(sort, schema):
 
             for type in types:
                 for c in cols:
-<<<<<<< HEAD
-                    if c.jx_type is type:
-                        if s.sort == -1:
-                            output.append({c.es_column: "desc"})
-                        else:
-                            output.append(c.es_column)
-=======
                     if c.jx_type == type or (c.jx_type in NUMBER_TYPES and type in NUMBER_TYPES):
                         np = first(c.nested_path)
                         if np == '.':
@@ -108,7 +89,6 @@ def jx_sort_to_es_sort(sort, schema):
                                     "filter": {"match_all": {}}
                                 },
                             }})
->>>>>>> dev
         else:
             from mo_logs import Log
 
@@ -127,11 +107,8 @@ aggregates = {
     "count_values": "count_values",
     "maximum": "max",
     "minimum": "min",
-<<<<<<< HEAD
-=======
     "and": "min",
     "or": "max",
->>>>>>> dev
     "max": "max",
     "min": "min",
     "mean": "avg",
@@ -153,45 +130,11 @@ aggregates = {
 
 NON_STATISTICAL_AGGS = {"none", "one"}
 
-<<<<<<< HEAD
-def es_and(terms):
-    return wrap({"bool": {"filter": terms}})
-
-
-def es_or(terms):
-    return wrap({"bool": {"should": terms}})
-
-
-def es_not(term):
-    return wrap({"bool": {"must_not": term}})
-
-
-def es_script(term):
-    return wrap({"script": {"lang": "painless", "source": term}})
-
-
-def es_missing(term):
-    return {"bool": {"must_not": {"exists": {"field": term}}}}
-
-
-def es_exists(term):
-    return {"exists": {"field": term}}
-
-
-MATCH_ALL = wrap({"match_all": {}})
-MATCH_NONE = es_not({"match_all": {}})
-
-=======
->>>>>>> dev
 
 pull_functions = {
     IS_NULL: lambda x: None,
     STRING: lambda x: x,
     NUMBER: lambda x: float(x) if x !=None else None,
-<<<<<<< HEAD
-    BOOLEAN: value2boolean
-}
-=======
     BOOLEAN: value2boolean,
 }
 
@@ -208,4 +151,3 @@ def temper_limit(proposed_limit, query):
         return mo_math.min(coalesce(proposed_limit, query.limit, DEFAULT_LIMIT), MAX_LIMIT)
 
 
->>>>>>> dev

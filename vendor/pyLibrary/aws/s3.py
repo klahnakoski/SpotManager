@@ -5,29 +5,28 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from __future__ import absolute_import, division, unicode_literals
 
 import gzip
-from tempfile import TemporaryFile
 import zipfile
+from tempfile import TemporaryFile
 
 import boto
 from boto.s3.connection import Location
 from bs4 import BeautifulSoup
 
-from mo_dots import Data, Null, coalesce, unwrap, wrap
+from mo_dots import Data, Null, coalesce, unwrap, wrap, is_many
 from mo_files.url import value2url_param
-from mo_future import StringIO, is_binary, text_type
+from mo_future import StringIO, is_binary, text
 from mo_kwargs import override
 from mo_logs import Except, Log
-from mo_logs.strings import unicode2utf8, utf82unicode
 from mo_times.dates import Date
 from mo_times.timer import Timer
 from pyLibrary import convert
-from pyLibrary.env import http
-from pyLibrary.env.big_data import LazyLines, MAX_STRING_SIZE, ibytes2ilines, safe_size, scompressed2ibytes
+from mo_http import http
+from mo_http.big_data import LazyLines, MAX_STRING_SIZE, ibytes2ilines, safe_size, scompressed2ibytes
 
 TOO_MANY_KEYS = 1000 * 1000 * 1000
 READ_ERROR = "S3 read error"
@@ -262,7 +261,7 @@ class Bucket(object):
         elif source.key.endswith(".gz"):
             json = convert.zip2bytes(json)
 
-        return utf82unicode(json)
+        return json.decode('utf8')
 
     def read_bytes(self, key):
         source = self.get_meta(key)
@@ -276,7 +275,7 @@ class Bucket(object):
             if source.key.endswith(".gz"):
                 return LazyLines(ibytes2ilines(scompressed2ibytes(source)))
             else:
-                return utf82unicode(source.read()).split("\n")
+                return source.read().decode('utf8').split("\n")
 
         if source.key.endswith(".gz"):
             return LazyLines(ibytes2ilines(scompressed2ibytes(source)))
@@ -312,7 +311,7 @@ class Bucket(object):
                     value = convert.bytes2zip(value)
                     key += ".json.gz"
                 else:
-                    value = convert.bytes2zip(unicode2utf8(value))
+                    value = convert.bytes2zip(value).encode('utf8')
                     key += ".json.gz"
 
             else:
@@ -344,7 +343,7 @@ class Bucket(object):
         archive = gzip.GzipFile(fileobj=buff, mode='w')
         count = 0
         for l in lines:
-            if hasattr(l, "__iter__"):
+            if is_many(l):
                 for ll in l:
                     archive.write(ll.encode("utf8"))
                     archive.write(b"\n")
@@ -360,7 +359,7 @@ class Bucket(object):
         retry = 3
         while retry:
             try:
-                with Timer("Sending {{count}} lines in {{file_length|comma}} bytes", {"file_length": file_length, "count": count}, silent=not self.settings.debug):
+                with Timer("Sending {{count}} lines in {{file_length|comma}} bytes for {{key}}", {"key": key, "file_length": file_length, "count": count}, verbose=self.settings.debug):
                     buff.seek(0)
                     storage.set_contents_from_file(buff)
                 break
@@ -404,11 +403,11 @@ class SkeletonBucket(Bucket):
 
 
 content_keys={
-    "key": text_type,
+    "key": text,
     "lastmodified": Date,
-    "etag": text_type,
+    "etag": text,
     "size": int,
-    "storageclass": text_type
+    "storageclass": text
 }
 
 
@@ -448,7 +447,8 @@ class PublicBucket(object):
 
             state.get_more = data.find("istruncated").contents[0] == "true"
             contents = data.findAll("contents")
-            state.marker = contents[-1].find("key").contents[0]
+            if len(contents):
+               state.marker = contents[-1].find("key").contents[0]
             return [{k: t(d.find(k).contents[0]) for k, t in content_keys.items()} for d in contents]
 
         while state.get_more:

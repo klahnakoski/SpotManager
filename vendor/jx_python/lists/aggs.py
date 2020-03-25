@@ -5,11 +5,10 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http:# mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from __future__ import absolute_import, division, unicode_literals
 
-from mo_future import is_text, is_binary
 import itertools
 
 from jx_base.domains import DefaultDomain, SimpleSetDomain
@@ -22,6 +21,7 @@ from mo_math import UNION
 from mo_times.dates import Date
 
 _ = Date
+
 
 def is_aggs(query):
     if query.edges or query.groupby or any(a != None and a != "none" for a in listwrap(query.select).aggregate):

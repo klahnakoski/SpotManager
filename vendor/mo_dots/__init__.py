@@ -4,14 +4,14 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
 from __future__ import absolute_import, division, unicode_literals
 
 import sys
 
-from mo_future import binary_type, generator_types, is_binary, is_text, text_type
+from mo_future import binary_type, generator_types, is_binary, is_text, text, OrderedDict
 
 from mo_dots.utils import CLASS, OBJ, get_logger, get_module
 
@@ -60,6 +60,14 @@ def zip(keys, values):
     return output
 
 
+def missing(value):
+    return value == None or value == ''
+
+
+def exists(value):
+    return value != None and value != ''
+
+
 def literal_field(field):
     """
     RETURN SAME WITH DOTS (`.`) ESCAPED
@@ -88,12 +96,17 @@ def unliteral_field(field):
 def tail_field(field):
     """
     RETURN THE FIRST STEP IN PATH, ALONG WITH THE REMAINING TAIL
+    IN (first, rest) PAIR
     """
     if field == "." or field==None:
         return ".", "."
     elif "." in field:
         if "\\." in field:
-            return tuple(k.replace("\a", ".") for k in field.replace("\\.", "\a").split(".", 1))
+            path = field.replace("\\.", "\a").split(".", 1)
+            if len(path) == 1:
+                return path[0].replace("\a", "."), "."
+            else:
+                return tuple(k.replace("\a", ".") for k in path)
         else:
             return field.split(".", 1)
     else:
@@ -148,6 +161,8 @@ def startswith_field(field, prefix):
     """
     RETURN True IF field PATH STRING STARTS WITH prefix PATH STRING
     """
+    if prefix == None:
+        return False
     if prefix.startswith("."):
         return True
         # f_back = len(field) - len(field.strip("."))
@@ -194,23 +209,15 @@ def hash_value(v):
         return hash(tuple(sorted(hash_value(vv) for vv in v.values())))
 
 
-
-def _setdefault(obj, key, value):
-    """
-    DO NOT USE __dict__.setdefault(obj, key, value), IT DOES NOT CHECK FOR obj[key] == None
-    """
-    v = obj.get(key)
-    if v == None:
-        obj[key] = value
-        return value
-    return v
-
-
 def set_default(*params):
     """
-    INPUT dicts IN PRIORITY ORDER
     UPDATES FIRST dict WITH THE MERGE RESULT, WHERE MERGE RESULT IS DEFINED AS:
     FOR EACH LEAF, RETURN THE HIGHEST PRIORITY LEAF VALUE
+
+    RECURSIVE VERSION OF params[0].update(*reversed(params));
+
+    :param params:  dicts IN PRIORITY ORDER, FIRST IS HIGHES PRIORITY
+    :return: FIRST dict OR NEW dict WITH PROPERTIES SET
     """
     p0 = params[0]
     agg = p0 if p0 or _get(p0, CLASS) in data_types else {}
@@ -236,7 +243,10 @@ def _all_default(d, default, seen=None):
 
     for k, default_value in default.items():
         default_value = unwrap(default_value)  # TWO DIFFERENT Dicts CAN SHARE id() BECAUSE THEY ARE SHORT LIVED
-        existing_value = _get_attr(d, [k])
+        if is_data(d):
+            existing_value = d.get(k)
+        else:
+            existing_value = _get_attr(d, [k])
 
         if existing_value == None:
             if default_value != None:
@@ -268,7 +278,7 @@ def _all_default(d, default, seen=None):
                 _all_default(existing_value, default_value, seen)
 
 
-def _getdefault(obj, key):
+def _get_dict_default(obj, key):
     """
     obj MUST BE A DICT
     key IS EXPECTED TO BE LITERAL (NO ESCAPING)
@@ -280,7 +290,28 @@ def _getdefault(obj, key):
         pass
 
     try:
-        return getattr(obj, key)
+        if float(key) == round(float(key), 0):
+            return obj[int(key)]
+    except Exception as f:
+        pass
+
+    return NullType(obj, key)
+
+
+def _getdefault(obj, key):
+    """
+    obj ANY OBJECT
+    key IS EXPECTED TO BE LITERAL (NO ESCAPING)
+    TRY BOTH ATTRIBUTE AND ITEM ACCESS, OR RETURN Null
+    """
+    try:
+        return obj[key]
+    except Exception as f:
+        pass
+
+    try:
+        if obj.__class__ is not dict:
+            return getattr(obj, key)
     except Exception as f:
         pass
 
@@ -294,7 +325,7 @@ def _getdefault(obj, key):
 
     # TODO: FIGURE OUT WHY THIS WAS EVER HERE (AND MAKE A TEST)
     # try:
-    #     return eval("obj."+text_type(key))
+    #     return eval("obj."+text(key))
     # except Exception as f:
     #     pass
     return NullType(obj, key)
@@ -406,14 +437,15 @@ def _set_attr(obj_, path, value):
     # ACTUAL SETTING OF VALUE
     try:
         old_value = _get_attr(obj, [attr_name])
-        if old_value == None:
+        old_type = _get(old_value, CLASS)
+        if old_value == None or old_type in (bool, int, float, text, binary_type):
             old_value = None
             new_value = value
         elif value == None:
             new_value = None
         else:
             new_value = _get(old_value, CLASS)(value)  # TRY TO MAKE INSTANCE OF SAME CLASS
-    except Exception as e:
+    except Exception:
         old_value = None
         new_value = value
 
@@ -425,11 +457,11 @@ def _set_attr(obj_, path, value):
             obj[attr_name] = new_value
             return old_value
         except Exception as f:
-            get_logger().error(PATH_NOT_FOUND, cause=e)
+            get_logger().error(PATH_NOT_FOUND, cause=[f, e])
 
 
 def lower_match(value, candidates):
-    return [v for v in candidates if v.lower()==value.lower()]
+    return [v for v in candidates if v.lower() == value.lower()]
 
 
 def wrap(v):
@@ -441,7 +473,7 @@ def wrap(v):
 
     type_ = _get(v, CLASS)
 
-    if type_ is dict:
+    if type_ in (dict, OrderedDict):
         m = object.__new__(Data)
         _set(m, SLOT, v)
         return m
@@ -467,7 +499,7 @@ def _wrap_leaves(value):
         return None
 
     class_ = _get(value, CLASS)
-    if class_ in (text_type, binary_type, int, float):
+    if class_ in (text, binary_type, int, float):
         return value
     if class_ in data_types:
         if class_ is Data:
@@ -511,14 +543,16 @@ def _wrap_leaves(value):
 
 
 def unwrap(v):
+    if v is None:
+        return None
     _type = _get(v, CLASS)
-    if _type is Data:
+    if _type is NullType:
+        return None
+    elif _type is Data:
         d = _get(v, SLOT)
         return d
     elif _type is FlatList:
         return v.list
-    elif _type is NullType:
-        return None
     elif _type is DataObject:
         d = _get(v, OBJ)
         if _get(d, CLASS) in data_types:
@@ -538,7 +572,7 @@ def listwrap(value):
     value -> [value]
     [...] -> [...]  (unchanged list)
 
-    ##MOTIVATION##
+    ## MOTIVATION ##
     OFTEN IT IS NICE TO ALLOW FUNCTION PARAMETERS TO BE ASSIGNED A VALUE,
     OR A list-OF-VALUES, OR NULL.  CHECKING FOR WHICH THE CALLER USED IS
     TEDIOUS.  INSTEAD WE CAST FROM THOSE THREE CASES TO THE SINGLE CASE
@@ -563,7 +597,7 @@ def listwrap(value):
         return FlatList()
     elif is_list(value):
         return wrap(value)
-    elif isinstance(value, set):
+    elif is_many(value):
         return wrap(list(value))
     else:
         return wrap([unwrap(value)])
@@ -587,7 +621,7 @@ def tuplewrap(value):
     """
     INTENDED TO TURN lists INTO tuples FOR USE AS KEYS
     """
-    if isinstance(value, (list, set, tuple) + generator_types):
+    if is_many(value):
         return tuple(tuplewrap(v) if is_sequence(v) else v for v in value)
     return unwrap(value),
 
@@ -596,3 +630,9 @@ from mo_dots.datas import Data, SLOT, data_types, is_data
 from mo_dots.nones import Null, NullType
 from mo_dots.lists import FlatList, is_list, is_sequence, is_container, is_many
 from mo_dots.objects import DataObject
+
+# EXPORT
+import mo_dots.nones as temp
+temp.wrap = wrap
+temp.is_sequence = is_sequence
+del temp

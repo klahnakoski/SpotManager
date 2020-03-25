@@ -5,15 +5,14 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from __future__ import absolute_import, division, unicode_literals
 
-from mo_future import is_text, is_binary
 from copy import copy
 
-from mo_dots import Data, is_data, join_field, set_default, split_field, wrap, is_many
-from mo_future import generator_types, text_type
+from mo_dots import Data, is_data, is_many, join_field, set_default, split_field, wrap
+from mo_future import is_text
 from mo_logs import Log
 
 type2container = Data()
@@ -25,7 +24,6 @@ _Query = None
 
 
 def _delayed_imports():
-    global type2container
     global _ListContainer
     global _Cube
     global _run
@@ -44,9 +42,9 @@ def _delayed_imports():
 
 class Container(object):
     """
-    CONTAINERS HOLD MULTIPLE FACTS AND CAN HANDLE
+    CONTAINERS HOLD MULTIPLE INDICES AND CAN HANDLE
     GENERAL JSON QUERY EXPRESSIONS ON ITS CONTENTS
-    METADATA FOR A Container IS CALL A Namespace
+    METADATA FOR A Container IS CALLED A Namespace
     """
 
 
@@ -114,10 +112,6 @@ class Container(object):
         raise NotImplementedError()
 
     def window(self, window):
-        raise NotImplementedError()
-
-    def having(self, having):
-        _ = having
         raise NotImplementedError()
 
     def format(self, format):

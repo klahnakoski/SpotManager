@@ -1,10 +1,6 @@
 # `jx_elasticsearch`
 
-<<<<<<< HEAD
-This library implements [JSON Query Expressions]() atop an Elasticsearch.
-=======
 This library implements [JSON Query Expressions]() atop an Elasticsearch instance.
->>>>>>> dev
 
 
 ## Contribution
@@ -18,8 +14,6 @@ There are two directories in the git history that may help for old versions.
 
 Both of these directories are too old to be used directly, but they do have code templates for their respective scripting language, and they do have other hints about how to construct queries with the limitations of the older versions.
 
-<<<<<<< HEAD
-=======
 
 
 ## elasticsearch.py
@@ -46,4 +40,3 @@ selecting only the properties it requires.
 
 
 
->>>>>>> dev

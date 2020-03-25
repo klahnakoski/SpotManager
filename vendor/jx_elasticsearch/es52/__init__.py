@@ -5,33 +5,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http:# mozilla.org/MPL/2.0/.
 #
-<<<<<<< HEAD
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
-#
-from __future__ import absolute_import, division, unicode_literals
-
-from mo_future import is_text, is_binary
-from jx_base import Column, container
-from jx_base.container import Container
-from jx_base.dimensions import Dimension
-from jx_base.expressions import jx_expression
-from jx_base.query import QueryOp
-from jx_base.language import is_op
-from jx_elasticsearch.es52.aggs import es_aggsop, is_aggsop
-from jx_elasticsearch.es52.deep import es_deepop, is_deepop
-from jx_elasticsearch.es52.setop import es_setop, is_setop
-from jx_elasticsearch.es52.util import aggregates
-from jx_elasticsearch.meta import ElasticsearchMetadata, Table
-from jx_python import jx
-from mo_dots import Data, coalesce, is_list, join_field, listwrap, split_field, startswith_field, unwrap, wrap
-from mo_future import sort_using_key
-from mo_json import EXISTS, OBJECT, value2json
-from mo_json.typed_encoder import EXISTS_TYPE
-from mo_kwargs import override
-from mo_logs import Except, Log
-from mo_times import Date
-from pyLibrary.env import elasticsearch, http
-=======
 # Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from __future__ import absolute_import, division, unicode_literals
@@ -62,7 +35,6 @@ from mo_kwargs import override
 from mo_logs import Except, Log
 from mo_times import Date
 from mo_http import http
->>>>>>> dev
 
 
 class ES52(Container):
@@ -82,16 +54,10 @@ class ES52(Container):
     def __init__(
         self,
         host,
-<<<<<<< HEAD
-        index,
-        type=None,
-        name=None,
-=======
         index,  # THE NAME OF THE SNOWFLAKE (IF WRITING)
         alias=None,  # THE NAME OF THE SNOWFLAKE (FOR READING)
         type=None,
         name=None,  # THE FULL NAME OF THE TABLE (THE NESTED PATH INTO THE SNOWFLAKE)
->>>>>>> dev
         port=9200,
         read_only=True,
         timeout=None,  # NUMBER OF SECONDS TO WAIT FOR RESPONSE, OR SECONDS TO WAIT FOR DOWNLOAD (PASSED TO requests)
@@ -105,19 +71,6 @@ class ES52(Container):
                 "type": "elasticsearch",
                 "settings": unwrap(kwargs)
             }
-<<<<<<< HEAD
-        self.settings = kwargs
-        self.name = name = coalesce(name, index)
-        if read_only:
-            self.es = elasticsearch.Alias(alias=index, kwargs=kwargs)
-        else:
-            self.es = elasticsearch.Cluster(kwargs=kwargs).get_index(read_only=read_only, kwargs=kwargs)
-
-        self._namespace = ElasticsearchMetadata(kwargs=kwargs)
-        self.settings.type = self.es.settings.type
-        self.edges = Data()
-        self.worker = None
-=======
         self.edges = Data()  # SET EARLY, SO OTHER PROCESSES CAN REQUEST IT
         self.worker = None
         self.settings = kwargs
@@ -131,7 +84,6 @@ class ES52(Container):
         self._ensure_max_result_window_set(name)
         self.settings.type = self.es.settings.type
         self.stats = QueryStats(self.es.cluster)
->>>>>>> dev
 
         columns = self.snowflake.columns  # ABSOLUTE COLUMNS
         is_typed = any(c.es_column == EXISTS_TYPE for c in columns)
@@ -146,18 +98,6 @@ class ES52(Container):
 
         if not typed:
             # ADD EXISTENCE COLUMNS
-<<<<<<< HEAD
-            all_paths = {".": None}  # MAP FROM path TO parent TO MAKE A TREE
-
-            def nested_path_of(v):
-                if not v:
-                    return []
-                else:
-                    return [v] + nested_path_of(all_paths[v])
-
-            all = sort_using_key(set(step for path in self.snowflake.query_paths for step in path), key=lambda p: len(split_field(p)))
-            for step in sorted(all):
-=======
             all_paths = {'.': None}  # MAP FROM path TO parent TO MAKE A TREE
 
             def nested_path_of(v):
@@ -167,7 +107,6 @@ class ES52(Container):
 
             query_paths = sort_using_key(set(step for path in self.snowflake.query_paths for step in path), key=lambda p: len(split_field(p)))
             for step in query_paths:
->>>>>>> dev
                 if step in all_paths:
                     continue
                 else:
@@ -178,20 +117,6 @@ class ES52(Container):
                                 best = candidate
                     all_paths[step] = best
             for p in all_paths.keys():
-<<<<<<< HEAD
-                nested_path = nested_path_of(all_paths[p])
-                if not nested_path:
-                    nested_path = ['.']
-                self.namespace.meta.columns.add(Column(
-                    name=p,
-                    es_column=p,
-                    es_index=self.name,
-                    es_type=OBJECT,
-                    jx_type=EXISTS,
-                    nested_path=nested_path,
-                    last_updated=Date.now()
-                ))
-=======
                 nested_path = nested_path_of(p)
                 try:
                     self.namespace.meta.columns.add(Column(
@@ -206,7 +131,6 @@ class ES52(Container):
                     ))
                 except Exception as e:
                     raise e
->>>>>>> dev
 
     @property
     def snowflake(self):
@@ -227,33 +151,10 @@ class ES52(Container):
         settings.settings = None
         return settings
 
-<<<<<<< HEAD
-    def __enter__(self):
-        Log.error("No longer used")
-        return self
-
-    def __exit__(self, type, value, traceback):
-        if not self.worker:
-            return
-
-        if isinstance(value, Exception):
-            self.worker.stop()
-            self.worker.join()
-        else:
-            self.worker.join()
-
-    @property
-    def query_path(self):
-        return join_field(split_field(self.name)[1:])
-
-=======
->>>>>>> dev
     @property
     def url(self):
         return self.es.url
 
-<<<<<<< HEAD
-=======
     def _ensure_max_result_window_set(self, name):
         # TODO : CHECK IF THIS IS ALREADY SET, IT TAKES TOO LONG
         for i, s in self.es.cluster.get_metadata().indices.items():
@@ -266,16 +167,12 @@ class ES52(Container):
                     }})
                     break
 
->>>>>>> dev
     def query(self, _query):
         try:
             query = QueryOp.wrap(_query, container=self, namespace=self.namespace)
 
-<<<<<<< HEAD
-=======
             self.stats.record(query)
 
->>>>>>> dev
             for s in listwrap(query.select):
                 if s.aggregate != None and not aggregates.get(s.aggregate):
                     Log.error(
@@ -291,8 +188,6 @@ class ES52(Container):
                 q2.frum = result
                 return jx.run(q2)
 
-<<<<<<< HEAD
-=======
             if is_bulk_agg(self.es, query):
                 return es_bulkaggsop(self, frum, query)
             if is_bulk_set(self.es, query):
@@ -300,7 +195,6 @@ class ES52(Container):
 
             query.limit = temper_limit(query.limit, query)
 
->>>>>>> dev
             if is_deepop(self.es, query):
                 return es_deepop(self.es, query)
             if is_aggsop(self.es, query):
@@ -315,35 +209,6 @@ class ES52(Container):
                 Log.error("Problem (Tried to clear Elasticsearch cache)", e)
             Log.error("problem", e)
 
-<<<<<<< HEAD
-    def addDimension(self, dim):
-        if is_list(dim):
-            Log.error("Expecting dimension to be a object, not a list:\n{{dim}}",  dim= dim)
-        self._addDimension(dim, [])
-
-    def _addDimension(self, dim, path):
-        dim.full_name = dim.name
-        for e in dim.edges:
-            d = Dimension(e, dim, self)
-            self.edges[d.full_name] = d
-
-    def __getitem__(self, item):
-        c = self.get_columns(table_name=self.name, column_name=item)
-        if c:
-            if len(c) > 1:
-                Log.error("Do not know how to handle multipole matches")
-            return c[0]
-
-        e = self.edges[item]
-        if not c:
-            Log.warning("Column with name {{column|quote}} can not be found in {{table}}", column=item, table=self.name)
-        return e
-
-    def __getattr__(self, item):
-        return self.edges[item]
-
-=======
->>>>>>> dev
     def update(self, command):
         """
         EXPECTING command == {"set":term, "where":where}
@@ -383,10 +248,6 @@ class ES52(Container):
             response = self.es.cluster.post(
                 es_index.path + "/" + "_bulk",
                 data=content,
-<<<<<<< HEAD
-                headers={"Content-Type": "application/json"},
-=======
->>>>>>> dev
                 timeout=self.settings.timeout,
                 params={"wait_for_active_shards": self.settings.wait_for_active_shards}
             )
@@ -394,19 +255,10 @@ class ES52(Container):
                 Log.error("could not update: {{error}}", error=[e.error for i in response["items"] for e in i.values() if e.status not in (200, 201)])
 
         # DELETE BY QUERY, IF NEEDED
-<<<<<<< HEAD
-        if "." in listwrap(command.clear):
-            es_filter = self.es.cluster.lang[jx_expression(command.where)].to_esfilter(schema)
-=======
         if "." in listwrap(command['clear']):
             es_filter = ES52Lang[jx_expression(command.where)].partial_eval().to_esfilter(schema)
->>>>>>> dev
             self.es.delete_record(es_filter)
             return
 
         es_index.flush()
 
-<<<<<<< HEAD
-
-=======
->>>>>>> dev

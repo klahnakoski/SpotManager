@@ -5,7 +5,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
 from __future__ import absolute_import, division, unicode_literals
@@ -37,7 +37,8 @@ def milli2datetime(u):
 
 def datetime2string(value, format="%Y-%m-%d %H:%M:%S"):
     try:
-        return value.strftime(format)
+        utc_time = datetime.utcfromtimestamp(value.timestamp())
+        return utc_time.strftime(format)
     except Exception as e:
         from mo_logs import Log
         Log.error("Can not format {{value}} with {{format}}", value=value, format=format, cause=e)

@@ -5,16 +5,14 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
 from __future__ import absolute_import, division, unicode_literals
 
-from collections import Iterable, Mapping, Set
-
 from mo_dots import is_data, is_sequence, tuplewrap, unwrap, wrap
 from mo_dots.objects import datawrap
-from mo_future import PY2, iteritems
+from mo_future import PY2, iteritems, Set, Mapping, Iterable, first
 from mo_logs import Log
 from mo_logs.exceptions import suppress_exception
 
@@ -71,7 +69,7 @@ class UniqueIndex(Set, Mapping):
         return self._data.keys()
 
     def pop(self):
-        output = iteritems(self._data).next()[1]
+        output = first(iteritems(self._data))[1]
         self.remove(output)
         return wrap(output)
 

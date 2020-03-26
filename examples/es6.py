@@ -19,8 +19,8 @@ import mo_math
 from spot.instance_manager import InstanceManager
 
 JRE = "jre-8u131-linux-x64.rpm"
-PYPY_DIR = "pypy-6.0.0-linux_x86_64-portable"
-PYPY_BZ2 = "pypy-6.0.0-linux_x86_64-portable.tar.bz2"
+PYPY_DIR = "pypy2.7-v7.3.0-linux64"
+PYPY_BZ2 = "pypy2.7-v7.3.0-linux64.tar.bz2"
 RESOURCES = File("resources")
 
 

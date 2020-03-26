@@ -12,11 +12,12 @@ from copy import copy
 
 import boto
 import boto.ec2
+import boto.vpc
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType
 from boto.ec2.networkinterface import NetworkInterfaceCollection, NetworkInterfaceSpecification
 from boto.utils import ISO8601
-import boto.vpc
 
+import mo_math
 from jx_python import jx
 from jx_python.containers.list_usingPythonList import ListContainer
 from mo_collections import UniqueIndex
@@ -24,17 +25,19 @@ from mo_dots import Data, FlatList, coalesce, listwrap, unwrap, wrap, Null
 from mo_dots.objects import datawrap
 from mo_files import File
 from mo_future import text
+from mo_http import http
 from mo_json import value2json
 from mo_kwargs import override
 from mo_logs import Except, Log, constants, startup
 from mo_logs.startup import SingleInstance
-import mo_math
 from mo_math import MAX, SUM
 from mo_threads import Lock, Signal, Thread, Till
 from mo_threads.threads import MAIN_THREAD
 from mo_times import DAY, Date, Duration, HOUR, MINUTE, SECOND, Timer, WEEK
 from pyLibrary import convert
 from pyLibrary.meta import cache, new_instance
+
+_please_import = http
 
 ENABLE_SIDE_EFFECTS = True
 ALLOW_SHUTDOWN = False
@@ -442,7 +445,12 @@ class SpotManager(object):
                 time_to_stop_trying = {}
                 please_setup = [
                     (i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests]
-                    if i.id and not i.tags.get("Name") and i._state.name == "running" and Date.now() > Date(i.launch_time) + DELAY_BEFORE_SETUP
+                    if i.id
+                       and (
+                           not i.tags.get("Name") or i.tags.get("Name") == self.settings.ec2.instance.name + " (setup)"
+                       )
+                       and i._state.name == "running"
+                       and Date.now() > Date(i.launch_time) + DELAY_BEFORE_SETUP
                 ]
 
                 for i, r in please_setup:

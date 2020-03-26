@@ -89,7 +89,7 @@ class Connection(object):
                 return False
             else:
                 return True
-        except Exception:
+        except Exception as e:
             return False
 
     def warn_only(self):

@@ -563,6 +563,7 @@ class SpotManager(object):
 
     @override
     def _request_spot_instances(self, price, availability_zone_group, instance_type, kwargs):
+        kwargs.self = None
         kwargs.kwargs = None
 
         # m3 INSTANCES ARE NOT ALLOWED PLACEMENT GROUP

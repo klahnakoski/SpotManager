@@ -5,26 +5,24 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
+from mo_future import is_text, is_binary
 # FOR WINDOWS INSTALL OF psycopg2
 # http://stickpeople.com/projects/python/win-psycopg/2.6.0/psycopg2-2.6.0.win32-py2.7-pg9.4.1-release.exe
 import psycopg2
 from psycopg2.extensions import adapt
 
-from pyLibrary import convert
-from mo_logs.exceptions import suppress_exception
-from mo_logs import Log
-from mo_kwargs import override
 from jx_python import jx
-from pyLibrary.sql import SQL
+from mo_kwargs import override
+from mo_logs import Log
+from mo_logs.exceptions import suppress_exception
 from mo_logs.strings import expand_template
 from mo_threads import Lock
+from mo_sql import SQL, SQL_INSERT, sql_list, SQL_VALUES, sql_iso
 
 
 class Redshift(object):
@@ -87,11 +85,10 @@ class Redshift(object):
 
         try:
             command = (
-                "INSERT INTO " + self.quote_column(table_name) + "(" +
-                ",".join([self.quote_column(k) for k in keys]) +
-                ") VALUES (" +
-                ",".join([self.quote_value(record[k]) for k in keys]) +
-                ")"
+                SQL_INSERT + self.quote_column(table_name) +
+                sql_iso(sql_list(self.quote_column(k) for k in keys)) +
+                SQL_VALUES +
+                sql_iso(sql_list(self.quote_value(record[k]) for k in keys))
             )
 
             self.execute(command)
@@ -110,17 +107,19 @@ class Redshift(object):
 
         try:
             self.execute(
-                "DELETE FROM " + self.quote_column(table_name) + " WHERE _id IN {{ids}}",
+                "DELETE FROM " + self.quote_column(table_name) + SQL_WHERE + "_id IN {{ids}}",
                 {"ids": self.quote_column([r["_id"] for r in records])}
             )
 
             command = (
-                "INSERT INTO " + self.quote_column(table_name) + "(" +
-                ",".join([self.quote_column(k) for k in columns]) +
-                ") VALUES " + ",\n".join([
-                sql_iso(",".join([self.quote_value(r.get(k, None)) for k in columns]))
-                for r in records
-            ])
+                SQL_INSERT + self.quote_column(table_name) +
+                sql_iso(sql_list(self.quote_column(k) for k in columns)) +
+                SQL_VALUES +
+                sql_iso(sql_list(
+                    self.quote_value(r.get(k, None))
+                    for k in columns
+                    for r in records
+                ))
             )
             self.execute(command)
         except Exception as e:
@@ -137,19 +136,14 @@ class Redshift(object):
                 output[k]=self.quote_value(v)
         return output
 
-    def quote_column(self, name):
-        if isinstance(name, text_type):
-            return SQL('"' + name.replace('"', '""') + '"')
-        return SQL(sql_iso((", ".join(self.quote_value(v) for v in name))))
-
     def quote_value(self, value):
         if value ==None:
             return SQL_NULL
-        if isinstance(value, list):
+        if is_list(value):
             json = value2json(value)
             return self.quote_value(json)
 
-        if isinstance(value, text_type) and len(value) > 256:
+        if is_text(value) and len(value) > 256:
             value = value[:256]
         return SQL(adapt(value))
 

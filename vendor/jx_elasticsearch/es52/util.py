@@ -5,27 +5,30 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http:# mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
-from jx_elasticsearch.es52.expressions import Variable
-from mo_dots import wrap
-from mo_future import text_type
-from mo_json.typed_encoder import STRING, BOOLEAN, NUMBER, OBJECT
+import mo_math
+from jx_base.expressions import Variable
+from jx_base.language import is_op
+from jx_base.query import DEFAULT_LIMIT, MAX_LIMIT
+from jx_elasticsearch.es52.expressions.and_op import es_and
+from mo_dots import wrap, Null, coalesce
+from mo_future import is_text, first
+from mo_json import BOOLEAN, IS_NULL, NUMBER, OBJECT, STRING, NUMBER_TYPES
 from mo_logs import Log
+from pyLibrary.convert import value2boolean
 
 
 def es_query_template(path):
     """
     RETURN TEMPLATE AND PATH-TO-FILTER AS A 2-TUPLE
     :param path: THE NESTED PATH (NOT INCLUDING TABLE NAME)
-    :return:
+    :return: (es_query, es_filters) TUPLE
     """
 
-    if not isinstance(path, text_type):
+    if not is_text(path):
         Log.error("expecting path to be a string")
 
     if path != ".":
@@ -62,7 +65,7 @@ def jx_sort_to_es_sort(sort, schema):
 
     output = []
     for s in sort:
-        if isinstance(s.value, Variable):
+        if is_op(s.value, Variable):
             cols = schema.leaves(s.value.var)
             if s.sort == -1:
                 types = OBJECT, STRING, NUMBER, BOOLEAN
@@ -71,11 +74,21 @@ def jx_sort_to_es_sort(sort, schema):
 
             for type in types:
                 for c in cols:
-                    if c.jx_type == type:
-                        if s.sort == -1:
-                            output.append({c.es_column: "desc"})
+                    if c.jx_type == type or (c.jx_type in NUMBER_TYPES and type in NUMBER_TYPES):
+                        np = first(c.nested_path)
+                        if np == '.':
+                            if s.sort == -1:
+                                output.append({c.es_column: "desc"})
+                            else:
+                                output.append(c.es_column)
                         else:
-                            output.append(c.es_column)
+                            output.append({c.es_column: {
+                                "order": {1: "asc", -1: "desc"}[s.sort],
+                                "nested": {
+                                    "path": np,
+                                    "filter": {"match_all": {}}
+                                },
+                            }})
         else:
             from mo_logs import Log
 
@@ -91,8 +104,11 @@ aggregates = {
     "sum": "sum",
     "add": "sum",
     "count": "value_count",
+    "count_values": "count_values",
     "maximum": "max",
     "minimum": "min",
+    "and": "min",
+    "or": "max",
     "max": "max",
     "min": "min",
     "mean": "avg",
@@ -115,21 +131,23 @@ aggregates = {
 NON_STATISTICAL_AGGS = {"none", "one"}
 
 
-def es_and(terms):
-    return wrap({"bool": {"filter": terms}})
+pull_functions = {
+    IS_NULL: lambda x: None,
+    STRING: lambda x: x,
+    NUMBER: lambda x: float(x) if x !=None else None,
+    BOOLEAN: value2boolean,
+}
 
 
-def es_or(terms):
-    return wrap({"bool": {"should": terms}})
+def temper_limit(proposed_limit, query):
+    """
+    SUITABLE DEFAULTS AND LIMITS
+    """
+    from jx_elasticsearch.es52.agg_bulk import is_bulk_agg
+    from jx_elasticsearch.es52.set_bulk import is_bulk_set
+    if is_bulk_agg(Null, query) or is_bulk_set(Null, query):
+        return coalesce(proposed_limit, query.limit)
+    else:
+        return mo_math.min(coalesce(proposed_limit, query.limit, DEFAULT_LIMIT), MAX_LIMIT)
 
 
-def es_not(term):
-    return wrap({"bool": {"must_not": term}})
-
-
-def es_script(term):
-    return wrap({"script": {"lang": "painless", "inline": term}})
-
-
-def es_missing(term):
-    return {"bool": {"must_not": {"exists": {"field": term}}}}

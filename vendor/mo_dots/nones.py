@@ -4,19 +4,21 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
-from mo_dots import _setdefault, wrap, split_field
-from mo_future import text_type, binary_type
+from mo_future import is_binary, text, none_type
 
+from mo_dots.utils import CLASS, OBJ
+
+wrap = None
+is_sequence = None
 _get = object.__getattribute__
 _set = object.__setattr__
 _zero_list = []
+_null_hash = hash(None)
 
 
 class NullType(object):
@@ -35,7 +37,7 @@ class NullType(object):
         key - THE dict ITEM REFERENCE (DOT(.) IS NOT ESCAPED)
         """
         d = _get(self, "__dict__")
-        d["_obj"] = obj
+        d[OBJ] = obj
         d["__key__"] = key
 
     def __bool__(self):
@@ -45,7 +47,7 @@ class NullType(object):
         return False
 
     def __add__(self, other):
-        if isinstance(other, list):
+        if is_sequence(other):
             return other
         return Null
 
@@ -58,7 +60,7 @@ class NullType(object):
     def __iadd__(self, other):
         try:
             d = _get(self, "__dict__")
-            o = d["_obj"]
+            o = d[OBJ]
             if o is None:
                 return self
             key = d["__key__"]
@@ -108,10 +110,16 @@ class NullType(object):
         return Null
 
     def __eq__(self, other):
-        return other == None or isinstance(other, NullType)
+        class_ = _get(other, CLASS)
+        if class_ in (none_type, NullType):
+            return True
+        elif class_ is list and not other:
+            return True
+        else:
+            return other == None
 
     def __ne__(self, other):
-        return other is not None and not isinstance(other, NullType)
+        return other is not None and _get(other, CLASS) is not NullType and other != None
 
     def __or__(self, other):
         if other is True:
@@ -153,7 +161,7 @@ class NullType(object):
     def __getitem__(self, key):
         if isinstance(key, slice):
             return Null
-        elif isinstance(key, binary_type):
+        elif is_binary(key):
             key = key.decode("utf8")
         elif isinstance(key, int):
             return NullType(self, key)
@@ -165,14 +173,14 @@ class NullType(object):
         return output
 
     def __getattr__(self, key):
-        key = text_type(key)
+        key = text(key)
 
         d = _get(self, "__dict__")
-        o = wrap(d["_obj"])
+        o = wrap(d[OBJ])
         k = d["__key__"]
         if o is None:
             return Null
-        elif isinstance(o, NullType):
+        elif _get(o, CLASS) is NullType:
             return NullType(self, key)
         v = o.get(k)
         if v == None:
@@ -184,10 +192,10 @@ class NullType(object):
             Log.error("not expected", cause=e)
 
     def __setattr__(self, key, value):
-        key = text_type(key)
+        key = text(key)
 
         d = _get(self, "__dict__")
-        o = wrap(d["_obj"])
+        o = wrap(d[OBJ])
         k = d["__key__"]
 
         seq = [k] + [key]
@@ -195,7 +203,7 @@ class NullType(object):
 
     def __setitem__(self, key, value):
         d = _get(self, "__dict__")
-        o = d["_obj"]
+        o = d[OBJ]
         if o is None:
             return
         k = d["__key__"]
@@ -225,7 +233,7 @@ class NullType(object):
         return "Null"
 
     def __hash__(self):
-        return hash(None)
+        return _null_hash
 
 
 Null = NullType()   # INSTEAD OF None!!!
@@ -240,9 +248,9 @@ def _assign_to_null(obj, path, value, force=True):
     try:
         if obj is Null:
             return
-        if isinstance(obj, NullType):
+        if _get(obj, CLASS) is NullType:
             d = _get(obj, "__dict__")
-            o = d["_obj"]
+            o = d[OBJ]
             p = d["__key__"]
             s = [p]+path
             return _assign_to_null(o, s, value)
@@ -276,3 +284,16 @@ def _split_field(field):
         return []
     else:
         return [k.replace("\a", ".") for k in field.replace("\\.", "\a").split(".")]
+
+
+def _setdefault(obj, key, value):
+    """
+    DO NOT USE __dict__.setdefault(obj, key, value), IT DOES NOT CHECK FOR obj[key] == None
+    """
+    v = obj.get(key)
+    if v == None:
+        obj[key] = value
+        return value
+    return v
+
+

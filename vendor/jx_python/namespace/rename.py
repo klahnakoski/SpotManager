@@ -5,24 +5,22 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
-from collections import Mapping
 from copy import copy
 
-from mo_dots import set_default, wrap, coalesce, Data, listwrap, unwraplist
-from mo_logs import Log
-from mo_math import Math
-from mo_times.dates import Date
-
 from jx_base.dimensions import Dimension
-from jx_base.queries import is_variable_name
-from jx_python.namespace import Namespace, convert_list
+from jx_base.utils import is_variable_name
 from jx_base.query import QueryOp
+from jx_base.language import is_op
+from jx_python.namespace import Namespace, convert_list
+from mo_dots import Data, coalesce, is_data, is_list, listwrap, set_default, unwraplist, wrap, is_many
+from mo_future import is_text
+from mo_logs import Log
+from mo_math import is_number
+from mo_times.dates import Date
 
 
 class Rename(Namespace):
@@ -32,7 +30,7 @@ class Rename(Namespace):
         EXPECTING A LIST OF {"name":name, "value":value} OBJECTS TO PERFORM A MAPPING
         """
         dimensions = wrap(dimensions)
-        if isinstance(dimensions, Mapping) and dimensions.name == None:
+        if is_data(dimensions) and dimensions.name == None:
             # CONVERT TO A REAL DIMENSION DEFINITION
             dimensions = {"name": ".", "type": "set", "edges":[{"name": k, "field": v} for k, v in dimensions.items()]}
 
@@ -44,19 +42,19 @@ class Rename(Namespace):
         """
         if expr is True or expr == None or expr is False:
             return expr
-        elif Math.is_number(expr):
+        elif is_number(expr):
             return expr
         elif expr == ".":
             return "."
         elif is_variable_name(expr):
             return coalesce(self.dimensions[expr], expr)
-        elif isinstance(expr, text_type):
+        elif is_text(expr):
             Log.error("{{name|quote}} is not a valid variable name", name=expr)
         elif isinstance(expr, Date):
             return expr
-        elif isinstance(expr, QueryOp):
+        elif is_op(expr, QueryOp):
             return self._convert_query(expr)
-        elif isinstance(expr, Mapping):
+        elif is_data(expr):
             if expr["from"]:
                 return self._convert_query(expr)
             elif len(expr) >= 2:
@@ -66,7 +64,7 @@ class Rename(Namespace):
                 # ASSUME SINGLE-CLAUSE EXPRESSION
                 k, v = expr.items()[0]
                 return converter_map.get(k, self._convert_bop)(self, k, v)
-        elif isinstance(expr, (list, set, tuple)):
+        elif is_many(expr):
             return wrap([self.convert(value) for value in expr])
         else:
             return expr
@@ -77,7 +75,6 @@ class Rename(Namespace):
         output.where = self.convert(query.where)
         output.frum = self._convert_from(query.frum)
         output.edges = convert_list(self._convert_edge, query.edges)
-        output.having = convert_list(self._convert_having, query.having)
         output.window = convert_list(self._convert_window, query.window)
         output.sort = self._convert_clause(query.sort)
         output.format = query.format
@@ -88,16 +85,16 @@ class Rename(Namespace):
 
 
     def _convert_bop(self, op, term):
-        if isinstance(term, list):
-            return {op: map(self.convert, term)}
+        if is_list(term):
+            return {op: list(map(self.convert, term))}
 
         return {op: {self.convert(var): val for var, val in term.items()}}
 
     def _convert_many(self, k, v):
-        return {k: map(self.convert, v)}
+        return {k: list(map(self.convert, v))}
 
     def _convert_from(self, frum):
-        if isinstance(frum, Mapping):
+        if is_data(frum):
             return Data(name=self.convert(frum.name))
         else:
             return self.convert(frum)
@@ -126,7 +123,7 @@ class Rename(Namespace):
 
         if clause == None:
             return None
-        elif isinstance(clause, Mapping):
+        elif is_data(clause):
             return set_default({"value": self.convert(clause.value)}, clause)
         else:
             return [set_default({"value": self.convert(c.value)}, c) for c in clause]

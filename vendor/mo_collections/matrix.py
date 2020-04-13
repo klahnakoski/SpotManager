@@ -5,17 +5,13 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
-from mo_future import text_type, xrange, transpose
-from mo_dots import Null, Data, coalesce, get_module
-from mo_kwargs import override
+from mo_dots import Data, Null, coalesce, get_module, is_sequence
+from mo_future import text, transpose, xrange
 from mo_logs import Log
-from mo_logs.exceptions import suppress_exception
 
 
 class Matrix(object):
@@ -40,7 +36,7 @@ class Matrix(object):
         self.num = len(dims)
         self.dims = tuple(dims)
         if zeros != None:
-            if self.num == 0 or any(d == 0 for d in dims):  #NO DIMS, OR HAS A ZERO DIM, THEN IT IS A NULL CUBE
+            if self.num == 0 or any(d == 0 for d in dims):  # NO DIMS, OR HAS A ZERO DIM, THEN IT IS A NULL CUBE
                 if hasattr(zeros, "__call__"):
                     self.cube = zeros()
                 else:
@@ -61,7 +57,7 @@ class Matrix(object):
         return output
 
     def __getitem__(self, index):
-        if not isinstance(index, (list, tuple)):
+        if not is_sequence(index):
             if isinstance(index, slice):
                 sub = self.cube[index]
                 output = Matrix()
@@ -171,10 +167,11 @@ class Matrix(object):
 
     def __iter__(self):
         if not self.dims:
-            return [self.value].__iter__()
+            yield (tuple(), self.value)
         else:
             # TODO: MAKE THIS FASTER BY NOT CALLING __getitem__ (MAKES CUBE OBJECTS)
-            return ((c, self[c]) for c in self._all_combos())
+            for c in self._all_combos():
+                yield (c, self[c])
 
     def __float__(self):
         return self.value
@@ -382,10 +379,10 @@ def index_to_coordinate(dims):
     coords = []
     for i in domain:
         if i == num_dims - 1:
-            commands.append("\tc" + text_type(i) + " = index")
+            commands.append("\tc" + text(i) + " = index")
         else:
-            commands.append("\tc" + text_type(i) + ", index = divmod(index, " + text_type(prod[i]) + ")")
-        coords.append("c" + text_type(i))
+            commands.append("\tc" + text(i) + ", index = divmod(index, " + text(prod[i]) + ")")
+        coords.append("c" + text(i))
     output = None
     if num_dims == 1:
         code = (
@@ -400,8 +397,9 @@ def index_to_coordinate(dims):
             "\treturn " + ", ".join(coords)
         )
 
-    exec(code)
-    return output
+    fake_locals = {}
+    exec(code, globals(), fake_locals)
+    return fake_locals["output"]
 
 
 def _product(values):

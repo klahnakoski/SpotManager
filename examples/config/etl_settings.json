@@ -41,13 +41,13 @@
 		{"instance_type": "h1.16xlarge", "num_drives": 24, "memory": 256, "cpu": 64, "utility": 64},
 
 //		{"instance_type": "m1.small", "ecu": 3, "num_drives": 1, "memory": 1.7, "cpu": 1, "utility": 1},  # TOO SMALL
-		{"instance_type": "m1.medium", "ecu": 3, "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 1},
-		{"instance_type": "m1.large", "ecu": 6.5, "num_drives": 2, "memory": 7.5, "cpu": 2, "utility": 2},
-		{"instance_type": "m1.xlarge", "ecu": 13, "num_drives": 4, "memory": 15, "cpu": 4, "utility": 4},
-
-		{"instance_type": "m2.xlarge",  "num_drives": 1, "memory": 17.1, "cpu": 2, "utility": 2},
-		{"instance_type": "m2.2xlarge",  "num_drives": 1, "memory": 34, "cpu": 4, "utility": 4},
-		{"instance_type": "m2.4xlarge", "num_drives": 2, "memory": 68, "cpu": 8, "utility": 8},
+//		{"instance_type": "m1.medium", "ecu": 3, "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 1},
+//		{"instance_type": "m1.large", "ecu": 6.5, "num_drives": 2, "memory": 7.5, "cpu": 2, "utility": 2},
+//		{"instance_type": "m1.xlarge", "ecu": 13, "num_drives": 4, "memory": 15, "cpu": 4, "utility": 4},
+//
+//		{"instance_type": "m2.xlarge",  "num_drives": 1, "memory": 17.1, "cpu": 2, "utility": 2},
+//		{"instance_type": "m2.2xlarge",  "num_drives": 1, "memory": 34, "cpu": 4, "utility": 4},
+//		{"instance_type": "m2.4xlarge", "num_drives": 2, "memory": 68, "cpu": 8, "utility": 8},
 
 		{"instance_type": "m3.medium", "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 1},
 		{"instance_type": "m3.large", "num_drives": 1, "memory": 7.5, "cpu": 2, "utility": 2},
@@ -127,7 +127,7 @@
 		}
 	},
 	"constants":{
-		"pyLibrary.env.http.default_headers":{"Referer": "https://github.com/klahnakoski/SpotManager"}
+		"mo_http.http.default_headers":{"Referer": "https://github.com/klahnakoski/SpotManager"}
 	},
 	"debug": {
 		"trace": true,

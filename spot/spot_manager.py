@@ -6,40 +6,46 @@
 #
 # Author: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import division, unicode_literals
 
 from copy import copy
 
 import boto
 import boto.ec2
 import boto.vpc
-from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
-from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
+from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType
+from boto.ec2.networkinterface import NetworkInterfaceCollection, NetworkInterfaceSpecification
 from boto.utils import ISO8601
 
+import mo_math
 from jx_python import jx
 from jx_python.containers.list_usingPythonList import ListContainer
 from mo_collections import UniqueIndex
-from mo_dots import unwrap, coalesce, wrap, listwrap, FlatList, Data
+from mo_dots import Data, FlatList, coalesce, listwrap, unwrap, wrap, Null
 from mo_dots.objects import datawrap
 from mo_files import File
-from mo_future import text_type
+from mo_future import text
+from mo_http import http
+from mo_json import value2json
 from mo_kwargs import override
-from mo_logs import Log, startup, Except, constants
+from mo_logs import Except, Log, constants, startup
 from mo_logs.startup import SingleInstance
-from mo_math import Math, MAX, SUM
-from mo_threads import Lock, Thread, Till, Signal
+from mo_math import MAX, SUM
+from mo_threads import Lock, Signal, Thread, Till
 from mo_threads.threads import MAIN_THREAD
-from mo_times import MINUTE, Date, Duration, Timer, DAY, WEEK, SECOND, HOUR
+from mo_times import DAY, Date, Duration, HOUR, MINUTE, SECOND, Timer, WEEK
 from pyLibrary import convert
 from pyLibrary.meta import cache, new_instance
 
+_please_import = http
+
 ENABLE_SIDE_EFFECTS = True
+ALLOW_SHUTDOWN = False
 DEBUG_PRICING = True
 TIME_FROM_RUNNING_TO_LOGIN = 7 * MINUTE
 ERROR_ON_CALL_TO_SETUP = "Problem with setup()"
 DELAY_BEFORE_SETUP = 1 * MINUTE  # PROBLEM WITH CONNECTING ONLY HAPPENS WITH BIGGER ES MACHINES
+CAPACITY_NOT_AVAILABLE_RETRY = Duration("day")  # SOME MACHINES ARE NOT AVAILABLE
 
 
 class SpotManager(object):
@@ -57,7 +63,9 @@ class SpotManager(object):
         self.price_locker = Lock()
         self.prices = None
         self.price_lookup = None
-        self.done_spot_requests = Signal()
+        self.no_capacity = {}
+        self.no_capacity_file = File(kwargs.price_file).parent / "no capacity.json"
+        self.done_making_new_spot_requests = Signal()
         self.net_new_locker = Lock()
         self.net_new_spot_requests = UniqueIndex(("id",))  # SPOT REQUESTS FOR THIS SESSION
         self.watcher = None
@@ -119,12 +127,12 @@ class SpotManager(object):
 
         if net_new_utility < 0:
             if self.settings.allowed_overage:
-                net_new_utility = Math.min(net_new_utility + self.settings.allowed_overage * utility_required, 0)
+                net_new_utility = mo_math.min(net_new_utility + self.settings.allowed_overage * utility_required, 0)
 
             net_new_utility = self.remove_instances(net_new_utility)
 
         if net_new_utility > 0:
-            net_new_utility = Math.min(net_new_utility, self.settings.max_new_utility)
+            net_new_utility = mo_math.min(net_new_utility, self.settings.max_new_utility)
             net_new_utility, remaining_budget = self.add_instances(net_new_utility, remaining_budget)
 
         if net_new_utility > 0:
@@ -142,7 +150,7 @@ class SpotManager(object):
                 req.add_tag("Name", self.settings.ec2.instance.name)
 
         Log.note("All requests for new utility have been made")
-        self.done_spot_requests.go()
+        self.done_making_new_spot_requests.go()
 
     def add_instances(self, net_new_utility, remaining_budget):
         prices = self.pricing()
@@ -153,18 +161,18 @@ class SpotManager(object):
 
             if p.current_price == None:
                 Log.note("{{type}} has no current price",
-                    type=p.type.instance_type
-                )
+                         type=p.type.instance_type
+                         )
                 continue
 
             if self.settings.utility[p.type.instance_type].blacklist or \
-                    p.availability_zone in listwrap(self.settings.utility[p.type.instance_type].blacklist_zones):
+                p.availability_zone in listwrap(self.settings.utility[p.type.instance_type].blacklist_zones):
                 Log.note("{{type}} in {{zone}} skipped due to blacklist", type=p.type.instance_type, zone=p.availability_zone)
                 continue
 
             # DO NOT BID HIGHER THAN WHAT WE ARE WILLING TO PAY
             max_acceptable_price = p.type.utility * self.settings.max_utility_price + p.type.discount
-            max_bid = Math.min(p.higher_price, max_acceptable_price, remaining_budget)
+            max_bid = mo_math.min(p.higher_price, max_acceptable_price, remaining_budget)
             min_bid = p.price_80
 
             if min_bid > max_acceptable_price:
@@ -186,15 +194,15 @@ class SpotManager(object):
             elif min_bid > max_bid:
                 Log.error("not expected")
 
-            naive_number_needed = int(Math.round(float(net_new_utility) / float(p.type.utility), decimal=0))
+            naive_number_needed = int(mo_math.round(float(net_new_utility) / float(p.type.utility), decimal=0))
             limit_total = None
             if self.settings.max_percent_per_type < 1:
                 current_count = sum(1 for a in self.active if a.launch_specification.instance_type == p.type.instance_type and a.launch_specification.placement == p.availability_zone)
                 all_count = sum(1 for a in self.active if a.launch_specification.placement == p.availability_zone)
                 all_count = max(all_count, naive_number_needed)
-                limit_total = int(Math.floor((all_count * self.settings.max_percent_per_type - current_count) / (1 - self.settings.max_percent_per_type)))
+                limit_total = int(mo_math.floor((all_count * self.settings.max_percent_per_type - current_count) / (1 - self.settings.max_percent_per_type)))
 
-            num = Math.min(naive_number_needed, limit_total, self.settings.max_requests_per_type)
+            num = mo_math.min(naive_number_needed, limit_total, self.settings.max_requests_per_type)
             if num < 0:
                 Log.note(
                     "{{type}} is over {{limit|percent}} of instances, no more requested",
@@ -203,10 +211,10 @@ class SpotManager(object):
                 )
                 continue
             elif num == 1:
-                min_bid = Math.min(Math.max(p.current_price * 1.1, min_bid), max_acceptable_price)
+                min_bid = mo_math.min(mo_math.max(p.current_price * 1.1, min_bid), max_acceptable_price)
                 price_interval = 0
             else:
-                price_interval = Math.min(min_bid / 10, (max_bid - min_bid) / (num - 1))
+                price_interval = mo_math.min(min_bid / 10, (max_bid - min_bid) / (num - 1))
 
             for i in range(num):
                 bid_per_machine = min_bid + (i * price_interval)
@@ -224,6 +232,15 @@ class SpotManager(object):
                         type=p.type.instance_type,
                         bid=bid_per_machine - p.type.discount,
                         remaining=remaining_budget
+                    )
+                    continue
+
+                last_no_capacity_message = self.no_capacity.get(p.type.instance_type, Null)
+                if last_no_capacity_message > Date.now() - CAPACITY_NOT_AVAILABLE_RETRY:
+                    Log.note(
+                        "Did not bid on {{type}}: \"No capacity\" last seen at {{last_time|datetime}}",
+                        type=p.type.instance_type,
+                        last_time=last_no_capacity_message
                     )
                     continue
 
@@ -288,7 +305,7 @@ class SpotManager(object):
         Log.note("Shutdown {{instances}}", instances=remove_list.id)
         remove_threads = [
             Thread.run(
-                "teardown for " + text_type(i.id),
+                "teardown for " + text(i.id),
                 self.instance_manager.teardown,
                 i
             )
@@ -352,23 +369,24 @@ class SpotManager(object):
 
         # SEND SHUTDOWN TO EACH INSTANCE
         Log.warning("Shutdown {{instances}} to save money!", instances=remove_list.id)
-        for g, removals in jx.groupby(remove_list, size=20):
-            for i, t in [
-                (i, Thread.run("teardown " + i.id, self.instance_manager.teardown, i, please_stop=False))
-                for i in removals
-            ]:
-                try:
-                    t.join()
-                except Exception:
-                    Log.note("Problem with shutdown of {{id}}", id=i.id)
+        if ALLOW_SHUTDOWN:
+            for g, removals in jx.groupby(remove_list, size=20):
+                for i, t in [
+                    (i, Thread.run("teardown " + i.id, self.instance_manager.teardown, i, please_stop=False))
+                    for i in removals
+                ]:
+                    try:
+                        t.join()
+                    except Exception:
+                        Log.note("Problem with shutdown of {{id}}", id=i.id)
 
-        remove_spot_requests.extend(remove_list.spot_instance_request_id)
+            remove_spot_requests.extend(remove_list.spot_instance_request_id)
 
-        # TERMINATE INSTANCES
-        self.ec2_conn.terminate_instances(instance_ids=remove_list.id)
+            # TERMINATE INSTANCES
+            self.ec2_conn.terminate_instances(instance_ids=remove_list.id)
 
-        # TERMINATE SPOT REQUESTS
-        self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
+            # TERMINATE SPOT REQUESTS
+            self.ec2_conn.cancel_spot_instance_requests(request_ids=remove_spot_requests)
         return remaining_budget, net_new_utility
 
     @cache(duration=5 * SECOND)
@@ -389,19 +407,54 @@ class SpotManager(object):
         return wrap(output)
 
     def _start_life_cycle_watcher(self):
+        failed_locker = Lock()
+        failed_attempts = Data()
+
+        def track_setup(
+            instance_setup_function,
+            request,
+            instance,   # THE boto INSTANCE OBJECT FOR THE MACHINE TO SETUP
+            utility,    # THE utility OBJECT FOUND IN CONFIG
+            please_stop
+        ):
+            try:
+                instance_setup_function(instance, utility, please_stop)
+                instance.add_tag("Name", self.settings.ec2.instance.name + " (running)")
+                with self.net_new_locker:
+                    self.net_new_spot_requests.remove(request.id)
+            except Exception as e:
+                e = Except.wrap(e)
+                instance.add_tag("Name", "")
+                with failed_locker:
+                    failed_attempts[request.id] += [e]
+                if "Can not setup unknown " in e:
+                    Log.warning("Unexpected failure on startup", instance_id=instance.id, cause=e)
+                elif ERROR_ON_CALL_TO_SETUP in e:
+                    with failed_locker:
+                        causes = failed_attempts[request.id]
+                    if len(causes) > 2:
+                        Log.warning("Problem with setup() of {{instance_id}}", instance_id=instance.id, cause=causes)
+                else:
+                    Log.warning("Unexpected failure on startup", instance_id=instance.id, cause=e)
+
         def life_cycle_watcher(please_stop):
-            failed_attempts = Data()
+            bad_requests = Data()
             setup_threads = []
+            last_get = Date.now()
 
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
-                last_get = Date.now()
                 instances = wrap({i.id: i for r in self.ec2_conn.get_all_instances() for i in r.instances})
                 # INSTANCES THAT REQUIRE SETUP
                 time_to_stop_trying = {}
                 please_setup = [
                     (i, r) for i, r in [(instances[r.instance_id], r) for r in spot_requests]
-                    if i.id and not i.tags.get("Name") and i._state.name == "running" and Date.now() > Date(i.launch_time) + DELAY_BEFORE_SETUP
+                    if i.id
+                       and (
+                           not i.tags.get("Name") or i.tags.get("Name") == self.settings.ec2.instance.name + " (setup)"
+                       )
+                       and i._state.name == "running"
+                       and Date.now() > Date(i.launch_time) + DELAY_BEFORE_SETUP
                 ]
 
                 for i, r in please_setup:
@@ -412,7 +465,7 @@ class SpotManager(object):
                         self.ec2_conn.terminate_instances(instance_ids=[i.id])
                         with self.net_new_locker:
                             self.net_new_spot_requests.remove(r.id)
-                        Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id, cause=e)
+                        Log.warning("Problem with setup of {{instance_id}}.  Time is up.  Instance TERMINATED!", instance_id=i.id)
                         continue
 
                     try:
@@ -427,38 +480,17 @@ class SpotManager(object):
 
                         i.markup = p
                         i.add_tag("Name", self.settings.ec2.instance.name + " (setup)")
-                        setup_threads.append((i, r, Thread.run(
-                            "setup for " + text_type(i.id),
+                        setup_threads.append(Thread.run(
+                            "setup for " + text(i.id),
+                            track_setup,
                             self.instance_manager.setup,
+                            r,
                             i,
                             p
-                        )))
+                        ))
                     except Exception as e:
                         i.add_tag("Name", "")
                         Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
-
-                please_join = [(i, r, t) for i, r, t in setup_threads if t.stopped]
-                if please_join:
-                    Log.note("{{num}} threads have stopped", num=len(please_join))
-                for i, r, t in please_join:
-                    try:
-                        t.join()
-                        setup_threads.remove((i, r, t))
-                        i.add_tag("Name", self.settings.ec2.instance.name + " (running)")
-                        with self.net_new_locker:
-                            self.net_new_spot_requests.remove(r.id)
-                    except Exception as e:
-                        e = Except.wrap(e)
-                        setup_threads.remove((i, r, t))
-                        i.add_tag("Name", "")
-                        failed_attempts[r.id] += [e]
-                        if "Can not setup unknown " in e:
-                            Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
-                        elif ERROR_ON_CALL_TO_SETUP in e:
-                            if len(failed_attempts[r.id]) > 2:
-                                Log.warning("Problem with setup() of {{instance_id}}", instance_id=i.id, cause=failed_attempts[r.id])
-                        else:
-                            Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)
 
                 if Date.now() - last_get > 5 * SECOND:
                     # REFRESH STALE
@@ -466,18 +498,17 @@ class SpotManager(object):
                     last_get = Date.now()
 
                 pending = wrap([r for r in spot_requests if r.status.code in PENDING_STATUS_CODES])
-                give_up = wrap([r for r in spot_requests if r.status.code in PROBABLY_NOT_FOR_A_WHILE | TERMINATED_STATUS_CODES])
+                give_up = wrap([r for r in spot_requests if (r.status.code in PROBABLY_NOT_FOR_A_WHILE | TERMINATED_STATUS_CODES) and r.id not in bad_requests])
                 ignore = wrap([r for r in spot_requests if r.status.code in MIGHT_HAPPEN])  # MIGHT HAPPEN, BUT NO NEED TO WAIT FOR IT
 
-                if self.done_spot_requests:
+                if self.done_making_new_spot_requests:
                     with self.net_new_locker:
                         expired = Date.now() - self.settings.run_interval + 2 * MINUTE
                         for ii in list(self.net_new_spot_requests):
                             if Date(ii.create_time) < expired:
-                                ## SOMETIMES REQUESTS NEVER GET INTO THE MAIN LIST OF REQUESTS
+                                # SOMETIMES REQUESTS NEVER GET INTO THE MAIN LIST OF REQUESTS
                                 self.net_new_spot_requests.remove(ii)
-                        for g in give_up:
-                            self.net_new_spot_requests.remove(g.id)
+
                         for g in ignore:
                             self.net_new_spot_requests.remove(g.id)
                         pending = UniqueIndex(("id",), data=pending)
@@ -487,16 +518,34 @@ class SpotManager(object):
                         self.ec2_conn.cancel_spot_instance_requests(request_ids=give_up.id)
                         Log.note("Cancelled spot requests {{spots}}, {{reasons}}", spots=give_up.id, reasons=give_up.status.code)
 
-                if not pending and not time_to_stop_trying and self.done_spot_requests and not setup_threads:
+                        for g in give_up:
+                            bad_requests[g.id] += 1
+                            if g.id in self.net_new_spot_requests:
+                                self.net_new_spot_requests.remove(g.id)
+                                if g.status.code == "capacity-not-available":
+                                    self.no_capacity[g.launch_specification.instance_type] = Date.now()
+                                if g.status.code == "bad-parameters":
+                                    self.no_capacity[g.launch_specification.instance_type] = Date.now()
+                                    Log.warning("bad parameters while requesting type {{type}}", type=g.launch_specification.instance_type)
+
+                if not pending and self.done_making_new_spot_requests:
                     Log.note("No more pending spot requests")
-                    please_stop.go()
                     break
-                elif setup_threads:
-                    Log.note("waiting for setup of {{num}} instances", num=len(setup_threads))
                 elif pending:
                     Log.note("waiting for spot requests: {{pending}}", pending=[p.id for p in pending])
 
                 (Till(seconds=10) | please_stop).wait()
+
+            with Timer("Save no capacity to file"):
+                table = [
+                    {"instance_type": k, "last_failure": v}
+                    for k, v in self.no_capacity.items()
+                ]
+                self.no_capacity_file.write(value2json(table, pretty=True))
+
+            # WAIT FOR SETUP TO COMPLETE
+            for t in setup_threads:
+                t.join()
 
             Log.note("life cycle watcher has stopped")
 
@@ -518,6 +567,7 @@ class SpotManager(object):
 
     @override
     def _request_spot_instances(self, price, availability_zone_group, instance_type, kwargs):
+        kwargs.self = None
         kwargs.kwargs = None
 
         # m3 INSTANCES ARE NOT ALLOWED PLACEMENT GROUP
@@ -549,7 +599,7 @@ class SpotManager(object):
         for i in range(num_ephemeral_volumes):
             letter = convert.ascii2char(98 + i)  # START AT "b"
             kwargs.block_device_map["/dev/sd" + letter] = BlockDeviceType(
-                ephemeral_name='ephemeral' + text_type(i),
+                ephemeral_name='ephemeral' + text(i),
                 delete_on_termination=True
             )
 
@@ -658,6 +708,17 @@ class SpotManager(object):
             return self.prices
 
     def _get_spot_prices_from_aws(self):
+        with Timer("Read no capacity file"):
+            try:
+                # FILE IS LIST OF {instance_type, last_failure} OBJECTS
+                content = self.no_capacity_file.read()
+                self.no_capacity = dict(
+                    (r.instance_type, r.last_failure)
+                    for r in convert.json2value(content, flexible=False, leaves=False)
+                )
+            except Exception as e:
+                self.no_capacity = {}
+
         with Timer("Read pricing file"):
             try:
                 content = File(self.settings.price_file).read()
@@ -688,9 +749,9 @@ class SpotManager(object):
 
                     if DEBUG_PRICING:
                         Log.note("get pricing for {{instance_type}} starting at {{start_at}}",
-                            instance_type=instance_type,
-                            start_at=start_at
-                        )
+                                 instance_type=instance_type,
+                                 start_at=start_at
+                                 )
 
                     next_token = None
                     while True:
@@ -739,7 +800,7 @@ def find_higher(candidates, reference):
 
 
 TERMINATED_STATUS_CODES = {
-    "marked-for-termination",   # AS GOOD AS DEAD
+    "marked-for-termination",  # AS GOOD AS DEAD
     "capacity-oversubscribed",
     "capacity-not-available",
     "instance-terminated-capacity-oversubscribed",
@@ -762,8 +823,6 @@ PROBABLY_NOT_FOR_A_WHILE = {
     "placement-group-constraint",
     "price-too-low"
 }
-
-
 RUNNING_STATUS_CODES = {
     "fulfilled",
     "request-canceled-and-instance-running"
@@ -773,9 +832,9 @@ RUNNING_STATUS_CODES = {
 def main():
     try:
         settings = startup.read_settings()
+        constants.set(settings.constants)
         Log.start(settings.debug)
         with SingleInstance(flavor_id=settings.args.filename):
-            constants.set(settings.constants)
             settings.run_interval = Duration(settings.run_interval)
             for u in settings.utility:
                 u.discount = coalesce(u.discount, 0)
@@ -804,31 +863,35 @@ def main():
 ephemeral_storage = {
     "c1.medium": {"num": 1, "size": 350},
     "c1.xlarge": {"num": 4, "size": 1680},
+
     "c3.2xlarge": {"num": 2, "size": 160},
     "c3.4xlarge": {"num": 2, "size": 320},
     "c3.8xlarge": {"num": 2, "size": 640},
     "c3.large": {"num": 2, "size": 32},
     "c3.xlarge": {"num": 2, "size": 80},
+
     "c4.2xlarge": {"num": 0, "size": 0},
     "c4.4xlarge": {"num": 0, "size": 0},
     "c4.8xlarge": {"num": 0, "size": 0},
     "c4.large": {"num": 0, "size": 0},
     "c4.xlarge": {"num": 0, "size": 0},
+
     "c5.large":{"num": 0, "size": 0},
     "c5.xlarge":{"num": 0, "size": 0},
     "c5.2xlarge":{"num": 0, "size": 0},
     "c5.4xlarge":{"num": 0, "size": 0},
     "c5.9xlarge":{"num": 0, "size": 0},
     "c5.18xlarge":{"num": 0, "size": 0},
+
     "cc2.8xlarge": {"num": 4, "size": 3360},
     "cg1.4xlarge": {"num": 2, "size": 1680},
     "cr1.8xlarge": {"num": 2, "size": 240},
+
     "d2.2xlarge": {"num": 6, "size": 12000},
     "d2.4xlarge": {"num": 12, "size": 24000},
     "d2.8xlarge": {"num": 24, "size": 48000},
     "d2.xlarge": {"num": 3, "size": 6000},
-    "f1.16xlarge": {"num": 0, "size": 0},
-    "f1.2xlarge": {"num": 0, "size": 0},
+
     "g2.2xlarge": {"num": 1, "size": 60},
     "g2.8xlarge": {"num": 2, "size": 240},
     "h1.2xlarge": {"num": 1, "size": 2000},
@@ -842,19 +905,18 @@ ephemeral_storage = {
     "i2.4xlarge": {"num": 4, "size": 3200},
     "i2.8xlarge": {"num": 8, "size": 6400},
     "i2.xlarge": {"num": 1, "size": 800},
-    "i3.16xlarge": {"num": 8, "size": 15200},
+
+    "i3.large": {"num": 1, "size": 475},
+    "i3.xlarge": {"num": 1, "size": 950},
     "i3.2xlarge": {"num": 1, "size": 1900},
     "i3.4xlarge": {"num": 2, "size": 3800},
     "i3.8xlarge": {"num": 4, "size": 7600},
-    "i3.large": {"num": 1, "size": 475},
-    "i3.xlarge": {"num": 1, "size": 950},
-    "m1.large": {"num": 2, "size": 840},
-    "m1.medium": {"num": 1, "size": 410},
-    "m1.small": {"num": 1, "size": 160},
-    "m1.xlarge": {"num": 4, "size": 1680},
-    "m2.2xlarge": {"num": 1, "size": 850},
-    "m2.4xlarge": {"num": 2, "size": 1680},
-    "m2.xlarge": {"num": 1, "size": 420},
+    "i3.16xlarge": {"num": 8, "size": 15200},
+
+    "f1.2xlarge": {"num": 1, "size": 470},
+    "f1.4xlarge": {"num": 1, "size": 940},
+    "f1.16xlarge": {"num": 4, "size": 940},
+
     "m3.2xlarge": {"num": 2, "size": 160},
     "m3.large": {"num": 1, "size": 32},
     "m3.medium": {"num": 1, "size": 4},
@@ -865,6 +927,14 @@ ephemeral_storage = {
     "m4.4xlarge": {"num": 0, "size": 0},
     "m4.large": {"num": 0, "size": 0},
     "m4.xlarge": {"num": 0, "size": 0},
+
+    "m5d.large": {"num": 1, "size": 75},
+    "m5d.xlarge": {"num": 1, "size": 150},
+    "m5d.2xlarge": {"num": 1, "size": 300},
+    "m5d.4xlarge": {"num": 2, "size": 300},
+    "m5d.12xlarge": {"num": 2, "size": 900},
+    "m5d.24xlarge": {"num": 4, "size": 900},
+
     "p2.16xlarge": {"num": 0, "size": 0},
     "p2.8xlarge": {"num": 0, "size": 0},
     "p2.xlarge": {"num": 0, "size": 0},
@@ -879,6 +949,14 @@ ephemeral_storage = {
     "r4.8xlarge": {"num": 0, "size": 0},
     "r4.large": {"num": 0, "size": 0},
     "r4.xlarge": {"num": 0, "size": 0},
+
+    "r5d.large": {"num": 1, "size": 75},
+    "r5d.xlarge": {"num": 1, "size": 150},
+    "r5d.2xlarge": {"num": 1, "size": 300},
+    "r5d.4xlarge": {"num": 2, "size": 300},
+    "r5d.12xlarge": {"num": 2, "size": 900},
+    "r5d.24xlarge": {"num": 4, "size": 900},
+
     "t1.micro": {"num": 0, "size": 0},
     "t2.2xlarge": {"num": 0, "size": 0},
     "t2.large": {"num": 0, "size": 0},
@@ -887,6 +965,28 @@ ephemeral_storage = {
     "t2.nano": {"num": 0, "size": 0},
     "t2.small": {"num": 0, "size": 0},
     "t2.xlarge": {"num": 0, "size": 0},
+
+    "c5d.large": {"num": 1, "size": 50},
+    "c5d.xlarge": {"num": 1, "size": 100},
+    "c5d.2xlarge": {"num": 1, "size": 200},
+    "c5d.4xlarge": {"num": 1, "size": 400},
+    "c5d.9xlarge": {"num": 1, "size": 900},
+    "c5d.18xlarge": {"num": 2, "size": 900},
+
+    "x1e.xlarge": {"num": 1, "size": 120},
+    "x1e.2xlarge": {"num": 1, "size": 240},
+    "x1e.4xlarge": {"num": 1, "size": 480},
+    "x1e.8xlarge": {"num": 1, "size": 960},
+    "x1e.16xlarge": {"num": 1, "size": 1920},
+    "x1e.32xlarge": {"num": 2, "size": 1920},
+
+    "z1d.large": {"num": 1, "size": 75},
+    "z1d.xlarge": {"num": 1, "size": 150},
+    "z1d.2xlarge": {"num": 1, "size": 300},
+    "z1d.3xlarge": {"num": 1, "size": 450},
+    "z1d.6xlarge": {"num": 1, "size": 900},
+    "z1d.12xlarge": {"num": 1, "size": 900},
+
     "x1.16xlarge": {"num": 1, "size": 1920},
     "x1.32xlarge": {"num": 2, "size": 3840}
 }

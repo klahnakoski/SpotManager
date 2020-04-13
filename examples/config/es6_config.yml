@@ -27,7 +27,7 @@ path.logs: /data1/logs
 
 discovery.ec2.endpoint: ec2.us-west-2.amazonaws.com
 discovery.zen.hosts_provider: ec2
-discovery.zen.minimum_master_nodes: 1
+discovery.zen.minimum_master_nodes: 2
 
 http.compression: true
 http.cors.enabled: true

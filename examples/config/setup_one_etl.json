@@ -25,6 +25,6 @@
 	},
 	"utility": {"cpu": 1, "utility":1},
 	"constants":{
-		"pyLibrary.env.http.default_headers.referer":"https://wiki.mozilla.org/Auto-tools/Projects/ActiveData"
+		"mo_http.http.default_headers.referer":"https://wiki.mozilla.org/Auto-tools/Projects/ActiveData"
 	}
 }

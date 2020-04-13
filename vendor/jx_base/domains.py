@@ -5,23 +5,17 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with self file,
 # You can obtain one at http:# mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
 import itertools
-from collections import Mapping
 from numbers import Number
-
-from mo_future import text_type
 
 from jx_base.expressions import jx_expression
 from mo_collections.unique_index import UniqueIndex
-from mo_dots import coalesce, Data, set_default, Null, listwrap
-from mo_dots import wrap
-from mo_dots.lists import FlatList
+from mo_dots import Data, FlatList, Null, coalesce, is_container, is_data, listwrap, set_default, unwrap, wrap
+from mo_future import text
 from mo_logs import Log
 from mo_math import MAX, MIN
 from mo_times.dates import Date
@@ -210,7 +204,12 @@ class SimpleSetDomain(Domain):
     DOMAIN IS A LIST OF OBJECTS, EACH WITH A value PROPERTY
     """
 
-    __slots__ = ["NULL", "partitions", "map", "order"]
+    __slots__ = [
+        "NULL",       # THE value FOR NULL
+        "partitions", # LIST OF {name, value, dataIndex} dicts
+        "map",        # MAP FROM value TO name
+        "order"       # MAP FROM value TO dataIndex
+    ]
 
     def __init__(self, **desc):
         Domain.__init__(self, **desc)
@@ -225,7 +224,7 @@ class SimpleSetDomain(Domain):
         if isinstance(self.key, set):
             Log.error("problem")
 
-        if not desc.key and (len(desc.partitions)==0 or isinstance(desc.partitions[0], (text_type, Number, tuple))):
+        if not desc.key and (len(desc.partitions)==0 or isinstance(desc.partitions[0], (text, Number, tuple))):
             # ASSUME PARTS ARE STRINGS, CONVERT TO REAL PART OBJECTS
             self.key = "value"
             self.map = {}
@@ -236,7 +235,7 @@ class SimpleSetDomain(Domain):
                 self.map[p] = part
                 self.order[p] = i
                 if isinstance(p, (int, float)):
-                    text_part = text_type(float(p))  # ES CAN NOT HANDLE NUMERIC PARTS
+                    text_part = text(float(p))  # ES CAN NOT HANDLE NUMERIC PARTS
                     self.map[text_part] = part
                     self.order[text_part] = i
             self.label = coalesce(self.label, "name")
@@ -246,15 +245,18 @@ class SimpleSetDomain(Domain):
         if desc.partitions and desc.dimension.fields and len(desc.dimension.fields) > 1:
             self.key = desc.key
             self.map = UniqueIndex(keys=desc.dimension.fields)
-        elif desc.partitions and isinstance(desc.key, (list, set)):
+        elif desc.partitions and is_container(desc.key):
             # TODO: desc.key CAN BE MUCH LIKE A SELECT, WHICH UniqueIndex CAN NOT HANDLE
             self.key = desc.key
             self.map = UniqueIndex(keys=desc.key)
-        elif desc.partitions and isinstance(desc.partitions[0][desc.key], Mapping):
+        elif desc.partitions and is_data(desc.partitions[0][desc.key]):
+            # LOOKS LIKE OBJECTS
+            # sorted = desc.partitions[desc.key]
+
             self.key = desc.key
             self.map = UniqueIndex(keys=desc.key)
-            # self.key = UNION(set(d[desc.key].keys()) for d in desc.partitions)
-            # self.map = UniqueIndex(keys=self.key)
+            self.order = {p[self.key]: p.dataIndex for p in desc.partitions}
+            self.partitions = desc.partitions
         elif len(desc.partitions) == 0:
             # CREATE AN EMPTY DOMAIN
             self.key = "value"
@@ -376,7 +378,7 @@ class SetDomain(Domain):
         if isinstance(self.key, set):
             Log.error("problem")
 
-        if isinstance(desc.partitions[0], (int, float, text_type)):
+        if isinstance(desc.partitions[0], (int, float, text)):
             # ASSMUE PARTS ARE STRINGS, CONVERT TO REAL PART OBJECTS
             self.key = "value"
             self.order[None] = len(desc.partitions)
@@ -388,14 +390,14 @@ class SetDomain(Domain):
         elif desc.partitions and desc.dimension.fields and len(desc.dimension.fields) > 1:
             self.key = desc.key
             self.map = UniqueIndex(keys=desc.dimension.fields)
-        elif desc.partitions and isinstance(desc.key, (list, set)):
+        elif desc.partitions and is_container(desc.key):
             # TODO: desc.key CAN BE MUCH LIKE A SELECT, WHICH UniqueIndex CAN NOT HANDLE
             self.key = desc.key
             self.map = UniqueIndex(keys=desc.key)
-        elif desc.partitions and isinstance(desc.partitions[0][desc.key], Mapping):
+        elif desc.partitions and is_data(desc.partitions[0][desc.key]):
             self.key = desc.key
             self.map = UniqueIndex(keys=desc.key)
-            # self.key = UNION(set(d[desc.key].keys()) for d in desc.partitions)
+            # self.key = UNION(*set(d[desc.key].keys()) for d in desc.partitions)
             # self.map = UniqueIndex(keys=self.key)
         elif desc.key == None:
             Log.error("Domains must have keys")
@@ -663,7 +665,7 @@ class RangeDomain(Domain):
             if not self.key:
                 Log.error("Must have a key value")
 
-            parts = list(listwrap(self.partitions))
+            parts =listwrap(self.partitions)
             for i, p in enumerate(parts):
                 self.min = MIN([self.min, p.min])
                 self.max = MAX([self.max, p.max])
@@ -675,10 +677,10 @@ class RangeDomain(Domain):
 
             # VERIFY PARTITIONS DO NOT OVERLAP, HOLES ARE FINE
             for p, q in itertools.product(parts, parts):
-                if p is not q and p.min <= q.min and q.min < p.max:
+                if p.min <= q.min and q.min < p.max and unwrap(p) is not unwrap(q):
                     Log.error("partitions overlap!")
 
-            self.partitions = parts
+            self.partitions = wrap(parts)
             return
         elif any([self.min == None, self.max == None, self.interval == None]):
             Log.error("Can not handle missing parameter")

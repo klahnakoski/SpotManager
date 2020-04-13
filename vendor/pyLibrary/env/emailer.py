@@ -5,23 +5,20 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-from __future__ import unicode_literals
-from __future__ import division
-from __future__ import absolute_import
+from __future__ import absolute_import, division, unicode_literals
 
+from mo_future import is_text, is_binary
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import smtplib
 import sys
 
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
-from mo_logs import Log
-from mo_dots import listwrap
-from mo_dots import coalesce
+from mo_dots import coalesce, listwrap
 from mo_kwargs import override
+from mo_logs import Log
 
 
 class Emailer:

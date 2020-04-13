@@ -5,17 +5,16 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
+from mo_future import is_text, is_binary
+from datetime import date, datetime
 import json as _json
-from datetime import datetime, date
 
-from mo_future import text_type, PY3
+from mo_future import PY3
 
 
 def unix2datetime(u):
@@ -38,7 +37,8 @@ def milli2datetime(u):
 
 def datetime2string(value, format="%Y-%m-%d %H:%M:%S"):
     try:
-        return value.strftime(format)
+        utc_time = datetime.utcfromtimestamp(value.timestamp())
+        return utc_time.strftime(format)
     except Exception as e:
         from mo_logs import Log
         Log.error("Can not format {{value}} with {{format}}", value=value, format=format, cause=e)

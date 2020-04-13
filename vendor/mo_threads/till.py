@@ -5,27 +5,26 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 # THIS THREADING MODULE IS PERMEATED BY THE please_stop SIGNAL.
 # THIS SIGNAL IS IMPORTANT FOR PROPER SIGNALLING WHICH ALLOWS
 # FOR FAST AND PREDICTABLE SHUTDOWN AND CLEANUP OF THREADS
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
 from collections import namedtuple
 from time import sleep, time
 from weakref import ref
 
-from mo_future import allocate_lock as _allocate_lock
-from mo_future import text_type
+from mo_future import allocate_lock as _allocate_lock, text
 from mo_logs import Log
-from mo_threads.signal import Signal, DONE
+
+from mo_threads.signals import DONE, Signal
 
 DEBUG = False
 INTERVAL = 0.1
+enabled = Signal()
 
 
 class Till(Signal):
@@ -36,11 +35,11 @@ class Till(Signal):
 
     locker = _allocate_lock()
     next_ping = time()
-    enabled = False
     new_timers = []
 
     def __new__(cls, till=None, seconds=None):
-        if not Till.enabled:
+        if not enabled:
+            Log.note("Till daemon not enabled")
             return DONE
         elif till != None:
             return object.__new__(cls)
@@ -53,7 +52,8 @@ class Till(Signal):
 
     def __init__(self, till=None, seconds=None):
         """
-        ONE OF THESE PARAMETERS IS REQUIRED
+        Signal after some elapsed time:  Till(seconds=1).wait()
+
         :param till: UNIX TIMESTAMP OF WHEN TO SIGNAL
         :param seconds: PREFERRED OVER timeout
         """
@@ -61,15 +61,15 @@ class Till(Signal):
         if till != None:
             if not isinstance(till, (float, int)):
                 from mo_logs import Log
-
                 Log.error("Date objects for Till are no longer allowed")
             timeout = till
         elif seconds != None:
             timeout = now + seconds
         else:
+            from mo_logs import Log
             raise Log.error("Should not happen")
 
-        Signal.__init__(self, name=text_type(timeout))
+        Signal.__init__(self, name=text(timeout))
 
         with Till.locker:
             if timeout != None:
@@ -78,7 +78,8 @@ class Till(Signal):
 
 
 def daemon(please_stop):
-    Till.enabled = True
+    global enabled
+    enabled.go()
     sorted_timers = []
 
     try:
@@ -139,7 +140,7 @@ def daemon(please_stop):
         Log.warning("unexpected timer shutdown", cause=e)
     finally:
         DEBUG and Log.alert("TIMER SHUTDOWN")
-        Till.enabled = False
+        enabled = Signal()
         # TRIGGER ALL REMAINING TIMERS RIGHT NOW
         with Till.locker:
             new_work, Till.new_timers = Till.new_timers, []

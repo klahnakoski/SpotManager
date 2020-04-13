@@ -5,24 +5,24 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
 import time
-from collections import Mapping
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from json.encoder import encode_basestring
 
-from mo_dots import Data, FlatList, NullType, join_field, split_field, _get, SLOT, DataObject
-from mo_future import text_type, binary_type, sort_using_key, long, PY2, none_type, generator_types
-from mo_json import ESCAPE_DCT, float2json
-from mo_json.encoder import UnicodeBuilder, COLON, COMMA, problem_serializing, json_encoder
+from mo_dots import CLASS, Data, DataObject, FlatList, NullType, SLOT, _get, is_data, join_field, split_field, \
+    concat_field
+from mo_dots.objects import OBJ
+from mo_future import binary_type, generator_types, integer_types, is_binary, is_text, sort_using_key, text
+from mo_json import BOOLEAN, ESCAPE_DCT, EXISTS, INTEGER, NESTED, NUMBER, STRING, float2json, python_type_to_json_type, \
+    NUMBER_TYPES
+from mo_json.encoder import COLON, COMMA, UnicodeBuilder, json_encoder, problem_serializing
 from mo_logs import Log
-from mo_logs.strings import quote, utf82unicode
+from mo_logs.strings import quote
 from mo_times import Date, Duration
 
 
@@ -45,11 +45,31 @@ def untype_path(encoded):
 
 def unnest_path(encoded):
     if encoded.startswith(".."):
-        encoded = encoded.lstrip(".")
-        if not encoded:
-            encoded = "."
+        remainder = encoded.lstrip(".")
+        back = len(encoded) - len(remainder)
+        return ("." * back) + unnest_path(remainder)
 
-    return join_field(decode_property(c) for c in split_field(encoded) if c != NESTED_TYPE)
+    path = split_field(encoded)
+    if not path:
+        return "."
+    if path[-1] == NESTED_TYPE:
+        path = path[:-1]
+        if not path:
+            return "."
+
+    return join_field([decode_property(c) for c in path[:-1] if not c.startswith(TYPE_PREFIX)] + [decode_property(path[-1])])
+
+
+def get_nested_path(typed_path):
+    # CONSTRUCT THE nested_path FROM THE typed_path
+    path = split_field(typed_path)
+    parent = "."
+    nested_path = (parent,)
+    for i, p in enumerate(path[:-1]):
+        if p == NESTED_TYPE:
+            step = concat_field(parent, join_field(path[0:i + 1]))
+            nested_path = (step,) + nested_path
+    return nested_path
 
 
 def untyped(value):
@@ -57,7 +77,7 @@ def untyped(value):
 
 
 def _untype_list(value):
-    if any(isinstance(v, Mapping) for v in value):
+    if any(is_data(v) for v in value):
         # MAY BE MORE TYPED OBJECTS IN THIS LIST
         output = [_untype_value(v) for v in value]
     else:
@@ -91,7 +111,7 @@ def _untype_dict(value):
 
 
 def _untype_value(value):
-    _type = _get(value, "__class__")
+    _type = _get(value, CLASS)
     if _type is Data:
         return _untype_dict(_get(value, SLOT))
     elif _type is dict:
@@ -103,7 +123,7 @@ def _untype_value(value):
     elif _type is NullType:
         return None
     elif _type is DataObject:
-        return _untype_value(_get(value, "_obj"))
+        return _untype_value(_get(value, OBJ))
     elif _type in generator_types:
         return _untype_list(value)
     else:
@@ -139,16 +159,18 @@ def typed_encode(value, sub_schema, path, net_new_properties, buffer):
 
             if value_json_type == column_json_type:
                 pass  # ok
+            elif  value_json_type in NUMBER_TYPES and column_json_type in NUMBER_TYPES:
+                pass # ok
             elif value_json_type == NESTED and all(python_type_to_json_type[v.__class__] == column_json_type for v in value if v != None):
                 pass  # empty arrays can be anything
             else:
                 from mo_logs import Log
 
-                Log.error("Can not store {{value}} in {{column|quote}}", value=value, column=sub_schema.names['.'])
+                Log.error("Can not store {{value}} in {{column|quote}}", value=value, column=sub_schema.name)
 
             sub_schema = {json_type_to_inserter_type[value_json_type]: sub_schema}
 
-        if value == None:
+        if value == None and path:
             from mo_logs import Log
             Log.error("can not encode null (missing) values")
         elif value is True:
@@ -183,13 +205,18 @@ def typed_encode(value, sub_schema, path, net_new_properties, buffer):
                     _dict2json(value, sub_schema[NESTED_TYPE], path + [NESTED_TYPE], net_new_properties, buffer)
                     append(buffer, ']' + COMMA)
                     append(buffer, QUOTED_EXISTS_TYPE)
-                    append(buffer, text_type(len(value)))
+                    append(buffer, text(len(value)))
                     append(buffer, '}')
                 else:
-                    # SINGLETON LISTS OF null SHOULD NOT EXIST
-                    from mo_logs import Log
-
-                    Log.error("should not happen")
+                    # SINGLETON LIST
+                    append(buffer, '{')
+                    append(buffer, QUOTED_NESTED_TYPE)
+                    append(buffer, '[{')
+                    append(buffer, QUOTED_EXISTS_TYPE)
+                    append(buffer, '1}]')
+                    append(buffer, COMMA)
+                    append(buffer, QUOTED_EXISTS_TYPE)
+                    append(buffer, '1}')
             else:
                 if EXISTS_TYPE not in sub_schema:
                     sub_schema[EXISTS_TYPE] = {}
@@ -200,7 +227,7 @@ def typed_encode(value, sub_schema, path, net_new_properties, buffer):
                 else:
                     append(buffer, '{')
                     append(buffer, QUOTED_EXISTS_TYPE)
-                    append(buffer, '0}')
+                    append(buffer, '1}')
         elif _type is binary_type:
             if STRING_TYPE not in sub_schema:
                 sub_schema[STRING_TYPE] = True
@@ -209,14 +236,14 @@ def typed_encode(value, sub_schema, path, net_new_properties, buffer):
             append(buffer, QUOTED_STRING_TYPE)
             append(buffer, '"')
             try:
-                v = utf82unicode(value)
+                v = value.decode('utf8')
             except Exception as e:
                 raise problem_serializing(value, e)
 
             for c in v:
                 append(buffer, ESCAPE_DCT.get(c, c))
             append(buffer, '"}')
-        elif _type is text_type:
+        elif _type is text:
             if STRING_TYPE not in sub_schema:
                 sub_schema[STRING_TYPE] = True
                 net_new_properties.append(path + [STRING_TYPE])
@@ -226,14 +253,14 @@ def typed_encode(value, sub_schema, path, net_new_properties, buffer):
             for c in value:
                 append(buffer, ESCAPE_DCT.get(c, c))
             append(buffer, '"}')
-        elif _type in (int, long):
+        elif _type in integer_types:
             if NUMBER_TYPE not in sub_schema:
                 sub_schema[NUMBER_TYPE] = True
                 net_new_properties.append(path + [NUMBER_TYPE])
 
             append(buffer, '{')
             append(buffer, QUOTED_NUMBER_TYPE)
-            append(buffer, text_type(value))
+            append(buffer, text(value))
             append(buffer, '}')
         elif _type in (float, Decimal):
             if NUMBER_TYPE not in sub_schema:
@@ -246,16 +273,27 @@ def typed_encode(value, sub_schema, path, net_new_properties, buffer):
         elif _type in (set, list, tuple, FlatList):
             if len(value) == 0:
                 append(buffer, '{')
-                append(buffer, QUOTED_NESTED_TYPE)
-                append(buffer, '[]}')
-            elif any(isinstance(v, (Mapping, set, list, tuple, FlatList)) for v in value):
-                if NESTED_TYPE not in sub_schema:
-                    sub_schema[NESTED_TYPE] = {}
-                    net_new_properties.append(path + [NESTED_TYPE])
-                append(buffer, '{')
-                append(buffer, QUOTED_NESTED_TYPE)
-                _list2json(value, sub_schema[NESTED_TYPE], path + [NESTED_TYPE], net_new_properties, buffer)
-                append(buffer, '}')
+                append(buffer, QUOTED_EXISTS_TYPE)
+                append(buffer, '0}')
+            elif any(v.__class__ in (Data, dict, set, list, tuple, FlatList) for v in value):
+                # THIS IS NOT DONE BECAUSE
+                if len(value) == 1:
+                    if NESTED_TYPE in sub_schema:
+                        append(buffer, '{')
+                        append(buffer, QUOTED_NESTED_TYPE)
+                        _list2json(value, sub_schema[NESTED_TYPE], path + [NESTED_TYPE], net_new_properties, buffer)
+                        append(buffer, '}')
+                    else:
+                        # NO NEED TO NEST, SO DO NOT DO IT
+                        typed_encode(value[0], sub_schema, path, net_new_properties, buffer)
+                else:
+                    if NESTED_TYPE not in sub_schema:
+                        sub_schema[NESTED_TYPE] = {}
+                        net_new_properties.append(path + [NESTED_TYPE])
+                    append(buffer, '{')
+                    append(buffer, QUOTED_NESTED_TYPE)
+                    _list2json(value, sub_schema[NESTED_TYPE], path + [NESTED_TYPE], net_new_properties, buffer)
+                    append(buffer, '}')
             else:
                 # ALLOW PRIMITIVE MULTIVALUES
                 value = [v for v in value if v != None]
@@ -332,11 +370,11 @@ def typed_encode(value, sub_schema, path, net_new_properties, buffer):
         else:
             from mo_logs import Log
 
-            Log.error(text_type(repr(value)) + " is not JSON serializable")
+            Log.error(text(repr(value)) + " is not JSON serializable")
     except Exception as e:
         from mo_logs import Log
 
-        Log.error(text_type(repr(value)) + " is not JSON serializable", cause=e)
+        Log.error(text(repr(value)) + " is not JSON serializable", cause=e)
 
 
 def _list2json(value, sub_schema, path, net_new_properties, buffer):
@@ -351,7 +389,7 @@ def _list2json(value, sub_schema, path, net_new_properties, buffer):
         append(buffer, ']')
         append(buffer, COMMA)
         append(buffer, QUOTED_EXISTS_TYPE)
-        append(buffer, text_type(len(value)))
+        append(buffer, text(len(value)))
 
 
 def _multivalue2json(value, sub_schema, path, net_new_properties, buffer):
@@ -380,7 +418,7 @@ def _iter2json(value, sub_schema, path, net_new_properties, buffer):
     append(buffer, ']')
     append(buffer, COMMA)
     append(buffer, QUOTED_EXISTS_TYPE)
-    append(buffer, text_type(count))
+    append(buffer, text(count))
 
 
 def _dict2json(value, sub_schema, path, net_new_properties, buffer):
@@ -390,9 +428,9 @@ def _dict2json(value, sub_schema, path, net_new_properties, buffer):
             continue
         append(buffer, prefix)
         prefix = COMMA
-        if isinstance(k, binary_type):
-            k = utf82unicode(k)
-        if not isinstance(k, text_type):
+        if is_binary(k):
+            k = k.decode('utf8')
+        if not is_text(k):
             Log.error("Expecting property name to be a string")
         if k not in sub_schema:
             sub_schema[k] = {}
@@ -410,42 +448,6 @@ def _dict2json(value, sub_schema, path, net_new_properties, buffer):
         append(buffer, '1}')
 
 
-IS_NULL = '0'
-BOOLEAN = 'boolean'
-INTEGER = 'integer'
-NUMBER = 'number'
-STRING = 'string'
-OBJECT = 'object'
-NESTED = "nested"
-EXISTS = "exists"
-
-JSON_TYPES = [BOOLEAN, INTEGER, NUMBER, STRING, OBJECT]
-PRIMITIVE = [EXISTS, BOOLEAN, INTEGER, NUMBER, STRING]
-STRUCT = [EXISTS, OBJECT, NESTED]
-
-
-python_type_to_json_type = {
-    int: NUMBER,
-    text_type: STRING,
-    float: NUMBER,
-    None: OBJECT,
-    bool: BOOLEAN,
-    NullType: OBJECT,
-    none_type: OBJECT,
-    Data: OBJECT,
-    dict: OBJECT,
-    object: OBJECT,
-    Mapping: OBJECT,
-    list: NESTED,
-    FlatList: NESTED,
-    Date: NUMBER
-}
-
-if PY2:
-    python_type_to_json_type[str] = STRING
-    python_type_to_json_type[long] = NUMBER
-
-
 TYPE_PREFIX = "~"  # u'\u0442\u0443\u0440\u0435-'  # "туре"
 BOOLEAN_TYPE = TYPE_PREFIX + "b~"
 NUMBER_TYPE = TYPE_PREFIX + "n~"
@@ -460,6 +462,12 @@ QUOTED_NUMBER_TYPE = quote(NUMBER_TYPE) + COLON
 QUOTED_STRING_TYPE = quote(STRING_TYPE) + COLON
 QUOTED_NESTED_TYPE = quote(NESTED_TYPE) + COLON
 QUOTED_EXISTS_TYPE = quote(EXISTS_TYPE) + COLON
+
+inserter_type_to_json_type = {
+    BOOLEAN_TYPE: BOOLEAN,
+    NUMBER_TYPE: NUMBER,
+    STRING_TYPE: STRING
+}
 
 json_type_to_inserter_type = {
     BOOLEAN: BOOLEAN_TYPE,

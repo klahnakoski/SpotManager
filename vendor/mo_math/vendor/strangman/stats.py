@@ -224,11 +224,12 @@ SUPPORT FUNCTIONS:  writecc
 ##              changed name of skewness and askewness to skew and askew
 ##              fixed (a)histogram (which sometimes counted points <lowerlimit)
 
-import math
 import copy
-# from types import *
+import math
 
 from mo_math.vendor.strangman import pstat
+
+# from types import *
 
 
 __version__ = 0.6
@@ -360,7 +361,7 @@ Calculates the nth moment about the mean for a sample (defaults to
 the 1st moment).  Used to calculate coefficients of skewness and kurtosis.
 
 Usage:   lmoment(inlist,moment=1)
-Returns: appropriate moment (r) from pyLibrary. 1/n * SUM((inlist(i)-mean)**r)
+Returns: appropriate moment (r) from. 1/n * SUM((inlist(i)-mean)**r)
 """
     if moment == 1:
         return 0.0

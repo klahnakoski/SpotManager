@@ -98,6 +98,8 @@ def es_bulkaggsop(esq, frum, query):
 
         if num_partitions > MAX_PARTITIONS:
             Log.error("Requesting more than {{num}} partitions", num=num_partitions)
+        if num_partitions == 0:
+            num_partitions = 1
 
         acc, decoders, es_query = build_es_query(selects, query_path, schema, query)
         guid = Random.base64(32, extra="-_")
@@ -119,7 +121,7 @@ def es_bulkaggsop(esq, frum, query):
             abs_limit,
             formatter,
             parent_thread=Null,
-        )
+        ).release()
 
     output = wrap(
         {

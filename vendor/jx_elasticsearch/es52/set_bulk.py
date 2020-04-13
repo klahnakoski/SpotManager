@@ -67,7 +67,7 @@ def es_bulksetop(esq, frum, query):
         es_query,
         formatter,
         parent_thread=Null,
-    )
+    ).release()
 
     output = wrap(
         {
@@ -102,6 +102,8 @@ def extractor(guid, abs_limit, esq, es_query, formatter, please_stop):
                     hits = result.hits.hits
                     chunk_limit = abs_limit - total
                     hits = hits[:chunk_limit]
+                    if len(hits) == 0:
+                        break
                     formatter.add(hits)
                     for b in formatter.bytes():
                         if b is DONE:
@@ -128,6 +130,8 @@ def extractor(guid, abs_limit, esq, es_query, formatter, please_stop):
                             result = esq.es.scroll(scroll_id)
                         continue
                     break
+                if please_stop:
+                    Log.error("Bulk download stopped for shutdown")
                 for b in formatter.footer():
                     output.write(b)
 

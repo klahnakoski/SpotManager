@@ -1,5 +1,5 @@
 {
-	"budget": 2.50,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"budget": 0.10,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.02,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 30,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"max_requests_per_type": 10,
@@ -49,6 +49,8 @@
 //		{"instance_type": "m2.2xlarge",  "num_drives": 1, "memory": 34, "cpu": 4, "utility": 4},
 //		{"instance_type": "m2.4xlarge", "num_drives": 2, "memory": 68, "cpu": 8, "utility": 8},
 
+		{"instance_type": "m5a.large", "memory": 8, "cpu": 2, "utility": 2},
+
 		{"instance_type": "m3.medium", "num_drives": 1, "memory": 3.75, "cpu": 1, "utility": 1},
 		{"instance_type": "m3.large", "num_drives": 1, "memory": 7.5, "cpu": 2, "utility": 2},
 		{"instance_type": "m3.xlarge", "num_drives": 2, "memory": 15, "cpu": 4, "utility": 4},
@@ -67,7 +69,7 @@
 		"request": {
 			//SEE http://boto.readthedocs.org/en/latest/ref/ec2.html#boto.ec2.connection.EC2Connection.request_spot_instances
 			"price": 0.001,
-			"image_id": "ami-835b4efa", //UBUNTU (old: ami-a9d276c9)
+			"image_id": "ami-003634241a8fcdec0", //UBUNTU (old: ami-a9d276c9)
 			"count": 1,
 			"type": "one-time",
 			"valid_from": null,

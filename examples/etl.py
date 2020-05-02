@@ -81,16 +81,7 @@ def _update_ubuntu_packages(conn):
 
 
 def _setup_etl_code(conn):
-    conn.sudo("apt-get install -y python2.7")
-
-    if not conn.exists("/usr/local/bin/pip"):
-        conn.run("mkdir -p /home/ubuntu/temp")
-
-        with conn.cd("/home/ubuntu/temp"):
-            # INSTALL FROM CLEAN DIRECTORY
-            conn.run("wget https://bootstrap.pypa.io/get-pip.py")
-            conn.sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
-            conn.sudo("python2.7 get-pip.py")
+    conn.sudo("apt-get install -y python37-pip")
 
     if not conn.exists("/home/ubuntu/ActiveData-ETL/README.md"):
         with conn.cd("/home/ubuntu"):
@@ -102,22 +93,9 @@ def _setup_etl_code(conn):
     with conn.cd("/home/ubuntu/ActiveData-ETL"):
         conn.run("git checkout etl")
 
-        # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
         conn.sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
-        conn.sudo("pip install future")
-        conn.sudo("pip install BeautifulSoup")
-        conn.sudo("pip install MozillaPulse")
-        conn.sudo("pip install boto")
-        conn.sudo("pip install requests")
-        conn.sudo("pip install taskcluster")
-        conn.sudo("apt-get install -y python-dev")  # REQUIRED FOR psutil
-        conn.sudo("apt-get install -y build-essential")  # REQUIRED FOR psutil
-        conn.sudo("pip install psutil")
-        conn.sudo("pip install pympler")
-        conn.sudo("pip install -r requirements.txt")
-
-    Log.note("8")
-    conn.sudo("apt-get -y install python-psycopg2")
+        conn.sudo("apt-get -y install gcc python3.7-dev")  # REQUIRED FOR psutil
+        conn.sudo("python3.7 -m pip install -r requirements.txt")
 
 
 def _setup_etl_supervisor(conn, cpu_count):
@@ -145,7 +123,7 @@ def _add_private_file(conn):
     conn.run('rm -f /home/ubuntu/private.json')
     conn.put('~/private_active_data_etl.json', '/home/ubuntu/private.json')
     with conn.cd("/home/ubuntu"):
-        conn.run("chmod o-r private.json")
+        conn.run("chmod go-rw private.json")
 
 
 def main():

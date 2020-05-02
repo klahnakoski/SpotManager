@@ -927,6 +927,7 @@ ephemeral_storage = {
     "m4.4xlarge": {"num": 0, "size": 0},
     "m4.large": {"num": 0, "size": 0},
     "m4.xlarge": {"num": 0, "size": 0},
+    "m5a.large": {"num": 0, "size": 0},
 
     "m5d.large": {"num": 1, "size": 75},
     "m5d.xlarge": {"num": 1, "size": 150},

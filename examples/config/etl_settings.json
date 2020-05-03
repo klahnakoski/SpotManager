@@ -1,5 +1,5 @@
 {
-	"budget": 0.20,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
+	"budget": 2.50,  //MAXIMUM SPEND PER HOUR FOR ALL INSTANCES
 	"max_utility_price": 0.02,   //MOST THAT WILL BE SPENT ON A SINGLE UTILITY POINT
 	"max_new_utility": 30,  //MOST NEW UTILITY THAT WILL BE REQUESTED IN A SINGLE RUN
 	"max_requests_per_type": 10,
@@ -61,7 +61,7 @@
 		{"instance_type": "r3.xlarge", "ecu": 13, "num_drives": 1, "memory": 30.5, "cpu": 4, "utility": 4},
 		{"instance_type": "r3.2xlarge", "ecu": 26, "num_drives": 1, "memory": 61, "cpu": 8, "utility": 8},
 		{"instance_type": "r3.4xlarge", "ecu": 52, "num_drives": 1, "memory": 122, "cpu": 16, "utility": 16},
-		{"instance_type": "r3.8xlarge", "ecu": 104, "num_drives": 2, "memory": 244, "cpu": 32, "utility": 32},
+		{"instance_type": "r3.8xlarge", "ecu": 104, "num_drives": 2, "memory": 244, "cpu": 32, "utility": 32}
 
 
 	],
@@ -90,9 +90,9 @@
 			"placement_group": null,
 //			"block_device_map": {
 //				"/dev/sda1": {
-//					"volume_id":"snap-039ffe051a6c30204",  // UBUNTU SNAPSHOT
-//					"volume_type":"standard",
-//					"size": 15
+//					"snapshot_id":"snap-07be4e96af7fee9f2",  // UBUNTU SNAPSHOT
+//					"volume_type":"gp2",
+//					"size": 8
 //				}
 //			},
 			"instance_profile_arn": null,

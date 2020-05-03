@@ -595,7 +595,6 @@ class SpotManager(object):
                 delete_on_termination=True,
                 **dev_settings
             )
-
         kwargs.block_device_map = block_device_map
 
         # INCLUDE EPHEMERAL STORAGE IN BlockDeviceMapping

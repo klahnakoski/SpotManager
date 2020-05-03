@@ -68,7 +68,8 @@ class ETL(InstanceManager):
             _update_ubuntu_packages(c, please_stop)
             _setup_etl_code(c, please_stop)
             _add_private_file(c, please_stop)
-            _setup_etl_supervisor(c, please_stop, cpu_count)
+            _install_supervisor(c, please_stop, cpu_count)
+            _restart_etl_supervisor(c, please_stop, cpu_count)
 
     def teardown(self, instance, please_stop):
         with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:
@@ -85,12 +86,13 @@ def _update_ubuntu_packages(conn, please_stop):
 
     apt_get(conn, please_stop, "clean")
     apt_get(conn, please_stop, "update")
+    apt_get(conn, please_stop, "-y install build-essential")
+    apt_get(conn, please_stop, "-y install python3-pip")
+    apt_get(conn, please_stop, "-y install python3.7")
+    apt_get(conn, please_stop, "-y install gcc python3.7-dev")  # REQUIRED FOR psutil
 
 
 def _setup_etl_code(conn, please_stop):
-    apt_get(conn, please_stop, "-y install python3-pip")
-    apt_get(conn, please_stop, "-y install python3.7")
-
     if not conn.exists("/home/ubuntu/ActiveData-ETL/README.md"):
         with conn.cd("/home/ubuntu"):
             apt_get(conn, please_stop, "-yf install git-core")
@@ -104,17 +106,17 @@ def _setup_etl_code(conn, please_stop):
         conn.run("git pull origin etl")
 
         conn.sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
-        apt_get(conn, please_stop, "-y install gcc python3.7-dev")  # REQUIRED FOR psutil
         conn.sudo("python3.7 -m pip install -r requirements.txt")
 
 
-def _setup_etl_supervisor(conn, please_stop, cpu_count):
+def _install_supervisor(conn, please_stop, cpu_count):
     # INSTALL supervsor
     apt_get(conn, please_stop, "-y install supervisor")
-    # with fabric_settings(warn=True:
-    conn.sudo("service supervisor start")
 
+
+def _restart_etl_supervisor(conn, please_stop, cpu_count):
     # READ LOCAL CONFIG FILE, ALTER IT FOR THIS MACHINE RESOURCES, AND PUSH TO REMOTE
+    conn.sudo("service supervisor start", warn=True)
     conf_file = File("./examples/config/etl_supervisor.conf")
     content = conf_file.read_bytes()
     find = between(content, "numprocs=", "\n")
@@ -135,7 +137,19 @@ def apt_get(conn, please_stop, command):
             conn.sudo("apt-get " + command)
             return
         except UnexpectedExit as ue:
-            if "Resource temporarily unavailable" in ue.result or "is another process using it?" in ue.result:
+            if "Unmet dependencies" in ue.result:
+                conn.sudo("apt -y --fix-broken install", warn=True)
+            if "Unable to lock directory /var/cache/apt/archives/" in ue.result:
+                conn.sudo("rm /var/cache/apt/archives/lock", warn=True)
+            elif "Unable to lock directory /var/lib/apt/lists/*" in ue.result or "run apt-get update to correct these problems" in ue.result:
+                try:
+                    conn.sudo("rm -rf /var/lib/apt/lists/*")
+                    conn.sudo("apt-get clean")
+                    conn.sudo("apt-get update")
+                except Exception as e:
+                    Log.warning("recovery failed, retry", cause=e)
+                    Till(seconds=2).wait()
+            elif "Resource temporarily unavailable" in ue.result or "is another process using it?" in ue.result:
                 Log.note("wait for apt-get {{command|quote}}", command=command)
                 Till(seconds=2).wait()
             else:

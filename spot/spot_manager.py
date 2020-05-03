@@ -39,8 +39,9 @@ from pyLibrary.meta import cache, new_instance
 
 _please_import = http
 
+SINGLE_THREAD_SETUP = False
 ENABLE_SIDE_EFFECTS = True
-ALLOW_SHUTDOWN = False
+ALLOW_SHUTDOWN = True
 DEBUG_PRICING = True
 TIME_FROM_RUNNING_TO_LOGIN = 7 * MINUTE
 ERROR_ON_CALL_TO_SETUP = "Problem with setup()"
@@ -370,7 +371,7 @@ class SpotManager(object):
         # SEND SHUTDOWN TO EACH INSTANCE
         Log.warning("Shutdown {{instances}} to save money!", instances=remove_list.id)
         if ALLOW_SHUTDOWN:
-            for g, removals in jx.groupby(remove_list, size=20):
+            for g, removals in jx.chunk(remove_list, size=20):
                 for i, t in [
                     (i, Thread.run("teardown " + i.id, self.instance_manager.teardown, i, please_stop=False))
                     for i in removals
@@ -480,14 +481,17 @@ class SpotManager(object):
 
                         i.markup = p
                         i.add_tag("Name", self.settings.ec2.instance.name + " (setup)")
-                        setup_threads.append(Thread.run(
+                        t = Thread.run(
                             "setup for " + text(i.id),
                             track_setup,
                             self.instance_manager.setup,
                             r,
                             i,
                             p
-                        ))
+                        )
+                        if SINGLE_THREAD_SETUP:
+                            t.join()
+                        setup_threads.append(t)
                     except Exception as e:
                         i.add_tag("Name", "")
                         Log.warning("Unexpected failure on startup", instance_id=i.id, cause=e)

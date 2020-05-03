@@ -9,12 +9,15 @@
 from __future__ import division
 from __future__ import unicode_literals
 
+from invoke import UnexpectedExit
+
 import mo_math
 from mo_fabric import Connection
 from mo_files import File
 from mo_kwargs import override
 from mo_logs import Log, constants, startup
 from mo_logs.strings import between
+from mo_threads import Till
 from mo_times import Date
 from pyLibrary import aws
 from spot.instance_manager import InstanceManager
@@ -62,10 +65,10 @@ class ETL(InstanceManager):
         with Connection(host=instance.ip_address, kwargs=self.settings.connect) as c:
             cpu_count = int(round(utility.cpu))
 
-            _update_ubuntu_packages(c)
-            _setup_etl_code(c)
-            _add_private_file(c)
-            _setup_etl_supervisor(c, cpu_count)
+            _update_ubuntu_packages(c, please_stop)
+            _setup_etl_code(c, please_stop)
+            _add_private_file(c, please_stop)
+            _setup_etl_supervisor(c, please_stop, cpu_count)
 
     def teardown(self, instance, please_stop):
         with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:
@@ -73,34 +76,41 @@ class ETL(InstanceManager):
             conn.sudo("supervisorctl stop all", warn=True)
 
 
-def _update_ubuntu_packages(conn):
-    conn.sudo("apt-get clean")
-    conn.sudo("dpkg --configure -a")
-    conn.sudo("apt-get clean")
-    conn.sudo("apt-get update")
+def _update_ubuntu_packages(conn, please_stop):
+    apt_get(conn, please_stop, "clean")
+    try:
+        conn.sudo("dpkg --configure -a")
+    except Exception:
+        pass
+
+    apt_get(conn, please_stop, "clean")
+    apt_get(conn, please_stop, "update")
 
 
-def _setup_etl_code(conn):
-    conn.sudo("apt-get install -y python37-pip")
+def _setup_etl_code(conn, please_stop):
+    apt_get(conn, please_stop, "-y install python3-pip")
+    apt_get(conn, please_stop, "-y install python3.7")
 
     if not conn.exists("/home/ubuntu/ActiveData-ETL/README.md"):
         with conn.cd("/home/ubuntu"):
-            conn.sudo("apt-get -yf install git-core")
+            apt_get(conn, please_stop, "-yf install git-core")
             conn.run('rm -fr /home/ubuntu/ActiveData-ETL')
             conn.run("git clone https://github.com/klahnakoski/ActiveData-ETL.git")
             conn.run("mkdir -p /home/ubuntu/ActiveData-ETL/results/logs")
 
     with conn.cd("/home/ubuntu/ActiveData-ETL"):
+        conn.run("git reset --hard HEAD")
         conn.run("git checkout etl")
+        conn.run("git pull origin etl")
 
         conn.sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
-        conn.sudo("apt-get -y install gcc python3.7-dev")  # REQUIRED FOR psutil
+        apt_get(conn, please_stop, "-y install gcc python3.7-dev")  # REQUIRED FOR psutil
         conn.sudo("python3.7 -m pip install -r requirements.txt")
 
 
-def _setup_etl_supervisor(conn, cpu_count):
+def _setup_etl_supervisor(conn, please_stop, cpu_count):
     # INSTALL supervsor
-    conn.sudo("apt-get install -y supervisor")
+    apt_get(conn, please_stop, "-y install supervisor")
     # with fabric_settings(warn=True:
     conn.sudo("service supervisor start")
 
@@ -119,7 +129,20 @@ def _setup_etl_supervisor(conn, cpu_count):
     conn.sudo("supervisorctl update")
 
 
-def _add_private_file(conn):
+def apt_get(conn, please_stop, command):
+    while not please_stop:
+        try:
+            conn.sudo("apt-get " + command)
+            return
+        except UnexpectedExit as ue:
+            if "Resource temporarily unavailable" in ue.result or "is another process using it?" in ue.result:
+                Log.note("wait for apt-get {{command|quote}}", command=command)
+                Till(seconds=2).wait()
+            else:
+                Log.warning("do not know what to do", cause=ue)
+
+
+def _add_private_file(conn, please_Stop):
     conn.run('rm -f /home/ubuntu/private.json')
     conn.put('~/private_active_data_etl.json', '/home/ubuntu/private.json')
     with conn.cd("/home/ubuntu"):

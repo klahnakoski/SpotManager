@@ -9,7 +9,7 @@
 	"run_interval": "10minute",
 	"connect": {
 		//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
-		"user": "ubuntu",
+		"user": "ec2-user",
 		"key_filename": "~/.ssh/activedata.pem",
 		"disable_known_hosts": true,
 		"host_string": "",

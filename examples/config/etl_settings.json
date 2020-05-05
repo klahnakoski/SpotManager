@@ -69,7 +69,7 @@
 		"request": {
 			//SEE http://boto.readthedocs.org/en/latest/ref/ec2.html#boto.ec2.connection.EC2Connection.request_spot_instances
 			"price": 0.001,
-			"image_id": "ami-003634241a8fcdec0", //UBUNTU (old: ami-a9d276c9)
+			"image_id": "ami-0d6621c01e8c2de2c", //UBUNTU (old: ami-a9d276c9)
 			"count": 1,
 			"type": "one-time",
 			"valid_from": null,
@@ -119,7 +119,7 @@
 		"minimum_utility": 0,   // HOW MUCH UTILITY CAN REMAIN IDLE
 		"connect": {
 			//USED IN Fabric's `env` GLOBAL CONFIG OBJECT
-			"user": "ubuntu",
+			"user": "ec2-user",
 			"key_filename": "~/.ssh/activedata.pem",
 			"port": 22
 		},

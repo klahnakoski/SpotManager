@@ -260,9 +260,11 @@ def _install_pypy_indexer(instance, conn):
 
     conn.put("~/private_active_data_etl.json", "/home/ec2-user/private.json")
 
+
 def _install_supervisor(instance, conn):
     _install_python(instance, conn)
-    conn.sudo("pip install supervisor")
+    conn.sudo("pip install supervisor==4.1.0")
+
 
 def _install_lib(lib_name, install="install", conn=None):
     """

@@ -9,12 +9,12 @@
 from __future__ import division
 from __future__ import unicode_literals
 
+import mo_math
 from mo_fabric import Connection
-from mo_files import File
+from mo_files import File, TempFile
 from mo_kwargs import override
 from mo_logs import Log, constants, startup
 from mo_logs.strings import between
-from mo_math import Math
 from mo_times import Date
 from pyLibrary import aws
 from spot.instance_manager import InstanceManager
@@ -43,8 +43,7 @@ class ETL(InstanceManager):
 
         if current_utility < pending / 20:
             # INCREASE
-            # ENSURE THERE IS PLENTY OF WORK BEFORE MACHINE IS DEPLOYED
-            return max(minimum, Math.ceiling(pending / 20))
+            return max(minimum, mo_math.ceiling(pending / 20))   # ENSURE THERE IS PLENTY OF WORK BEFORE MACHINE IS DEPLOYED
         else:
             # DECREASE
             target = max(minimum, min(current_utility, pending*2))
@@ -63,10 +62,10 @@ class ETL(InstanceManager):
         with Connection(host=instance.ip_address, kwargs=self.settings.connect) as c:
             cpu_count = int(round(utility.cpu))
 
-            _update_ubuntu_packages(c)
-            _setup_etl_code(c)
-            _add_private_file(c)
-            _setup_etl_supervisor(c, cpu_count)
+            _setup_etl_code(c, please_stop)
+            _add_private_file(c, please_stop)
+            _install_supervisor(c, please_stop, cpu_count)
+            _restart_etl_supervisor(c, please_stop, cpu_count)
 
     def teardown(self, instance, please_stop):
         with Connection(host=instance.ip_address, kwargs=self.settings.connect) as conn:
@@ -74,79 +73,59 @@ class ETL(InstanceManager):
             conn.sudo("supervisorctl stop all", warn=True)
 
 
-def _update_ubuntu_packages(conn):
-    conn.sudo("apt-get clean")
-    conn.sudo("dpkg --configure -a")
-    conn.sudo("apt-get clean")
-    conn.sudo("apt-get update")
+def _install_python3(conn, please_stop):
+    result = conn.run("python3 --version", warn=True)
+    if "Python 3.7" not in result:
+        conn.sudo("yum install -y python3")
 
 
-def _setup_etl_code(conn):
-    conn.sudo("apt-get install -y python2.7")
-
-    if not conn.exists("/usr/local/bin/pip"):
-        conn.run("mkdir -p /home/ubuntu/temp")
-
-        with conn.cd("/home/ubuntu/temp"):
-            # INSTALL FROM CLEAN DIRECTORY
-            conn.run("wget https://bootstrap.pypa.io/get-pip.py")
-            conn.sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
-            conn.sudo("python2.7 get-pip.py")
-
-    if not conn.exists("/home/ubuntu/ActiveData-ETL/README.md"):
-        with conn.cd("/home/ubuntu"):
-            conn.sudo("apt-get -yf install git-core")
-            conn.run('rm -fr /home/ubuntu/ActiveData-ETL')
+def _setup_etl_code(conn, please_stop):
+    _install_python3(conn, please_stop)
+    if not conn.exists("/home/ec2-user/ActiveData-ETL/README.md"):
+        with conn.cd("/home/ec2-user"):
+            conn.sudo("yum -y install git")
+            # conn.sudo("yum -y install gcc python3-devel")  # REQUIRED FOR psutil
+            conn.run('rm -fr /home/ec2-user/ActiveData-ETL')
             conn.run("git clone https://github.com/klahnakoski/ActiveData-ETL.git")
-            conn.run("mkdir -p /home/ubuntu/ActiveData-ETL/results/logs")
+            conn.run("mkdir -p /home/ec2-user/logs")
 
-    with conn.cd("/home/ubuntu/ActiveData-ETL"):
+    with conn.cd("/home/ec2-user/ActiveData-ETL"):
+        conn.run("git reset --hard HEAD")
         conn.run("git checkout etl")
+        conn.run("git pull origin etl")
 
-        # pip install -r requirements.txt HAS TROUBLE IMPORTING SOME LIBS
         conn.sudo("rm -fr ~/.cache/pip")  # JUST IN CASE THE DIRECTORY WAS MADE
-        conn.sudo("pip install future")
-        conn.sudo("pip install BeautifulSoup")
-        conn.sudo("pip install MozillaPulse")
-        conn.sudo("pip install boto")
-        conn.sudo("pip install requests")
-        conn.sudo("pip install taskcluster")
-        conn.sudo("apt-get install -y python-dev")  # REQUIRED FOR psutil
-        conn.sudo("apt-get install -y build-essential")  # REQUIRED FOR psutil
-        conn.sudo("pip install psutil")
-        conn.sudo("pip install pympler")
-        conn.sudo("pip install -r requirements.txt")
-
-    Log.note("8")
-    conn.sudo("apt-get -y install python-psycopg2")
+        conn.sudo("python3 -m pip install -r requirements.txt")
 
 
-def _setup_etl_supervisor(conn, cpu_count):
-    # INSTALL supervsor
-    conn.sudo("apt-get install -y supervisor")
-    # with fabric_settings(warn=True:
-    conn.sudo("service supervisor start")
+def _install_supervisor(conn, please_stop, cpu_count):
+    conn.sudo("easy_install --upgrade pip")
+    conn.sudo("pip install supervisor==4.1.0")
 
+
+def _restart_etl_supervisor(conn, please_stop, cpu_count):
     # READ LOCAL CONFIG FILE, ALTER IT FOR THIS MACHINE RESOURCES, AND PUSH TO REMOTE
     conf_file = File("./examples/config/etl_supervisor.conf")
     content = conf_file.read_bytes()
     find = between(content, "numprocs=", "\n")
     content = content.replace("numprocs=" + find + "\n", "numprocs=" + str(cpu_count) + "\n")
-    File("./temp/etl_supervisor.conf.alt").write_bytes(content)
-    conn.sudo("rm -f /etc/supervisor/conf.d/etl_supervisor.conf")
-    conn.put("./temp/etl_supervisor.conf.alt", '/etc/supervisor/conf.d/etl_supervisor.conf', use_sudo=True)
-    conn.run("mkdir -p /home/ubuntu/ActiveData-ETL/results/logs")
+    with TempFile() as tempfile:
+        tempfile.write(content)
+        conn.sudo("rm -f /etc/supervisor/conf.d/etl_supervisor.conf")
+        conn.put(tempfile.abspath, "/etc/supervisord.conf", use_sudo=True)
+    conn.run("mkdir -p /home/ec2-user/logs")
 
-    # POKE supervisor TO NOTICE THE CHANGE
+    # START DAEMON (OR THROW ERROR IF RUNNING ALREADY)
+    conn.sudo("supervisord -c /etc/supervisord.conf", warn=True)
     conn.sudo("supervisorctl reread")
     conn.sudo("supervisorctl update")
 
 
-def _add_private_file(conn):
-    conn.run('rm -f /home/ubuntu/private.json')
-    conn.put('~/private_active_data_etl.json', '/home/ubuntu/private.json')
-    with conn.cd("/home/ubuntu"):
-        conn.run("chmod o-r private.json")
+def _add_private_file(conn, please_Stop):
+    conn.run('rm -f /home/ec2-user/private.json')
+    conn.put('~/private_active_data_etl.json', '/home/ec2-user/private.json')
+    with conn.cd("/home/ec2-user"):
+        conn.run("chmod go-rw private.json")
 
 
 def main():

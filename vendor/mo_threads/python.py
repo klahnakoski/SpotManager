@@ -4,19 +4,18 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
 import os
+import platform
 
-from mo_dots import wrap, set_default
-from mo_json import value2json, json2value
-from mo_logs import Log, Except
+from mo_dots import set_default, wrap
+from mo_json import json2value, value2json
+from mo_logs import Except, Log
 
-from mo_threads import Process, Lock, Thread, Signal, THREAD_STOP
+from mo_threads import Lock, Process, Signal, THREAD_STOP, Thread, DONE
 
 PYTHON = "python"
 DEBUG = True
@@ -29,11 +28,22 @@ class Python(object):
         if config.debug.logs:
             Log.error("not allowed to configure logging on other process")
 
-        self.process = Process(name, [PYTHON, "mo_threads" + os.sep + "python_worker.py"], shell=True)
-        self.process.stdin.add(value2json(set_default({"debug": {"trace": True}}, config)))
-
+        Log.note("begin process")
+        # WINDOWS REQUIRED shell, WHILE LINUX NOT
+        shell = "windows" in platform.system().lower()
+        self.process = Process(
+            name,
+            [PYTHON, "-u", "mo_threads" + os.sep + "python_worker.py"],
+            debug=False,
+            cwd=os.getcwd(),
+            shell=shell
+        )
+        self.process.stdin.add(value2json(set_default({}, config, {"debug": {"trace": True}})))
+        status = self.process.stdout.pop()
+        if status != '{"out":"ok"}':
+            Log.error("could not start python\n{{error|indent}}", error=self.process.stderr.pop_all()+[status]+self.process.stdin.pop_all())
         self.lock = Lock("wait for response from "+name)
-        self.current_task = None
+        self.current_task = DONE
         self.current_response = None
         self.current_error = None
 
@@ -42,21 +52,23 @@ class Python(object):
 
     def _execute(self, command):
         with self.lock:
-            if self.current_task is not None:
-                self.current_task.wait()
+            self.current_task.wait()
             self.current_task = Signal()
             self.current_response = None
             self.current_error = None
-        self.process.stdin.add(value2json(command))
-        self.current_task.wait()
-        with self.lock:
+
+            if self.process.service_stopped:
+                Log.error("python is not running")
+            self.process.stdin.add(value2json(command))
+            (self.current_task | self.process.service_stopped).wait()
+
             try:
                 if self.current_error:
                     Log.error("problem with process call", cause=Except.new_instance(self.current_error))
                 else:
                     return self.current_response
             finally:
-                self.current_task = None
+                self.current_task = DONE
                 self.current_response = None
                 self.current_error = None
 
@@ -66,18 +78,16 @@ class Python(object):
             if line == THREAD_STOP:
                 break
             try:
-                data = json2value(line.decode('utf8'))
+                data = json2value(line)
                 if "log" in data:
                     Log.main_log.write(*data.log)
                 elif "out" in data:
-                    with self.lock:
-                        self.current_response = data.out
-                        self.current_task.go()
+                    self.current_response = data.out
+                    self.current_task.go()
                 elif "err" in data:
-                    with self.lock:
-                        self.current_error = data.err
-                        self.current_task.go()
-            except Exception:
+                    self.current_error = data.err
+                    self.current_task.go()
+            except Exception as e:
                 Log.note("non-json line: {{line}}", line=line)
         DEBUG and Log.note("stdout reader is done")
 
@@ -110,7 +120,7 @@ class Python(object):
     def __getattr__(self, item):
         def output(*args, **kwargs):
             if len(args):
-                if len(kwargs.keys()):
+                if kwargs.keys():
                     Log.error("Not allowed to use both args and kwargs")
                 return self._execute({item: args})
             else:

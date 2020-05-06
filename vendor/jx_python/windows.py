@@ -5,23 +5,19 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, unicode_literals
 
-import functools
 from copy import copy
+import functools
 
-import mo_math
 from mo_collections.multiset import Multiset
-from mo_dots.lists import FlatList
+from mo_dots import FlatList
 from mo_logs import Log
-from mo_math import MIN
-from mo_math import Math
-from mo_math import stats
+import mo_math
+from mo_math import MIN, stats
 from mo_math.stats import ZeroMoment, ZeroMoment2Stats
 
 
@@ -147,7 +143,7 @@ class _Stats(WindowFunction):
         Log.error("Do not know how to handle")
 
     def end(self):
-        ignore = Math.ceiling(len(self.samples) * (1 - self.middle) / 2)
+        ignore = mo_math.ceiling(len(self.samples) * (1 - self.middle) / 2)
         if ignore * 2 >= len(self.samples):
             return stats.Stats()
         output = stats.Stats(samples=sorted(self.samples)[ignore:len(self.samples) - ignore:])
@@ -323,6 +319,9 @@ class List(WindowFunction):
         return copy(self.agg)
 
 
+def median(*args, **kwargs):
+    return Percentile(0.5, *args, **kwargs)
+
 name2accumulator = {
     "count": Count,
     "sum": Sum,
@@ -332,6 +331,7 @@ name2accumulator = {
     "list": List,
     "min": Min,
     "minimum": Min,
+    "median": median,
     "percentile": Percentile,
     "one": One
 }

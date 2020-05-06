@@ -84,7 +84,7 @@ def _setup_etl_code(conn, please_stop):
     if not conn.exists("/home/ec2-user/ActiveData-ETL/README.md"):
         with conn.cd("/home/ec2-user"):
             conn.sudo("yum -y install git")
-            conn.sudo("yum -y install gcc python3-devel")  # REQUIRED FOR psutil
+            # conn.sudo("yum -y install gcc python3-devel")  # REQUIRED FOR psutil
             conn.run('rm -fr /home/ec2-user/ActiveData-ETL')
             conn.run("git clone https://github.com/klahnakoski/ActiveData-ETL.git")
             conn.run("mkdir -p /home/ec2-user/logs")

@@ -17,6 +17,7 @@ from mo_logs import Log, constants, startup
 from mo_logs.strings import between
 from mo_times import Date
 from pyLibrary import aws
+from pyLibrary.aws import sqs
 from spot.instance_manager import InstanceManager
 
 
@@ -33,12 +34,12 @@ class ETL(InstanceManager):
         self.settings = kwargs
 
     def required_utility(self, current_utility=None):
-        queue = aws.Queue(self.settings.work_queue)
+        queue = sqs.Queue(self.settings.work_queue)
         pending = len(queue)
 
         tod_minimum = None
         if Date.now().dow not in [6, 7] and Date.now().hour not in [4, 5, 6, 7, 8, 9, 10, 11]:
-            tod_minimum = 100
+            tod_minimum = 101
         minimum = max(self.settings.minimum_utility, tod_minimum)
 
         if current_utility < pending / 20:

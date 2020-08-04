@@ -19,7 +19,7 @@ from boto.utils import ISO8601
 
 import mo_math
 from jx_python import jx
-from jx_python.containers.list_usingPythonList import ListContainer
+from jx_python.containers.list import ListContainer
 from mo_collections import UniqueIndex
 from mo_dots import Data, FlatList, coalesce, listwrap, unwrap, wrap, Null
 from mo_dots.objects import datawrap

@@ -48,7 +48,7 @@ class ES6Spot(InstanceManager):
                 gigabytes = mo_math.floor(utility.memory)
                 Log.note("setup {{instance}}", instance=instance.id)
 
-                _install_pypy_indexer(instance=instance, conn=conn)
+                _install_python_indexer(instance=instance, conn=conn)
                 _install_es(gigabytes, instance=instance, conn=conn)
                 _install_supervisor(instance=instance, conn=conn)
                 _start_supervisor(conn=conn)
@@ -205,7 +205,7 @@ def _install_python_indexer(instance, conn):
     with conn.cd("/home/ec2-user/ActiveData-ETL/"):
         conn.run("git checkout push-to-es6")
         conn.sudo("yum -y install gcc")  # REQUIRED FOR psutil
-        conn.run("~/pypy/bin/pypy -m pip install -r requirements.txt")
+        conn.run("python -m pip install -r requirements.txt")
 
     conn.put("~/private_active_data_etl.json", "/home/ec2-user/private.json")
 
@@ -216,7 +216,7 @@ def _install_python(instance, conn):
     else:
         pip_version = ""
 
-    if not pip_version.startswith("pip 18."):
+    if not pip_version.startswith("pip 20."):
         conn.sudo("yum -y install python2")
         conn.sudo("easy_install pip")
         # conn.sudo("rm -f /usr/bin/pip", warn=True)

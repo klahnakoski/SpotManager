@@ -442,6 +442,7 @@ class SpotManager(object):
             bad_requests = Data()
             setup_threads = []
             last_get = Date.now()
+            setup_in_progress = set()
 
             while not please_stop:
                 spot_requests = self._get_managed_spot_requests()
@@ -454,6 +455,7 @@ class SpotManager(object):
                        and (
                            not i.tags.get("Name") or i.tags.get("Name") == self.settings.ec2.instance.name + " (setup)"
                        )
+                       and i.id not in setup_in_progress
                        and i._state.name == "running"
                        and Date.now() > Date(i.launch_time) + DELAY_BEFORE_SETUP
                 ]
@@ -481,6 +483,7 @@ class SpotManager(object):
 
                         i.markup = p
                         i.add_tag("Name", self.settings.ec2.instance.name + " (setup)")
+                        setup_in_progress.add(i.id)
                         t = Thread.run(
                             "setup for " + text(i.id),
                             track_setup,

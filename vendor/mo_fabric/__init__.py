@@ -4,23 +4,23 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Author: Kyle Lahnakoski (kyle@lahnakoski.com)
+# Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 from __future__ import absolute_import, division, unicode_literals
 
-from datetime import datetime
 import os
 import sys
+from datetime import datetime
 
 from fabric2 import Config, Connection as _Connection, Result
-from mo_logs.exceptions import Except
 
-from mo_dots import set_default, unwrap, wrap, listwrap, coalesce
+from mo_dots import set_default, unwrap, wrap, listwrap
 from mo_files import File
 from mo_future import text, is_text
 from mo_kwargs import override
 from mo_logs import Log, exceptions, machine_metadata
-from mo_math.randoms import Random
+from mo_logs.exceptions import Except
+from mo_math import randoms
 from mo_threads import Thread
 from mo_threads.threads import RegisterThread
 
@@ -42,10 +42,12 @@ class Connection(object):
         kwargs=None,
     ):
         connect_kwargs = set_default(
-            {}, connect_kwargs, {"key_filename": File(key_filename).abspath}
+            {},
+            connect_kwargs,
+            {"key_filename": [File(f).abspath for f in listwrap(key_filename)]}
         )
 
-        key_filenames = listwrap(coalesce(connect_kwargs.key_filename, key_filename))
+        key_filenames = connect_kwargs.key_filename
 
         self.stdout = LogStream(host, "stdout")
         self.stderr = LogStream(host, "stderr")
@@ -103,7 +105,7 @@ class Connection(object):
             remote = self.conn.command_cwds[-1].rstrip("/'") + "/" + remote
 
         if use_sudo:
-            filename = "/tmp/" + Random.hex(20)
+            filename = "/tmp/" + randoms.filename()
             self.sudo("cp " + remote + " " + filename)
             self.sudo("chmod a+r " + filename)
             self.conn.get(filename, File(local).abspath)
@@ -116,7 +118,7 @@ class Connection(object):
             remote = self.conn.command_cwds[-1].rstrip("/'") + "/" + remote
 
         if use_sudo:
-            filename = "/tmp/" + Random.hex(20)
+            filename = "/tmp/" + randoms.filename()
             self.conn.put(File(local).abspath, filename)
             self.sudo("cp " + filename + " " + remote)
             self.sudo("rm " + filename)

@@ -17,12 +17,10 @@ from jx_elasticsearch.es52.expressions.or_op import OrOp
 
 
 class WhenOp(WhenOp_):
-    def to_esfilter(self, schema):
-        output = OrOp(
-            [
-                AndOp([self.when, BooleanOp(self.then)]),
-                AndOp([NotOp(self.when), BooleanOp(self.els_)]),
-            ]
-        ).partial_eval()
+    def to_es(self, schema):
+        output = OrOp([
+            AndOp([self.when, BooleanOp(self.then)]),
+            AndOp([NotOp(self.when), BooleanOp(self.els_)]),
+        ]).partial_eval()
 
-        return output.to_esfilter(schema)
+        return output.to_es(schema)

@@ -10,7 +10,7 @@
 from __future__ import absolute_import, division, unicode_literals
 
 from jx_base.expressions import EsScript as EsScript_, FALSE, NULL, ONE, TRUE, ZERO
-from mo_dots import coalesce, wrap
+from mo_dots import coalesce, dict_to_data
 from mo_future import PY2, text
 from mo_json import BOOLEAN, INTEGER, NUMBER
 from mo_logs import Log
@@ -64,7 +64,7 @@ class EsScript(EsScript_):
     if PY2:
         __unicode__ = __str__
 
-    def to_esfilter(self, schema):
+    def to_es(self, schema):
         return {"script": es_script(text(self))}
 
     def to_es_script(self, schema, not_null=False, boolean=False, many=True):
@@ -101,6 +101,4 @@ def box(script):
 
 
 def es_script(term):
-    return wrap({"script": {"lang": "painless", "source": term}})
-
-
+    return dict_to_data({"script": {"lang": "painless", "source": term}})

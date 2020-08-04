@@ -11,13 +11,14 @@
 
 from __future__ import absolute_import, division, unicode_literals
 
-from mo_future import is_text, is_binary
 import time
 
 from mo_future import allocate_lock
-from mo_logs import Log
+from mo_imports import expect
 from mo_logs.log_usingNothing import StructuredLogger
 from mo_logs.strings import expand_template
+
+Log = expect("Log")
 
 
 class StructuredLogger_usingFile(StructuredLogger):

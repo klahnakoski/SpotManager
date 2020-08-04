@@ -7,15 +7,17 @@
 #
 # Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
+
 from __future__ import absolute_import, division, unicode_literals
 
 from copy import copy
+from datetime import datetime
 from decimal import Decimal
 from math import isnan
 
 from mo_dots import Data, data_types, listwrap, NullType, startswith_field
 from mo_dots.lists import list_types, is_many
-from mo_future import boolean_type, long, none_type, text, transpose
+from mo_future import boolean_type, long, none_type, text, transpose, function_type
 from mo_logs import Log
 from mo_times import Date
 
@@ -89,7 +91,7 @@ class Language(object):
             )
             self.ops = [None] * num_ops
 
-        for _, new_op in module_vars.items():
+        for _, new_op in list(module_vars.items()):
             if isinstance(new_op, type) and hasattr(new_op, ID):
                 # EXPECT OPERATORS TO HAVE id
                 # EXPECT NEW DEFINED OPS IN THIS MODULE TO HAVE lang NOT SET
@@ -156,6 +158,9 @@ def value_compare(left, right, ordering=1):
     :return: The return value is negative if x < y, zero if x == y and strictly positive if x > y.
     """
 
+    if left is right:
+        return 0
+
     try:
         ltype = left.__class__
         rtype = right.__class__
@@ -208,6 +213,8 @@ def value_compare(left, right, ordering=1):
                 if c != 0:
                     return c
             return 0
+        elif ltype is function_type:
+             return 0
         elif left > right:
             return ordering
         elif left < right:
@@ -239,6 +246,7 @@ TYPE_ORDER = {
     float: 1,
     Decimal: 1,
     Date: 1,
+    datetime: 1,
     long: 1,
     text: 3,
     list: 4,

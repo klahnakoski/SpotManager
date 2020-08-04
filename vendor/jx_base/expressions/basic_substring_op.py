@@ -8,15 +8,6 @@
 # Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-"""
-# NOTE:
-
-THE self.lang[operator] PATTERN IS CASTING NEW OPERATORS TO OWN LANGUAGE;
-KEEPING Python AS# Python, ES FILTERS AS ES FILTERS, AND Painless AS
-Painless. WE COULD COPY partial_eval(), AND OTHERS, TO THIER RESPECTIVE
-LANGUAGE, BUT WE KEEP CODE HERE SO THERE IS LESS OF IT
-
-"""
 from __future__ import absolute_import, division, unicode_literals
 
 from jx_base.expressions.expression import Expression
@@ -44,5 +35,19 @@ class BasicSubstringOp(Expression):
             ]
         }
 
+    def map(self, map_):
+        return self.lang[BasicSubstringOp([
+            self.value.map(map_),
+            self.start.map(map_),
+            self.end.map(map_)
+        ])]
+
+    def vars(self):
+        return self.value.vars() | self.start.vars() | self.end.vars()
+
     def missing(self):
         return FALSE
+
+    def invert(self):
+        return FALSE
+

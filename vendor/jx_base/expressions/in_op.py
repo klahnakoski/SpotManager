@@ -8,21 +8,11 @@
 # Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-"""
-# NOTE:
-
-THE self.lang[operator] PATTERN IS CASTING NEW OPERATORS TO OWN LANGUAGE;
-KEEPING Python AS# Python, ES FILTERS AS ES FILTERS, AND Painless AS
-Painless. WE COULD COPY partial_eval(), AND OTHERS, TO THIER RESPECTIVE
-LANGUAGE, BUT WE KEEP CODE HERE SO THERE IS LESS OF IT
-
-"""
 from __future__ import absolute_import, division, unicode_literals
 
-from jx_base.expressions import eq_op
 from jx_base.expressions._utils import simplified
 from jx_base.expressions.eq_op import EqOp
-from jx_base.expressions.expression import Expression
+from jx_base.expressions.expression import Expression, NotOp
 from jx_base.expressions.false_op import FALSE
 from jx_base.expressions.literal import Literal
 from jx_base.expressions.literal import is_literal
@@ -30,6 +20,7 @@ from jx_base.expressions.null_op import NULL
 from jx_base.expressions.variable import Variable
 from jx_base.language import is_op
 from mo_dots import is_many
+from mo_imports import export
 from mo_json import BOOLEAN
 
 
@@ -71,6 +62,8 @@ class InOp(Expression):
         superset = self.superset.partial_eval()
         if superset is NULL:
             return FALSE
+        elif value is NULL:
+            return FALSE
         elif is_literal(value) and is_literal(superset):
             return self.lang[Literal(self())]
         else:
@@ -82,4 +75,5 @@ class InOp(Expression):
     def missing(self):
         return FALSE
 
-eq_op.InOp = InOp
+
+export("jx_base.expressions.eq_op", InOp)

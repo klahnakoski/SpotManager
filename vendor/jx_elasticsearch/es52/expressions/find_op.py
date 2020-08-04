@@ -17,17 +17,18 @@ from jx_base.expressions import (
     Variable as Variable_,
     is_literal,
     simplified,
+    BooleanOp,
 )
 from jx_base.language import is_op
-from jx_elasticsearch.es52.painless import Painless
-from jx_elasticsearch.es52.expressions._utils import ES52
+from jx_elasticsearch.es52.expressions.utils import ES52
 from jx_elasticsearch.es52.expressions.not_op import NotOp
+from jx_elasticsearch.es52.painless import Painless
+from mo_imports import export
 from mo_json import STRING
 
-BooleanOp = None
 
 class FindOp(FindOp_):
-    def to_esfilter(self, schema):
+    def to_es(self, schema):
         if (
             is_op(self.value, Variable_)
             and is_literal(self.find)
@@ -37,14 +38,12 @@ class FindOp(FindOp_):
         ):
             columns = [c for c in schema.leaves(self.value.var) if c.jx_type == STRING]
             if len(columns) == 1:
-                return {
-                    "regexp": {
-                        columns[0].es_column: ".*" + re.escape(self.find.value) + ".*"
-                    }
-                }
+                return {"regexp": {
+                    columns[0].es_column: ".*" + re.escape(self.find.value) + ".*"
+                }}
         # CONVERT TO SCRIPT, SIMPLIFY, AND THEN BACK TO FILTER
         self.simplified = False
-        return ES52[Painless[self].partial_eval()].to_esfilter(schema)
+        return ES52[Painless[self].partial_eval()].to_es(schema)
 
     @simplified
     def partial_eval(self):
@@ -60,3 +59,6 @@ class FindOp(FindOp_):
 
     def exists(self):
         return BooleanOp(self)
+
+
+export("jx_elasticsearch.es52.expressions.boolean_op", FindOp)

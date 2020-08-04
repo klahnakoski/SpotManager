@@ -18,24 +18,23 @@ from mo_json import BOOLEAN
 
 class BooleanOp(BooleanOp_):
     def to_es_script(self, schema, not_null=False, boolean=False, many=True):
-        value = self.lang[self.term].to_es_script(schema)
+        try:
+            value = self.lang[self.term].to_es_script(schema)
+        except Exception as e:
+            raise e
         if value.many:
-            return BooleanOp(
-                EsScript(
-                    miss=value.miss,
-                    type=value.type,
-                    expr="(" + value.expr + ")[0]",
-                    frum=value.frum,
-                    schema=schema,
-                )
-            ).to_es_script(schema)
+            return BooleanOp(EsScript(
+                miss=value.miss,
+                type=value.type,
+                expr="(" + value.expr + ")[0]",
+                frum=value.frum,
+                schema=schema,
+            )).to_es_script(schema)
         elif value.type == BOOLEAN:
             miss = value.miss
             value.miss = FALSE
-            return (
-                WhenOp(miss, **{"then": FALSE, "else": value})
-                .partial_eval()
-                .to_es_script(schema)
-            )
+            return WhenOp(
+                miss, **{"then": FALSE, "else": value}
+            ).partial_eval().to_es_script(schema)
         else:
             return NotOp(value.miss).partial_eval().to_es_script(schema)

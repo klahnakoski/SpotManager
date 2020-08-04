@@ -8,7 +8,7 @@
 
 from __future__ import absolute_import, division, unicode_literals
 
-from jx_base.expressions._utils import jx_expression
+from jx_base.expressions._utils import jx_expression, simplified
 from jx_base.expressions.and_op import AndOp
 from jx_base.expressions.expression import Expression
 from jx_base.expressions.literal import Literal
@@ -17,7 +17,7 @@ from jx_base.expressions.null_op import NULL
 from jx_base.expressions.variable import Variable
 from jx_base.language import is_op
 from jx_base.utils import is_variable_name
-from mo_dots import is_data
+from mo_dots import is_data, listwrap, is_many
 from mo_future import first, is_text
 from mo_json import STRING
 from mo_logs import Log
@@ -27,16 +27,15 @@ class ConcatOp(Expression):
     has_simple_form = True
     data_type = STRING
 
-    def __init__(self, terms, **clauses):
-        Expression.__init__(self, terms)
-        if is_data(terms):
-            self.terms = first(terms.items())
-        else:
-            self.terms = terms
-        self.separator = clauses.get(str("separator"), Literal(""))
-        self.default = clauses.get(str("default"), NULL)
-        if not is_literal(self.separator):
+    def __init__(self, terms, separator=Literal(""), default=NULL):
+        if not is_many(terms):
+            Log.error("Expecting many terms")
+        if not is_literal(separator):
             Log.error("Expecting a literal separator")
+        Expression.__init__(self, terms + [separator, default])
+        self.terms = terms
+        self.separator = separator
+        self.default = default
 
     @classmethod
     def define(cls, expr):
@@ -60,6 +59,10 @@ class ConcatOp(Expression):
             )
         ]
 
+    @simplified
+    def partial_eval(self):
+        return self.lang[ConcatOp([t.partial_eval() for t in self.terms], self.separator, self.default)]
+
     def __data__(self):
         f, s = self.terms[0], self.terms[1]
         if is_op(f, Variable) and is_literal(s):
@@ -70,6 +73,9 @@ class ConcatOp(Expression):
             output["separator"] = self.separator.__data__()
         return output
 
+    def invert(self):
+        return self.missing()
+
     def vars(self):
         if not self.terms:
             return set()
@@ -77,7 +83,7 @@ class ConcatOp(Expression):
 
     def map(self, map_):
         return self.lang[
-            ConcatOp([t.map(map_) for t in self.terms], separator=self.separator)
+            ConcatOp([t.map(map_) for t in self.terms], self.separator.map(map_), self.default.map(map_))
         ]
 
     def missing(self):

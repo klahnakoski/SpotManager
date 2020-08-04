@@ -8,24 +8,16 @@
 # Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-"""
-# NOTE:
-
-THE self.lang[operator] PATTERN IS CASTING NEW OPERATORS TO OWN LANGUAGE;
-KEEPING Python AS# Python, ES FILTERS AS ES FILTERS, AND Painless AS
-Painless. WE COULD COPY partial_eval(), AND OTHERS, TO THIER RESPECTIVE
-LANGUAGE, BUT WE KEEP CODE HERE SO THERE IS LESS OF IT
-
-"""
 from __future__ import absolute_import, division, unicode_literals
 
-from jx_base.expressions import _utils, expression
 from jx_base.expressions._utils import simplified, value2json
 from jx_base.expressions.expression import Expression
-from mo_dots import Null, is_data
-from mo_json import python_type_to_json_type
+from mo_dots import Null, is_data, is_many
+from mo_imports import expect, export
+from mo_json import python_type_to_json_type, same_json_type, merge_json_type
 
-DateOp, FALSE, TRUE, NULL = [None]*4
+DateOp, FALSE, TRUE, NULL = expect("DateOp", "FALSE", "TRUE", "NULL")
+
 
 class Literal(Expression):
     """
@@ -97,6 +89,9 @@ class Literal(Expression):
             return TRUE
         return FALSE
 
+    def invert(self):
+        return self.missing()
+
     def __call__(self, row=None, rownum=None, rows=None):
         return self.value
 
@@ -108,7 +103,12 @@ class Literal(Expression):
 
     @property
     def type(self):
-        return python_type_to_json_type[self._value.__class__]
+        def typer(v):
+            if is_many(v):
+                return merge_json_type(*map(typer, v))
+            else:
+                return python_type_to_json_type[v.__class__]
+        return typer(self._value)
 
     @simplified
     def partial_eval(self):
@@ -137,6 +137,6 @@ def is_literal(l):
         return False
 
 
-_utils.Literal = Literal
-expression.Literal = Literal
-expression.is_literal=is_literal
+export("jx_base.expressions._utils", Literal)
+export("jx_base.expressions.expression", Literal)
+export("jx_base.expressions.expression", is_literal)

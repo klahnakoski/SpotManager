@@ -29,15 +29,17 @@ from jx_elasticsearch.es52.painless import Painless
 from jx_elasticsearch.es52.painless.es_script import es_script
 from mo_dots import Null, to_data, join_field, split_field, coalesce, startswith_field
 from mo_future import first
-from mo_imports import expect
+from mo_imports import expect, delay_import
 from mo_json import EXISTS
 from mo_json.typed_encoder import EXISTS_TYPE, NESTED_TYPE
 from mo_logs import Log
 from mo_math import MAX
 
-MATCH_NONE, MATCH_ALL, AndOp, OrOp, NestedOp, = expect(
+
+MATCH_NONE, MATCH_ALL, AndOp, OrOp, NestedOp = expect(
     "MATCH_NONE", "MATCH_ALL", "AndOp", "OrOp", "NestedOp",
 )
+get_decoders_by_path = delay_import("jx_elasticsearch.es52.agg_op.get_decoders_by_path")
 
 
 def _inequality_to_esfilter(self, schema):
@@ -135,17 +137,11 @@ def split_nested_inner_variables(where, focal_path, var_to_columns):
                     if startswith_field(focal_path, deepest):
                         more_exprs.append(e.map({v: Variable(c.es_column)}))
                     else:
-                        more_exprs.append(
-                            e.map(
-                                {
-                                    v: NestedOp(
-                                        path=Variable(deepest),
-                                        select=Variable(c.es_column),
-                                        where=Variable(c.es_column).exists(),
-                                    )
-                                }
-                            )
-                        )
+                        more_exprs.append(e.map({v: NestedOp(
+                            path=Variable(deepest),
+                            select=Variable(c.es_column),
+                            where=Variable(c.es_column).exists(),
+                        )}))
         wheres = more_exprs
         var_to_columns = {
             c.es_column: [c] for cs in var_to_columns.values() for c in cs
@@ -206,9 +202,9 @@ def setop_to_inner_joins(query, all_paths, split_select, var_to_columns):
                             deeper_conditions = FALSE
                         else:
                             # ENSURE THIS IS NOT "OPTIMIZED" TO FALSE
-                            deeper_conditions = NotOp(
-                                NestedOp(path=Variable(nest_path), where=TRUE)
-                            )
+                            deeper_conditions = NotOp(NestedOp(
+                                path=Variable(nest_path), where=TRUE
+                            ))
                             deeper_conditions.simplified = True
 
                 inner_join = inner_join.partial_eval()
@@ -234,20 +230,18 @@ def pre_process(query):
     new_select, split_select = get_selects(query)
     where_vars = query.where.vars()
     var_to_columns = {v.var: schema.values(v.var) for v in where_vars}
+    split_decoders = get_decoders_by_path(query, schema)
 
     # FROM DEEPEST TO SHALLOWEST
-    all_paths = list(
-        reversed(
-            sorted(
-                set(c.nested_path[0] for v in where_vars for c in var_to_columns[v.var])
-                | {"."}
-                | set(schema.query_path)
-                | set(split_select.keys())
-            )
-        )
-    )
+    all_paths = list(reversed(sorted(
+        set(c.nested_path[0] for v in where_vars for c in var_to_columns[v.var])
+        | {"."}
+        | set(schema.query_path)
+        | set(split_select.keys())
+        | split_decoders.keys()
+    )))
 
-    return new_select, all_paths, split_select, var_to_columns
+    return new_select, all_paths, split_select, split_decoders, var_to_columns
 
 
 def setop_to_es_queries(query, all_paths, split_select, var_to_columns):
@@ -293,11 +287,9 @@ def query_to_outer_joins(query, all_paths, split_select, var_to_columns):
                 exclude.append(NotOp(t))
             return output
 
-        all_nests = list(
-            set(
-                c.nested_path[0] for v in expr.vars() for c in frum.schema.values(v.var)
-            )
-        )
+        all_nests = list(set(
+            c.nested_path[0] for v in expr.vars() for c in frum.schema.values(v.var)
+        ))
 
         if len(all_nests) > 1:
             Log.error("do not know how to handle")
@@ -323,7 +315,7 @@ def query_to_outer_joins(query, all_paths, split_select, var_to_columns):
             outer.nests.append(NestedOp(Variable(p), select=select, where=AndOp(nest)))
         output.terms.append(outer)
 
-    return output
+    return output.partial_eval()
 
 
 def split_expression_by_path(expr, schema, lang=Language):
@@ -427,9 +419,9 @@ def split_expression_by_path(expr, schema, lang=Language):
 
     acc = {}
     for e in exprs:
-        nestings = list(
-            set(c.nested_path[0] for v in e.vars() for c in var_to_columns[v])
-        )
+        nestings = list(set(
+            c.nested_path[0] for v in e.vars() for c in var_to_columns[v]
+        ))
         if not nestings:
             a = acc.get(".")
             if not a:

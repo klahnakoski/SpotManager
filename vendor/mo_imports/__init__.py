@@ -156,7 +156,6 @@ def export(module, name, value=_nothing):
         frame = inspect.stack()[1]
         value = inspect.getmodule(frame[0])
 
-
     desc = getattr(module, name, None)
     if isinstance(desc, Expecting):
         with _locker:
@@ -210,12 +209,10 @@ def _error(description):
 
 
 def delay_import(module):
+    globals = sys._getframe(1).f_globals
+    caller_name = globals["__name__"]
 
-    # GET MODULE OF THE CALLER
-    caller_frame = inspect.stack()[1]
-    caller = inspect.getmodule(caller_frame[0])
-
-    return DelayedImport(caller, module)
+    return DelayedImport(caller_name, module)
 
 
 class DelayedImport(object):
@@ -228,7 +225,8 @@ class DelayedImport(object):
 
     def _import_now(self):
         # FIND MODULE VARIABLE THAT HOLDS self
-        caller = _get(self, "caller")
+        caller_name = _get(self, "caller")
+        caller = importlib.import_module(caller_name)
         names = []
         for n in dir(caller):
             try:
@@ -238,26 +236,24 @@ class DelayedImport(object):
                 pass
 
         if not names:
-            _error(
-                "Can not find variable holding a " + self.__class__.__name__
-            )
+            _error("Can not find variable holding a " + self.__class__.__name__)
 
         module = _get(self, "module")
         path = module.split(".")
-        module_name, short_name = "".join(path[:-1]), path[-1]
+        module_name, short_name = ".".join(path[:-1]), path[-1]
         try:
             m = importlib.import_module(module_name)
             val = getattr(m, short_name)
 
             for n in names:
                 setattr(caller, n, val)
-            return m
+            return val
         except Exception as cause:
             _error("Can not load " + _get(self, "module") + " caused by " + text(cause))
 
     def __call__(self, *args, **kwargs):
         m = DelayedImport._import_now(self)
-        return m()
+        return m(*args, **kwargs)
 
     def __getitem__(self, item):
         m = DelayedImport._import_now(self)

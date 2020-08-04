@@ -10,11 +10,12 @@
 from __future__ import absolute_import, division, unicode_literals
 
 from jx_base.expressions import OrOp as OrOp_
+from jx_elasticsearch.es52.expressions.not_op import es_not, NotOp
 from jx_elasticsearch.es52.expressions.utils import ES52
 from mo_dots import dict_to_data
 from mo_imports import expect, export
 
-NotOp, es_not, es_and = expect("NotOp", "es_not", "es_and")
+es_and = expect("es_and")
 
 
 class OrOp(OrOp_):
@@ -27,21 +28,18 @@ class OrOp(OrOp_):
             # {"bool":{"must_not":[a, b, c]}} ALSO RUNS IN PARALLEL
 
             # OR(x) == NOT(AND(NOT(xi) for xi in x))
-            output = es_not(
-                es_and(
-                    [NotOp(t).partial_eval().to_es(schema) for t in self.terms]
-                )
-            )
+            output = es_not(es_and([
+                NotOp(t).partial_eval().to_es(schema) for t in self.terms
+            ]))
             return output
         else:
             # VERSION 6.2+
-            return es_or(
-                [ES52[t].partial_eval().to_es(schema) for t in self.terms]
-            )
+            return es_or([ES52[t].partial_eval().to_es(schema) for t in self.terms])
 
 
 def es_or(terms):
     return dict_to_data({"bool": {"should": terms}})
 
 
+export("jx_elasticsearch.es52.expressions.not_op", es_or)
 export("jx_elasticsearch.es52.expressions.utils", OrOp)

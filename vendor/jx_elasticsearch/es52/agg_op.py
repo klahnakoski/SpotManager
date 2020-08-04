@@ -43,14 +43,13 @@ def is_aggsop(es, query):
     return False
 
 
-def get_decoders_by_path(query):
+def get_decoders_by_path(query, schema):
     """
     RETURN MAP FROM QUERY PATH TO LIST OF DECODER ARRAYS
 
     :param query:
     :return:
     """
-    schema = query.frum.schema
     output = {}
 
     if query.edges:
@@ -152,9 +151,8 @@ def extract_aggs(select, query_path, schema):
 def aggop_to_es_queries(select, query_path, schema, query):
     base_agg = extract_aggs(select, query_path, schema)
     base_agg = NestedAggs(query_path).add(base_agg)
-    split_decoders = get_decoders_by_path(query)
 
-    new_select, all_paths, split_select, var_to_columns = pre_process(query)
+    new_select, all_paths, split_select, split_decoders, var_to_columns = pre_process(query)
 
     # WE LET EACH DIMENSION ADD ITS OWN CODE FOR HANDLING INNER JOINS
     union_outer = query_to_outer_joins(query, all_paths, split_select, var_to_columns)
@@ -162,7 +160,7 @@ def aggop_to_es_queries(select, query_path, schema, query):
     start = 0
     decoders = [None] * (len(query.edges) + len(query.groupby))
     output = NestedAggs(".")
-    for i, inner in enumerate(union_outer.terms):
+    for i, outer in enumerate(union_outer.terms):
         acc = base_agg
         for p, path in enumerate(all_paths):
             decoder = split_decoders.get(path, Null)
@@ -172,7 +170,7 @@ def aggop_to_es_queries(select, query_path, schema, query):
                 acc = d.append_query(path, acc)
                 start += d.num_columns
 
-            where = first(nest.where for nest in inner.nests if nest.path == path)
+            where = first(nest.where for nest in outer.nests if nest.path == path).partial_eval()
             if where is FALSE:
                 continue
             elif not where or where is TRUE:

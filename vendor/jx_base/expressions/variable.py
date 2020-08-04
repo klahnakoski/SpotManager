@@ -8,26 +8,17 @@
 # Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-"""
-# NOTE:
-
-THE self.lang[operator] PATTERN IS CASTING NEW OPERATORS TO OWN LANGUAGE;
-KEEPING Python AS# Python, ES FILTERS AS ES FILTERS, AND Painless AS
-Painless. WE COULD COPY partial_eval(), AND OTHERS, TO THIER RESPECTIVE
-LANGUAGE, BUT WE KEEP CODE HERE SO THERE IS LESS OF IT
-
-"""
 from __future__ import absolute_import, division, unicode_literals
 
-from jx_base.expressions import _utils, expression
 from jx_base.expressions.expression import Expression
 from jx_base.expressions.false_op import FALSE
 from jx_base.expressions.missing_op import MissingOp
 from jx_base.language import is_op
 from jx_base.utils import get_property_name
-from mo_dots import coalesce, is_sequence, split_field
+from mo_dots import is_sequence, split_field
 from mo_dots.lists import last
 from mo_future import is_text
+from mo_imports import export
 from mo_json.typed_encoder import inserter_type_to_json_type
 
 
@@ -67,7 +58,14 @@ class Variable(Expression):
         return {self}
 
     def map(self, map_):
-        return Variable(coalesce(map_.get(self.var), self.var))
+        replacement = map_.get(self.var)
+        if replacement != None:
+            if is_text(replacement):
+                return Variable(replacement)
+            else:
+                return replacement
+        else:
+            return self
 
     def __hash__(self):
         return self.var.__hash__()
@@ -94,5 +92,5 @@ class Variable(Expression):
 
 IDENTITY = Variable(".")
 
-_utils.Variable = Variable
-expression.Variable = Variable
+export("jx_base.expressions._utils", Variable)
+export("jx_base.expressions.expression", Variable)

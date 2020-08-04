@@ -11,16 +11,17 @@ from __future__ import absolute_import, division, unicode_literals
 
 from jx_base.expressions import LeavesOp, NULL, Variable
 from jx_base.language import is_op
-from jx_base.query import DEFAULT_LIMIT
-from jx_elasticsearch.es52.expressions import AndOp, ES52, split_expression_by_depth, MATCH_ALL
+from jx_base.expressions.query_op import DEFAULT_LIMIT
+from jx_elasticsearch.es52.expressions import AndOp, ES52, split_expression_by_depth
+from jx_elasticsearch.es52.expressions.true_op import MATCH_ALL
 from jx_elasticsearch.es52.set_op import set_formatters, get_pull, get_pull_function
 from jx_elasticsearch.es52.util import es_query_template, jx_sort_to_es_sort
 from jx_python.expressions import jx_expression_to_function
 from mo_dots import Data, FlatList, coalesce, concat_field, is_list as is_list_, listwrap, literal_field, \
-    relative_field, set_default, split_field, startswith_field, unwrap, wrap
+    relative_field, set_default, split_field, startswith_field, unwrap, list_to_data
 from mo_future import zip_longest
-from mo_json import NESTED
-from mo_json.typed_encoder import untype_path, untyped
+from mo_json import NESTED, INTERNAL
+from mo_json.typed_encoder import untype_path
 from mo_logs import Log
 from mo_threads import Thread
 from mo_times.timer import Timer
@@ -59,14 +60,14 @@ def es_deepop(es, query):
     # SPLIT WHERE CLAUSE BY DEPTH
     wheres = split_expression_by_depth(query.where, schema)
     for f, w in zip_longest(es_filters, wheres):
-        script = ES52[AndOp(w)].partial_eval().to_esfilter(schema)
+        script = ES52[AndOp(w).partial_eval()].to_es(schema)
         set_default(f, script)
 
     if not wheres[1]:
         # INCLUDE DOCS WITH NO NESTED DOCS
         more_filter = {
             "bool": {
-                "filter": [AndOp(wheres[0]).partial_eval().to_esfilter(schema)],
+                "filter": [AndOp(wheres[0]).partial_eval().to_es(schema)],
                 "must_not": {
                     "nested": {
                         "path": query_path,
@@ -89,7 +90,7 @@ def es_deepop(es, query):
     es_query.stored_fields = []
 
     is_list = is_list_(query.select)
-    selects = wrap([unwrap(s.copy()) for s in listwrap(query.select)])
+    selects = list_to_data([unwrap(s.copy()) for s in listwrap(query.select)])
     new_select = FlatList()
 
     put_index = 0
@@ -100,7 +101,7 @@ def es_deepop(es, query):
             col_names = set()
             for c in leaves:
                 if c.nested_path[0] == ".":
-                    if c.jx_type == NESTED:
+                    if c.jx_type in INTERNAL:
                         continue
                     es_query.stored_fields += [c.es_column]
                 c_name = untype_path(relative_field(c.name, query_path))

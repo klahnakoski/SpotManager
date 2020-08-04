@@ -10,15 +10,15 @@
 from __future__ import absolute_import, division, unicode_literals
 
 from jx_base.expressions import OrOp as OrOp_
-from jx_elasticsearch.es52.expressions._utils import ES52
-from jx_elasticsearch.es52.expressions.and_op import es_and
-from mo_dots import wrap
+from jx_elasticsearch.es52.expressions.utils import ES52
+from mo_dots import dict_to_data
+from mo_imports import expect, export
 
-NotOp, es_not = [None] * 2
+NotOp, es_not, es_and = expect("NotOp", "es_not", "es_and")
 
 
 class OrOp(OrOp_):
-    def to_esfilter(self, schema):
+    def to_es(self, schema):
 
         if schema.snowflake.namespace.es_cluster.version.startswith("5."):
             # VERSION 5.2.x
@@ -29,16 +29,19 @@ class OrOp(OrOp_):
             # OR(x) == NOT(AND(NOT(xi) for xi in x))
             output = es_not(
                 es_and(
-                    [NotOp(t).partial_eval().to_esfilter(schema) for t in self.terms]
+                    [NotOp(t).partial_eval().to_es(schema) for t in self.terms]
                 )
             )
             return output
         else:
             # VERSION 6.2+
             return es_or(
-                [ES52[t].partial_eval().to_esfilter(schema) for t in self.terms]
+                [ES52[t].partial_eval().to_es(schema) for t in self.terms]
             )
 
 
 def es_or(terms):
-    return wrap({"bool": {"should": terms}})
+    return dict_to_data({"bool": {"should": terms}})
+
+
+export("jx_elasticsearch.es52.expressions.utils", OrOp)

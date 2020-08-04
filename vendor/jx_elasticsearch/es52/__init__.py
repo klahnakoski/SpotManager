@@ -13,12 +13,12 @@ from jx_base import Column, container
 from jx_base.container import Container
 from jx_base.expressions import jx_expression
 from jx_base.language import is_op
-from jx_base.query import QueryOp
+from jx_base.expressions import QueryOp
 from jx_elasticsearch import elasticsearch
-from jx_elasticsearch.es52.expressions import ES52 as ES52Lang
 from jx_elasticsearch.es52.agg_bulk import is_bulk_agg, es_bulkaggsop
 from jx_elasticsearch.es52.agg_op import es_aggsop, is_aggsop
 from jx_elasticsearch.es52.deep import es_deepop, is_deepop
+from jx_elasticsearch.es52.expressions import ES52 as ES52Lang
 from jx_elasticsearch.es52.painless import Painless
 from jx_elasticsearch.es52.set_bulk import is_bulk_set, es_bulksetop
 from jx_elasticsearch.es52.set_op import es_setop, is_setop
@@ -26,15 +26,14 @@ from jx_elasticsearch.es52.stats import QueryStats
 from jx_elasticsearch.es52.util import aggregates, temper_limit
 from jx_elasticsearch.meta import ElasticsearchMetadata, Table
 from jx_python import jx
-from mo_dots import Data, coalesce, listwrap, split_field, startswith_field, unwrap, wrap
-from mo_dots.lists import last
+from mo_dots import Data, coalesce, listwrap, split_field, startswith_field, unwrap, to_data
 from mo_future import sort_using_key
-from mo_json import OBJECT, value2json
-from mo_json.typed_encoder import EXISTS_TYPE, NESTED_TYPE
+from mo_http import http
+from mo_json import OBJECT, value2json, NESTED
+from mo_json.typed_encoder import EXISTS_TYPE
 from mo_kwargs import override
 from mo_logs import Except, Log
 from mo_times import Date
-from mo_http import http
 
 
 class ES52(Container):
@@ -117,20 +116,23 @@ class ES52(Container):
                                 best = candidate
                     all_paths[step] = best
             for p in all_paths.keys():
-                nested_path = nested_path_of(p)
-                try:
-                    self.namespace.meta.columns.add(Column(
-                        name=p,
-                        es_column=p,
-                        es_index=self.name,
-                        es_type=OBJECT,
-                        jx_type=OBJECT,
-                        nested_path=nested_path,
-                        multi=1001 if last(split_field(p)) == NESTED_TYPE else None,
-                        last_updated=Date.now()
-                    ))
-                except Exception as e:
-                    raise e
+                if p == ".":
+                    nested_path = ('.',)
+                else:
+                    nested_path = nested_path_of(p)[1:]
+
+                jx_type = (OBJECT if p == "." else NESTED)
+                self.namespace.meta.columns.add(Column(
+                    name=p,
+                    es_column=p,
+                    es_index=self.name,
+                    es_type=jx_type,
+                    jx_type=jx_type,
+                    cardinality=1,
+                    nested_path=nested_path,
+                    multi=1001 if jx_type is NESTED else 1,
+                    last_updated=Date.now()
+                ))
 
     @property
     def snowflake(self):
@@ -215,7 +217,7 @@ class ES52(Container):
         THE set CLAUSE IS A DICT MAPPING NAMES TO VALUES
         THE where CLAUSE IS AN ES FILTER
         """
-        command = wrap(command)
+        command = to_data(command)
         table = self.get_table(command['update'])
 
         es_index = self.es.cluster.get_index(read_only=False, alias=None, kwargs=self.es.settings)
@@ -256,9 +258,9 @@ class ES52(Container):
 
         # DELETE BY QUERY, IF NEEDED
         if "." in listwrap(command['clear']):
-            es_filter = ES52Lang[jx_expression(command.where)].partial_eval().to_esfilter(schema)
+            es_filter = ES52Lang[jx_expression(command.where)].partial_eval().to_es(schema)
             self.es.delete_record(es_filter)
             return
 
-        es_index.flush()
+        es_index.refresh()
 

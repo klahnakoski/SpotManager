@@ -12,7 +12,7 @@ from __future__ import absolute_import, division, unicode_literals
 import datetime
 import re
 
-from mo_dots import get_module, wrap
+from mo_dots import get_module, dict_to_data
 from mo_future import is_text, text
 from mo_math import MIN, is_nan, is_number, abs, floor, round
 from mo_times.vendor.dateutil.relativedelta import relativedelta
@@ -115,33 +115,38 @@ class Duration(object):
         return output
 
     def __div__(self, amount):
-        if isinstance(amount, Duration) and amount.month:
-            m = self.month
-            r = self.milli
+        if isinstance(amount, Duration):
+            if amount.month:
+                m = self.month
+                r = self.milli
 
-            # DO NOT CONSIDER TIME OF DAY
-            tod = r % MILLI_VALUES.day
-            r = r - tod
+                # DO NOT CONSIDER TIME OF DAY
+                tod = r % MILLI_VALUES.day
+                r = r - tod
 
-            if m == 0 and r > (MILLI_VALUES.year / 3):
-                m = floor(12 * self.milli / MILLI_VALUES.year)
-                r -= (m / 12) * MILLI_VALUES.year
+                if m == 0 and r > (MILLI_VALUES.year / 3):
+                    m = floor(12 * self.milli / MILLI_VALUES.year)
+                    r -= (m / 12) * MILLI_VALUES.year
+                else:
+                    r = r - (self.month * MILLI_VALUES.month)
+                    if r >= MILLI_VALUES.day * 31:
+                        from mo_logs import Log
+                        Log.error("Do not know how to handle")
+                r = MIN([29 / 30, (r + tod) / (MILLI_VALUES.day * 30)])
+
+                output = floor(m / amount.month) + r
+                return output
             else:
-                r = r - (self.month * MILLI_VALUES.month)
-                if r >= MILLI_VALUES.day * 31:
-                    from mo_logs import Log
-                    Log.error("Do not know how to handle")
-            r = MIN([29 / 30, (r + tod) / (MILLI_VALUES.day * 30)])
-
-            output = floor(m / amount.month) + r
-            return output
+                return self.milli / amount.milli
         elif is_number(amount):
             output = Duration(0)
             output.milli = self.milli / amount
             output.month = self.month / amount
             return output
         else:
-            return self.milli / amount.milli
+            if not _Log:
+                _delayed_import()
+            _Log.error("Do not know how to divide by {{type}}", type=type(amount).__name__)
 
     def __truediv__(self, other):
         return self.__div__(other)
@@ -354,7 +359,7 @@ def parse(value):
     return output
 
 
-MILLI_VALUES = wrap({
+MILLI_VALUES = dict_to_data({
     "year": float(52 * 7 * 24 * 60 * 60 * 1000),  # 52weeks
     "quarter": float(13 * 7 * 24 * 60 * 60 * 1000),  # 13weeks
     "month": float(28 * 24 * 60 * 60 * 1000),  # 4weeks
@@ -367,7 +372,7 @@ MILLI_VALUES = wrap({
     "zero": float(0)
 })
 
-MONTH_VALUES = wrap({
+MONTH_VALUES = dict_to_data({
     "year": 12,
     "quarter": 3,
     "month": 1,

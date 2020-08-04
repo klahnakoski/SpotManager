@@ -12,7 +12,7 @@ from __future__ import absolute_import, division, unicode_literals
 import cProfile
 import pstats
 
-from mo_dots import wrap
+from mo_dots import to_data
 from mo_future import iteritems
 from mo_logs import Log
 
@@ -112,16 +112,16 @@ def write_profiles(main_thread_profile):
     Log.note("profile written to {{filename}}", filename=stats_file.abspath)
 
 
-def list2tab(rows):
+def list2tab(rows, separator="\t"):
     from mo_json import value2json
 
     columns = set()
-    for r in wrap(rows):
+    for r in to_data(rows):
         columns |= set(k for k, v in r.leaves())
     keys = list(columns)
 
     output = []
-    for r in wrap(rows):
-        output.append("\t".join(value2json(r[k]) for k in keys))
+    for r in to_data(rows):
+        output.append(separator.join(value2json(r[k]) for k in keys))
 
-    return "\t".join(keys) + "\n" + "\n".join(output)
+    return separator.join(keys) + "\n" + "\n".join(output)

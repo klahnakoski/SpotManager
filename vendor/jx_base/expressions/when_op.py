@@ -8,18 +8,8 @@
 # Contact: Kyle Lahnakoski (kyle@lahnakoski.com)
 #
 
-"""
-# NOTE:
-
-THE self.lang[operator] PATTERN IS CASTING NEW OPERATORS TO OWN LANGUAGE;
-KEEPING Python AS# Python, ES FILTERS AS ES FILTERS, AND Painless AS
-Painless. WE COULD COPY partial_eval(), AND OTHERS, TO THIER RESPECTIVE
-LANGUAGE, BUT WE KEEP CODE HERE SO THERE IS LESS OF IT
-
-"""
 from __future__ import absolute_import, division, unicode_literals
 
-from jx_base.expressions import first_op, eq_op, not_op
 from jx_base.expressions._utils import simplified
 from jx_base.expressions.and_op import AndOp
 from jx_base.expressions.boolean_op import BooleanOp
@@ -32,7 +22,8 @@ from jx_base.expressions.or_op import OrOp
 from jx_base.expressions.true_op import TRUE
 from jx_base.language import is_op
 from mo_dots import coalesce
-from mo_json import INTEGER, NUMBER, OBJECT, NUMBER_TYPES
+from mo_imports import export
+from mo_json import OBJECT, same_json_type, merge_json_type
 from mo_logs import Log
 
 
@@ -48,10 +39,8 @@ class WhenOp(Expression):
             self.data_type = self.els_.type
         elif self.els_ is NULL:
             self.data_type = self.then.type
-        elif self.then.type == self.els_.type:
-            self.data_type = self.then.type
-        elif self.then.type in NUMBER_TYPES and self.els_.type in NUMBER_TYPES:
-            self.data_type = NUMBER
+        elif same_json_type(self.then.type, self.els_.type):
+            self.data_type = merge_json_type(self.then.type, self.els_.type)
         else:
             self.data_type = OBJECT
 
@@ -83,6 +72,17 @@ class WhenOp(Expression):
             )
         ].partial_eval()
 
+    def invert(self):
+        return self.lang[
+            OrOp(
+                [
+                    AndOp([self.when, self.then.invert()]),
+                    AndOp([NotOp(self.when), self.els_.invert()]),
+                ]
+            )
+        ].partial_eval()
+
+
     @simplified
     def partial_eval(self):
         when = self.lang[BooleanOp(self.when)].partial_eval()
@@ -111,6 +111,5 @@ class WhenOp(Expression):
         return self.lang[WhenOp(when, **{"then": then, "else": els_})]
 
 
-first_op.WhenOp = WhenOp
-eq_op.WhenOp = WhenOp
-not_op.WhenOp = WhenOp
+export("jx_base.expressions.first_op", WhenOp)
+export("jx_base.expressions.eq_op", WhenOp)

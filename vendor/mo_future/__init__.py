@@ -18,15 +18,28 @@ PY2 = sys.version_info[0] == 2
 PYPY = False
 try:
     import __pypy__ as _
-    PYPY=True
+
+    PYPY = True
 except Exception:
-    PYPY=False
+    PYPY = False
 
 
 none_type = type(None)
 boolean_type = type(True)
 
 if PY3:
+    try:
+        STDOUT = sys.stdout.buffer
+    except Exception as e:
+        # WE HOPE WHATEVER REPLACED sys.stdout CAN HANDLE BYTES IN UTF8
+        STDOUT = sys.stdout
+
+    try:
+        STDERR = sys.stderr.buffer
+    except Exception as e:
+        # WE HOPE WHATEVER REPLACED sys.stderr CAN HANDLE BYTES IN UTF8
+        STDERR = sys.stderr
+
     import itertools
     from collections import OrderedDict, UserDict
     from collections.abc import Callable, Iterable, Mapping, Set, MutableMapping
@@ -130,6 +143,9 @@ if PY3:
 
 
 else:  # PY2
+    STDOUT = sys.stdout
+    STDERR = sys.stderr
+
     from collections import Callable, Iterable, Mapping, Set, MutableMapping, OrderedDict
     from functools import cmp_to_key, reduce, update_wrapper
 

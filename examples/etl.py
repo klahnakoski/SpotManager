@@ -39,7 +39,7 @@ class ETL(InstanceManager):
 
         tod_minimum = None
         if Date.now().dow not in [6, 7] and Date.now().hour not in [4, 5, 6, 7, 8, 9, 10, 11]:
-            tod_minimum = 101
+            tod_minimum = 100
         minimum = max(self.settings.minimum_utility, tod_minimum)
 
         if current_utility < pending / 20:
